@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Röpdolgozat – Kivetítő Monitor (2. Monitor)</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* Projektor specifikus sötét háttér a moziszerű élményhez (Tilos az !important) */
+    body {
+      background-color: #0b0f19;
+      color: #f8fafc;
+    }
+    .projector-header {
+      background-color: #111827;
+      border-bottom: 2px solid #1f2937;
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .projector-title {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: #60a5fa;
+    }
+    .stat-card {
+      background-color: #1f2937;
+      border: 1px solid #374151;
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .stat-bar-bg {
+      background-color: #374151;
+      height: 24px;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .stat-bar-fill {
+      background-color: #22c55e;
+      height: 100%;
+      width: 0%;
+      transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Projektor Fejléc -->
+  <header class="projector-header">
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path>
+        <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path>
+        <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path>
+        <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path>
+      </svg>
+      <div>
+        <h1 id="proj-quiz-title" class="projector-title">Röpdolgozat Kivetítő</h1>
+        <p id="proj-meta-info" style="color: #9ca3af; font-size: 1rem;">Csatlakozás folyamatban...</p>
+      </div>
+    </div>
+
+    <!-- Módváltó és Nagy Óra -->
+    <div style="display: flex; align-items: center; gap: 20px;">
+      <div class="admin-nav-tabs" style="border: none; margin: 0; padding: 0;">
+        <button id="btn-view-race" class="nav-tab-btn active" style="color: #ffffff; background-color: #2563eb;">
+          🚀 Space Race Verseny
+        </button>
+        <button id="btn-view-stats" class="nav-tab-btn" style="color: #94a3b8;">
+          📊 Anonim Statisztika
+        </button>
+      </div>
+
+      <div id="proj-timer-box" class="timer-badge" style="display: none; font-size: 1.4rem; padding: 8px 18px;">
+        ⏱️ <span id="proj-timer-text">--:--</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Fő Kivetítő Terület -->
+  <main class="race-container">
+
+    <!-- 1. SPACE RACE NÉZET (Űrhajós Verseny) -->
+    <section id="view-space-race">
+      <div style="max-width: 1200px; margin: 0 auto;">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+          <h2>🚀 Csapatverseny Futam</h2>
+          <span id="proj-participant-counter" style="color: #9ca3af; font-size: 1.1rem; font-weight: 600;">
+            0 résztvevő diák
+          </span>
+        </div>
+
+        <!-- 1. KÉK CSAPAT PÁLYÁJA -->
+        <div class="race-track">
+          <div class="race-header">
+            <span style="color: #60a5fa;">🔵 Kék Csapat</span>
+            <span id="score-blue" style="color: #60a5fa;">0 pont</span>
+          </div>
+          <div class="track-line">
+            <div id="rocket-blue" class="rocket-runner" style="left: 0%;">
+              <svg class="rocket-icon" viewBox="0 0 24 24" fill="#3b82f6">
+                <path d="M12 2.5s4 4 4 10.5c0 2-1 3.5-2 4.5l1 4-3-2-3 2 1-4c-1-1-2-2.5-2-4.5 0-6.5 4-10.5 4-10.5z"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. PIROS CSAPAT PÁLYÁJA -->
+        <div class="race-track">
+          <div class="race-header">
+            <span style="color: #f87171;">🔴 Piros Csapat</span>
+            <span id="score-red" style="color: #f87171;">0 pont</span>
+          </div>
+          <div class="track-line">
+            <div id="rocket-red" class="rocket-runner" style="left: 0%;">
+              <svg class="rocket-icon" viewBox="0 0 24 24" fill="#ef4444">
+                <path d="M12 2.5s4 4 4 10.5c0 2-1 3.5-2 4.5l1 4-3-2-3 2 1-4c-1-1-2-2.5-2-4.5 0-6.5 4-10.5 4-10.5z"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. ZÖLD CSAPAT PÁLYÁJA -->
+        <div class="race-track">
+          <div class="race-header">
+            <span style="color: #4ade80;">🟢 Zöld Csapat</span>
+            <span id="score-green" style="color: #4ade80;">0 pont</span>
+          </div>
+          <div class="track-line">
+            <div id="rocket-green" class="rocket-runner" style="left: 0%;">
+              <svg class="rocket-icon" viewBox="0 0 24 24" fill="#22c55e">
+                <path d="M12 2.5s4 4 4 10.5c0 2-1 3.5-2 4.5l1 4-3-2-3 2 1-4c-1-1-2-2.5-2-4.5 0-6.5 4-10.5 4-10.5z"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. SÁRGA CSAPAT PÁLYÁJA -->
+        <div class="race-track">
+          <div class="race-header">
+            <span style="color: #facc15;">🟡 Sárga Csapat</span>
+            <span id="score-yellow" style="color: #facc15;">0 pont</span>
+          </div>
+          <div class="track-line">
+            <div id="rocket-yellow" class="rocket-runner" style="left: 0%;">
+              <svg class="rocket-icon" viewBox="0 0 24 24" fill="#eab308">
+                <path d="M12 2.5s4 4 4 10.5c0 2-1 3.5-2 4.5l1 4-3-2-3 2 1-4c-1-1-2-2.5-2-4.5 0-6.5 4-10.5 4-10.5z"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 2. ANONIM STATISZTIKA NÉZET -->
+    <section id="view-anon-stats" style="display: none;">
+      <div style="max-width: 1000px; margin: 0 auto;">
+        <h2 style="margin-bottom: 24px;">📊 Kérdésenkénti Eredményesség (Anonim)</h2>
+        <div id="anon-questions-list">
+          <!-- Dinamikus statisztika sávok -->
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Szkriptek -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/utils.js"></script>
+  <script src="/js/projector.js"></script>
+</body>
+</html>
+

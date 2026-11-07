@@ -1,0 +1,1038 @@
+A két fájlt együtt vizsgáltam: a `project-context.md` üzleti és működési követelményeit, valamint a `DATABASE_SCHEMA.sql` adatbázisszerkezetét.
+
+Az első fontos megállapításom: a projekt alapgondolata jól átgondolt, de a jelenlegi specifikáció még nem tekinthető teljes, ellentmondásmentes rendszertervnek.
+
+A legnagyobb kockázat nem a technológiai stackben van. Hanem abban, hogy több fontos működési szabály már megjelenik a dokumentumban, de nincs hozzájuk egyértelmű adatmodell, állapotkezelés vagy biztonsági garancia.
+
+Az elemzést négy szempont szerint végzem:
+
+1. Hiányosságok: miről nem rendelkeznek a dokumentumok?
+2. Ellentmondások: hol ütköznek egymással a követelmények vagy az adatmodell elemei?
+3. Tisztázandó kérdések: hol többféleképpen értelmezhető a rendszer?
+4. Best practice: milyen megoldásokat érdemes alkalmazni egy megbízható, hosszú távon fenntartható rendszerhez?
+
+Nem tekintem best practice-nek azt, hogy valami egyszerűbb megvalósítani. A cél a megbízhatóság, adatkonzisztencia, biztonság, karbantarthatóság és a tanórai használhatóság.
+
+# 1. Kritikus hiányosságok
+
+Ezek azok a területek, amelyekről a dokumentumok vagy egyáltalán nem beszélnek, vagy nem határozzák meg kellő mélységben a működést.
+
+## 1.1. Adatkonzisztencia és üzleti szabályok
+
+Kiemelt prioritás
+
+Az adatbázis jelenleg több olyan összefüggést nem garantál, amelyet a program működése megkövetel.
+
+Példa: tantárgy és évfolyam összerendelése.
+
+A `sessions` táblában külön szerepel:
+
+- `subject_id`
+- `grade_level`
+- `quiz_id`
+
+A `quizzes` táblában pedig:
+
+- `subject_id`
+- `subject_grade`
+
+Így előfordulhat például:
+
+- a munkamenet tantárgya Digitális kultúra;
+- a kiválasztott teszt tantárgya Technika;
+- a munkamenet évfolyama 6.;
+- a teszt évfolyama 5.
+
+Az adatbázis ezt jelenleg nem akadályozza meg.
+
+Best practice:
+
+Az üzleti szabályokat nem elegendő a frontendben ellenőrizni. A szerveroldali üzleti logikának és – ahol lehetséges – az adatbázisnak is védenie kell az integritást.
+
+Tisztázni kell, hogy a tantárgy és évfolyam:
+
+- a teszt kötelező tulajdonsága;
+- a munkamenet kötelező tulajdonsága;
+- vagy mindkettőé, egymással kötelezően egyező értékkel.
+
+Ugyanez vonatkozik a többi kapcsolatra is.
+
+## 1.2. A tesztek módosíthatósága és az eredmények történeti hitelessége
+
+Kiemelt prioritás
+
+Ez az egyik legfontosabb hiányzó terület.
+
+A `questions` tábla a tesztek kérdéseit tárolja, az `answers` tábla pedig ezekre hivatkozik.
+
+Mi történik, ha a tanár:
+
+1. elindít egy dolgozatot;
+2. a diákok elkezdik kitölteni;
+3. közben módosítja a teszt egyik kérdését;
+4. megváltoztatja a helyes választ vagy a pontszámot?
+
+A korábbi válaszok kiértékelése ekkor már nem feltétlenül az eredeti kérdésállapot alapján történik.
+
+A dokumentumok nem határozzák meg a tesztverziózás szabályait.
+
+Best practice:
+
+A dolgozat elindításakor rögzíteni kell a feladatsor egy változtathatatlan változatát, vagy olyan kérdésszintű pillanatképet kell készíteni, amelyből az adott munkamenet teljes eredménye később is reprodukálható.
+
+A lezárt dolgozat eredménye nem változhat meg azért, mert valaki később szerkesztette az eredeti tesztet.
+
+## 1.3. Jogosultságkezelés és hitelesítés
+
+A projekt említi a tanári jelszavas bejelentkezést, de az adatbázissémában nincs:
+
+- tanári felhasználói tábla;
+- jelszóhash tárolása;
+- szerepkörkezelés;
+- bejelentkezési munkamenetek kezelése;
+- kijelentkeztetés és munkamenet-visszavonás;
+- jogosultságok meghatározása.
+
+Több tanári gép párhuzamos használata esetén különösen fontos tisztázni, hogy ki milyen műveletet végezhet.
+
+Best practice:
+
+- Jelszavakat kizárólag korszerű, erre tervezett jelszóhash-eléssel tárolni.
+- A hitelesítést és az engedélyezést külön kezelni.
+- Minden érzékeny szerverműveletnél szerveroldali jogosultságellenőrzést végezni.
+- A tanári munkameneteket visszavonhatóvá tenni.
+- A Socket.io-kapcsolatokat is hitelesíteni és jogosultság szerint korlátozni.
+
+A frontend elrejtett gombja nem jogosultságvédelem.
+
+## 1.4. Munkamenet-helyreállítás biztonsága
+
+A dokumentum egyik fontos funkciója a Session Recovery.
+
+A `participants` táblában van:
+
+- `student_name`;
+- `session_token`;
+- `session_id`.
+
+Viszont nincs meghatározva:
+
+- hogyan keletkezik a token;
+- mennyire véletlenszerű;
+- meddig érvényes;
+- visszavonható-e;
+- hogyan történik a token ellenőrzése;
+- mi akadályozza meg, hogy másik gépről valaki más nevében folytassák a dolgozatot.
+
+Különösen fontos, hogy a névsorban szereplő név kiválasztása önmagában nem bizonyítja a tanuló személyazonosságát.
+
+Best practice: kriptográfiailag biztonságos, kellően hosszú véletlen token, szerveroldali ellenőrzés, biztonságos tárolás, valamint visszavonási és lejárati szabályok.
+
+A token nem helyettesíti a tanuló személyazonosítását, hanem egy munkamenet folytatására szolgáló jogosultság.
+
+## 1.5. Biztonsági mentés és helyreállítás
+
+A projekt említi a `backup.js` fájlt, de a mentési stratégia nincs kidolgozva.
+
+Nem derül ki:
+
+- milyen gyakran készül mentés;
+- automatikus vagy manuális;
+- mit tartalmaz;
+- hogyan történik a visszaállítás;
+- hogyan ellenőrzi a rendszer a mentés épségét;
+- mi történik egy szerverleállás vagy adatbázis-sérülés esetén.
+
+SQLite WAL használatakor ez különösen fontos: nem szabad egyszerűen feltételezni, hogy az adatbázisfájl önmagában mindig teljes és konzisztens mentés.
+
+Best practice:
+
+SQLite Online Backup API vagy megfelelő, konzisztens mentési eljárás; rendszeres visszaállítási teszt; több generációs mentés; a feltöltött képek és egyéb fájlok mentése is.
+
+A mentés akkor tekinthető működőképesnek, ha a visszaállítást is sikeresen tesztelték.
+
+## 1.6. A diákok és a névsor kezelése
+
+A `students` tábla jelenleg:
+
+- osztálynév;
+- diáknév;
+- létrehozás időpontja.
+
+Ez egy kezdeti névsorhoz elegendő, de egy iskolai rendszer hosszabb távú működéséhez kevés.
+
+Hiányzik például:
+
+- tanuló egyedi, belső azonosítója;
+- osztályváltás kezelése;
+- tanuló inaktiválása;
+- névváltozás kezelése;
+- azonos nevű tanulók megkülönböztetése;
+- névsor importálásának és frissítésének szabályai;
+- korábbi dolgozatok történeti névmegőrzése.
+
+Különösen fontos ellentmondás:
+
+A dokumentum szerint a KRÉTA-illesztés és az atombiztos Session Recovery miatt kell a hivatalos névsor.
+
+Az adatbázis viszont a diákot jelenleg a `student_name` alapján azonosítja.
+
+A név nem stabil egyedi azonosító. Két azonos nevű tanuló is lehet, és a név később megváltozhat.
+
+Best practice:
+
+A tanuló kapjon belső, változatlan azonosítót. Az osztálytagság külön kezelhető legyen, és a dolgozatban a név történeti pillanatképe is megőrizhető legyen.
+
+A név a megjelenítés és export szempontjából fontos, de ne ez legyen az elsődleges adatbázis-kulcs.
+
+## 1.7. Adatmegőrzés, törlés és anonimizálás
+
+A dokumentum beszél az anonim HTML-exportról, de nem határozza meg az adatkezelés teljes életciklusát.
+
+Tisztázatlan:
+
+- Meddig tárolódnak a dolgozatok?
+- Meddig tárolódnak a személyes adatok?
+- Mi történik, ha egy tanuló elhagyja az iskolát?
+- Hogyan törölhető vagy anonimizálható egy tanuló?
+- Hogyan kezelhető egy tévesen rögzített eredmény?
+- A mentésekben meddig maradnak meg a törölt adatok?
+
+Best practice:
+
+Legyen meghatározott adatmegőrzési szabályzat, jogosultságokhoz kötött törlési és anonimizálási folyamat, valamint naplózott adminisztratív beavatkozás.
+
+Iskolai környezetben a személyes adatok kezelése nem mellékes technikai kérdés. A GDPR, az intézményi adatkezelési szabályok és az adatminimalizálás elve is releváns. A pontos megőrzési időket az intézmény adatkezelési szabályai alapján kell meghatározni.
+
+## 1.8. Hibakezelés és üzembiztonság
+
+A dokumentumok a normál működést részletesen leírják, de a rendellenes működésről alig beszélnek.
+
+Például:
+
+- Mi történik, ha a szerver újraindul dolgozatírás közben?
+- Mi történik, ha megszakad a Socket.io-kapcsolat?
+- Mi történik, ha a diák válasza eljut a szerverhez, de a visszaigazolás nem?
+- Mi történik, ha a tanár kétszer kattint a Finish gombra?
+- Mi történik, ha egyszerre két tanár módosítja ugyanazt a dolgozatot?
+- Mi történik, ha az adatbázis írása hibára fut?
+
+Best practice:
+
+A szerver legyen az egyetlen hiteles adatforrás. A kliens állapota újracsatlakozáskor helyreállítható legyen. A kritikus műveletek legyenek idempotensek, a kapcsolódó adatbázis-műveletek pedig tranzakcióban fussanak.
+
+A Socket.io elsősorban kommunikációs csatorna, nem adattároló és nem állapotkezelési garancia.
+
+# 2. Rejtett ellentmondások a jelenlegi specifikációban
+
+Itt már nem pusztán hiányzó funkciókról van szó. Ezeknél a pontoknál a dokumentumokban szereplő meglévő megoldások között van feszültség.
+
+| Terület         | Első állítás                                  | Másik állítás / probléma                                                              |
+| --------------- | --------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Tantárgy        | A teszt tantárgyhoz kötött                    | A munkamenet külön tantárgyat tárol                                                   |
+| Évfolyam        | A teszt évfolyamot tartalmaz                  | A munkamenet is külön évfolyamot tárol                                                |
+| Belépés         | A diák tantárgy + osztály alapján csatlakozik | Az aktív dolgozat kiválasztásának egyértelműsége nincs biztosítva                     |
+| Válaszértékelés | Azonnali visszajelzés                         | A végén megjelenő visszajelzés külön kapcsolóval szabályozható                        |
+| Válaszok        | A diák végleges választ ad                    | Az adatbázis UPSERT-et támogat                                                        |
+| Helyes válasz   | A kérdéshez tárolt helyes válasz              | A munkamenet alatt módosítható teszt veszélyezteti a korábbi értékelést               |
+| Azonosítás      | Hivatalos névsor                              | A résztvevő azonosítása név alapján történik                                          |
+| Több tanár      | Párhuzamos adminisztráció                     | Nincs konfliktuskezelési és jogosultsági modell                                       |
+| Dolgozatlezárás | Egyetlen Finish gomb                          | Nincs meghatározva a párhuzamos lezárás és a már folyamatban lévő beküldések kezelése |
+
+Néhányat részletesebben is kiemelek.
+
+## 2.1. Azonnali visszajelzés kontra lezárás utáni visszajelzés
+
+A `project-context.md` szerint:
+
+- minden beküldött válasz után azonnali helyes/helytelen visszajelzés jár;
+- hibás válasznál a helyes válasz is megjelenik.
+
+A `sessions` táblában viszont van:
+
+`show_feedback_on_end`
+
+Ez alapján nem világos, hogy a beállítás pontosan mit szabályoz.
+
+A két fogalmat külön kell választani:
+
+1. Beküldés utáni azonnali visszajelzés.
+2. Dolgozatlezárás utáni részletes értékelőlap.
+
+Ezek nem ugyanazok.
+
+Ráadásul az azonnali helyes válasz megmutatása jelentősen befolyásolja a későbbi kérdések megoldását. Ez tanulási célú gyakorlásnál előny lehet, számonkérésnél viszont hátrány.
+
+Ez egy pedagógiai és rendszertervezési döntés, nem egyszerűen egy frontend-beállítás.
+
+## 2.2. Végleges válasz kontra UPSERT
+
+A projekt szerint a tanuló nem módosíthatja a korábbi válaszát.
+
+Az adatbázisban azonban a következő megjegyzés szerepel:
+
+`UNIQUE(participant_id, question_id) -- UPSERT támogatás`
+
+Az UPSERT önmagában nem hiba. A probléma az, hogy nincs meghatározva, mikor használható.
+
+Best practice:
+
+- Normál működésben egy kérdésre egy végleges beküldés legyen.
+- Hálózati újraküldés esetén ugyanaz a beküldés ne hozzon létre új eredményt.
+- Tanári felülbírálás külön művelet legyen.
+- Válaszmódosítás csak kifejezett, jogosultsághoz kötött szabály alapján történhessen.
+
+A technikai újraküldés és a tanuló által kezdeményezett válaszmódosítás két külön esemény.
+
+## 2.3. Aktív dolgozat kiválasztása
+
+A dokumentum virtuális termeket definiál:
+
+`Tantárgy + Évfolyam`
+
+A diák kiválasztja a tantárgyat és az osztályát, a rendszer pedig betölti az aktív dolgozatot.
+
+Az adatbázisban azonban nincs olyan megszorítás, amely biztosítaná, hogy egy adott tantárgy–évfolyam csatornán csak egy aktív dolgozat legyen.
+
+Ez komoly működési probléma.
+
+Például:
+
+- Digitális kultúra + 6. évfolyam + Hálózatok;
+- Digitális kultúra + 6. évfolyam + Fájlkezelés.
+
+Ha mindkettő aktív, melyikhez csatlakozzon a 6.a tanuló?
+
+Best practice:
+
+A csatornamodellhez egyértelmű aktív munkamenet-feloldási szabály kell. Ha valóban kizárólag egy aktív munkamenet lehet egy tantárgy–évfolyam páron, ezt adatbázisszinten is érdemes kikényszeríteni, például részleges egyedi indexszel.
+
+Ha később osztályonkénti párhuzamos dolgozat is szükséges, a csatornaazonosítási szabályt eleve bővíthetőre kell tervezni.
+
+## 2.4. A munkamenet időkorlátja és az egyéni időmérés
+
+A dokumentum szerint az időzítő a tanuló saját belépési időpontjától indul.
+
+Az adatbázisban viszont:
+
+- `sessions.time_limit_min`;
+- `participants.joined_at`;
+- `participants.finished_at`;
+- `answers.time_spent_sec`
+
+szerepel.
+
+Ez alapvetően jó kiindulás, de nem tisztázza, hogy:
+
+- a munkamenet teljes időkorlátja vagy az egyéni időkorlát érvényesül-e;
+- a később belépő diák ugyanannyi időt kap-e;
+- a böngésző bezárásakor megáll-e az idő;
+- a szerver újraindításakor hogyan folytatódik;
+- a tanári lezárás felülírja-e az egyéni határidőt.
+
+Best practice:
+
+Az időmérés szerveroldali legyen. Az egyéni határidő számítható a csatlakozás időpontjából és az érvényes időkorlátból. A kliens visszaszámlálója csak megjelenítési eszköz legyen.
+
+## 2.5. Pontozás és eredményállapotok
+
+Az `answers` táblában egyszerre szerepel:
+
+- `eval_status`;
+- `is_correct`;
+- `points_earned`;
+- `is_manually_overridden`.
+
+Ezek között nincs teljesen tiszta szemantikai kapcsolat.
+
+Például egy részben helyes válasz esetén:
+
+- `eval_status = PARTIAL`;
+- `is_correct = 1`;
+- `points_earned = 0.5`.
+
+Ez a jelenlegi kommentek szerint lehetséges, de az `is_correct` elnevezés félreérthető: a teljesen helyes választ és a részben pontozott választ egyaránt helyesnek tekinti.
+
+Best practice:
+
+Legyen egyetlen egyértelmű pontozási modell:
+
+- maximálisan elérhető pont;
+- ténylegesen elért pont;
+- értékelési státusz;
+- értékelés forrása (automatikus vagy tanári);
+- felülbírálás indoka és időpontja.
+
+Az állapotokat és a pontszámokat egymással összhangban kell tartani.
+
+A tanári felülbírálás ne csak egy logikai mező legyen: legyen visszakövethető, ki, mikor és miért módosította az eredményt.
+
+# 3. Az adatbázisséma konkrét problémái
+
+Itt már közvetlenül a `DATABASE_SCHEMA.sql` szerkezetét vizsgálom.
+
+## 3.1. Hiányzó adatbázis-megszorítások
+
+A jelenlegi séma sok mezőnél csak az adattípust határozza meg, az értéktartományt nem.
+
+Például:
+
+| Mező                | Jelenlegi probléma                           | Javasolt védelem               |
+| ------------------- | -------------------------------------------- | ------------------------------ |
+| `points`            | Negatív pont is megadható                    | `CHECK(points >= 0)`           |
+| `points_earned`     | Lehet negatív vagy maximális pontnál nagyobb | Tartományellenőrzés            |
+| `time_limit_min`    | Negatív érték lehetséges                     | `CHECK(time_limit_min >= 0)`   |
+| `pc_number`         | 0 vagy 100 is tárolható                      | 1–42 vagy NULL                 |
+| `shuffle_questions` | Nem csak 0/1 értéket vehet fel               | `CHECK(... IN (0,1))`          |
+| `shuffle_options`   | Nem csak 0/1 értéket vehet fel               | `CHECK(... IN (0,1))`          |
+| `is_finished`       | Nem csak 0/1 értéket vehet fel               | `CHECK(... IN (0,1))`          |
+| `focus_lost_count`  | Negatív lehet                                | `CHECK(focus_lost_count >= 0)` |
+| `question_order`    | Negatív vagy nulla lehet                     | Pozitív érték megkövetelése    |
+
+A SQLite adattípus-kezelése miatt a `REAL`, `INTEGER` és `TEXT` deklaráció önmagában nem minden esetben jelent szigorú adattípus-kényszert.
+
+Best practice: ahol üzleti szabály van, ott adatbázis-megszorítás is legyen. Az alkalmazásoldali validáció ettől függetlenül kötelező.
+
+## 3.2. Hiányzó egyedi indexek
+
+A következő megszorításokat érdemes megvizsgálni:
+
+- `questions(quiz_id, question_order)` – egy teszten belül ne legyen két azonos sorszám.
+- `participants(session_id, pc_number)` – ha egy kliensgép egy munkamenetben csak egy tanulóhoz tartozhat.
+- `session_token` – legyen egyedi.
+- `sessions` – az aktív csatornák egyediségének biztosítása.
+
+Az utolsó pont üzleti döntéstől függ, a többi esetében is meg kell határozni a NULL-értékek kezelését.
+
+## 3.3. Hiányzó kapcsolati integritás
+
+Van egy különösen fontos probléma az `answers` táblában.
+
+A tábla három idegen kulcsot használ:
+
+- `session_id`;
+- `participant_id`;
+- `question_id`.
+
+De az adatbázis nem garantálja, hogy:
+
+- a résztvevő valóban ehhez a munkamenethez tartozik;
+- a kérdés valóban az adott munkamenet tesztjéhez tartozik.
+
+Technikailag tehát létrejöhet olyan válasz, amelyben a `session_id` az egyik dolgozatra, a `participant_id` egy másik dolgozat résztvevőjére, a `question_id` pedig egy harmadik teszt kérdésére mutat.
+
+Best practice: összetett idegen kulcsokkal vagy megfelelő tranzakciós szerveroldali ellenőrzéssel kell biztosítani a teljes összetartozást.
+
+## 3.4. A JSON-mezők kezelése
+
+A következő mezők JSON-tartalmat tárolnak:
+
+- `options_json`;
+- `grade_thresholds_json`;
+- `question_order_json`;
+- `correct_answer`.
+
+A `TEXT` típus nem garantálja, hogy érvényes JSON kerül bele.
+
+Például hibás JSON is bekerülhet az adatbázisba, ha az alkalmazás nem ellenőrzi.
+
+Best practice:
+
+- SQLite `json_valid()` ellenőrzés, ahol alkalmazható.
+- Strukturált sémaellenőrzés a szerveroldalon.
+- Kötelező mezők és megengedett értékek ellenőrzése.
+- Verziózott JSON-struktúrák, ha az adatmodell később változhat.
+
+Különösen a `correct_answer` mező problémás: három különböző kérdéstípus háromféle adatformátumot használ.
+
+Ezt egyértelmű, verziózott kérdés- és válaszszerződéssel kell kezelni.
+
+## 3.5. A kérdéstípusok jövőbeli bővíthetősége
+
+Jelenleg:
+
+- `ABCD`;
+- `TF`;
+- `SHORT`.
+
+A kérdésformátumok később könnyen bővülhetnek:
+
+- több helyes válasz;
+- sorrendbe rendezés;
+- párosítás;
+- képfelismerés;
+- hiányos szöveg kiegészítése;
+- számérték megadása;
+- fájlfeltöltés;
+- összetett kérdés.
+
+Nem azt javaslom, hogy ezeket most mind megvalósítsd.
+
+Azt viszont igen, hogy a kérdéskezelő és a pontozó ne legyen úgy megírva, hogy három konkrét kérdéstípusra épülő, nehezen bővíthető elágazásrendszerré váljon.
+
+Best practice: minden kérdéstípushoz egyértelmű szerződés tartozzon:
+
+1. kérdésadat-struktúra;
+2. megjelenítési logika;
+3. beküldött válasz struktúrája;
+4. validáció;
+5. pontozási algoritmus;
+6. visszajelzési forma.
+
+A pontozó legyen a kérdéstípusokhoz illeszthető, jól tesztelhető komponens.
+
+## 3.6. SQLite és WAL működés
+
+A WAL jó választás ehhez a rendszerhez, de néhány részlet hiányzik.
+
+A jelenlegi beállítások:
+
+```
+PRAGMA journal_mode = WAL;
+PRAGMA synchronous = NORMAL;
+PRAGMA foreign_keys = ON;
+```
+
+További szempontok:
+
+- `busy_timeout` beállítása;
+- WAL checkpoint kezelése;
+- tranzakciók megfelelő használata;
+- hosszú ideig nyitva tartott olvasási tranzakciók elkerülése;
+- adatbázisfájl és WAL állomány konzisztens mentése;
+- adatbázis-műveletek időigényének monitorozása.
+
+Fontos: a WAL nem jelent több párhuzamos írót. Az SQLite egyszerre egy írót engedélyez.
+
+A 42 kliens és több tanári gép esetén ez nem feltétlenül probléma, de a válaszbeküldések kezelését hatékonyan kell megvalósítani.
+
+A SQLite adatbázis a szerveren maradjon. A kliensek HTTP/API és Socket.io kapcsolaton keresztül érjék el, ne közvetlenül hálózati megosztáson keresztül.
+
+# 4. A kérdésbank és a dolgozatkezelés további hiányosságai
+
+Ez egy különösen fontos terület, mert a rendszer központi eleme maga a feladatsor.
+
+## 4.1. Kérdés- és tesztszerkesztés
+
+A dokumentum említi a szerkesztőket, de nem határozza meg a szerkesztés működését.
+
+Tisztázandó:
+
+- Lehet-e kérdést másolni?
+- Lehet-e tesztet másolni?
+- Mi történik törölt kérdéssel?
+- Lehet-e kérdéseket átrendezni?
+- Lehet-e egy tesztet archiválni?
+- Lehet-e ugyanazt a kérdést több tesztben használni?
+- Van-e kérdésbank, vagy minden kérdés egy konkrét teszthez tartozik?
+- Lehet-e egy dolgozatot piszkozatként menteni?
+
+Best practice: a kérdésbankot és a feladatsorokat érdemes logikailag különválasztani.
+
+A kérdésbank az újrafelhasználható tartalmat kezeli, a feladatsor pedig ezekből összeállított, önállóan verziózható tartalom.
+
+Ez azonban csak akkor indokolt, ha a kérdések újrafelhasználása tényleges követelmény. Ha nem, a különválasztás egyelőre felesleges komplexitás is lehet.
+
+## 4.2. A képek és feltöltött fájlok kezelése
+
+A `questions.image_path` egyetlen képfájlt engedélyez kérdésenként.
+
+Nem szabályozott:
+
+- fájlméret;
+- fájltípus;
+- képméretek;
+- fájlnév-generálás;
+- fájlfeltöltés biztonsága;
+- törölt kérdéshez tartozó kép törlése;
+- árva fájlok kezelése;
+- mentés és visszaállítás;
+- relatív elérési utak biztonságos feloldása.
+
+Best practice:
+
+- Fájltípus ellenőrzése a tényleges tartalom alapján is.
+- Véletlenszerű szerveroldali fájlnevek.
+- Méret- és felbontáskorlátozás.
+- Feltöltések elkülönített könyvtárban.
+- Kizárólag engedélyezett képfájlok kiszolgálása.
+- A fájlok és adatbázis-rekordok életciklusának összehangolása.
+
+A feltöltött fájlok soha ne legyenek közvetlenül végrehajthatók.
+
+## 4.3. A kérdések sorrendje és keverése
+
+A `question_order_json` jó megközelítés: a diák saját kérdéssorrendje rögzítve van.
+
+De nincs teljesen meghatározva:
+
+- mikor készül a sorrend;
+- milyen véletlenszám-generálást használsz;
+- megmarad-e a sorrend helyreállításkor;
+- a kérdések és válaszlehetőségek keverése egymástól független-e;
+- hogyan tárolod az eredeti és a megjelenített válaszindexek kapcsolatát.
+
+Kiemelten fontos: ha az ABCD válaszlehetőségeket megkevered, a beküldött válasz indexe nem feltétlenül az eredeti válasz indexe.
+
+A kiértékelésnek a tényleges választartalomhoz kell kapcsolódnia, nem a pillanatnyi képernyőn elfoglalt pozícióhoz.
+
+A véletlen sorrend generálását egyszer kell elvégezni, és az eredményt tartósan rögzíteni kell.
+
+## 4.4. Rövid szöveges válaszok automatikus értékelése
+
+A `SHORT` típusnál elfogadott kulcsszavak szerepelnek.
+
+Ez önmagában nagyon korlátozott pontozási modell.
+
+Például:
+
+- kis- és nagybetű;
+- ékezetek;
+- szóközök;
+- írásjelek;
+- több elfogadott megfogalmazás;
+- szinonimák;
+- szórend;
+- részleges egyezés;
+- elgépelések.
+
+Nem mindegy, hogy a „router”, „Router” és „útválasztó” azonos értékű-e.
+
+Best practice: legyen külön válasznormalizálási és értékelési réteg. Az automatikus szöveges értékelés ne tekintse a kulcsszó egyszerű részszöveges előfordulását automatikusan helyes válasznak.
+
+A tanári felülbírálás lehetőségét pedig meg kell tartani.
+
+# 5. A három dolgozatmód nincs kellően specifikálva
+
+A séma három módot definiál:
+
+- `STUDENT_PACED`;
+- `TEACHER_PACED`;
+- `SPACE_RACE`.
+
+Ezek azonban nem három egyszerű megjelenítési változat. Eltérő működési modellek.
+
+STUDENT_PACED – Egyéni haladás
+
+[Pelaksanaan TKA SMA jadwal 2025 - Bimbel Ujian Mandiri - Cerebrum](https://images.openai.com/static-rsc-4/hdQPrUyS77jqJ_7ox2ev0mWCJdAroKRKE066JOZqX-rUjJj2gDrzkk-aW8rA6l0V39YMubkU5x84VNgXHfZCV6sp8uZLHhefG2FNDsxBc6XlIonzXxYuip7EqQiiNtQK9L8HW3PAD5jHCBNK68vmDsRzgr30FXmyYhxDA1eNHuQ?purpose=inline)
+
+[cerebrum.id](https://cerebrum.id/pelaksanaan-tka-sma/?utm_source=chatgpt.com)
+
+- Minden diák a saját tempójában halad.
+- Saját időkorlát és kérdéssorrend.
+- Egyéni befejezés.
+- Egyéni eredmény.
+
+TEACHER_PACED – Tanári vezérlés
+
+[NineQuiz - Làm Thế Nào Quiz Online Giúp Học Sinh Không Bỏ Dở Giữa Chừng ?](https://images.openai.com/static-rsc-4/6BggrsWd6tLXz8oubBdTV4sZru7Xp8NMQ2heuCCl_8wSBSR8cp5gTcb5eWzzpoCfoQG01TZ_n1AGedBBHMTn9_e8TtmJwa-hF_1SNVk72madmfQW-nnErNM8ziHb625e84b1aBMBZo8wEzCtH57hepCDoJ1e5K-VULr0J5BK6oU?purpose=inline)
+
+[ninequiz.com](https://ninequiz.com/blog/lam-the-nao-quiz-online-giup-hoc-sinh-khong-bo-do-giua-chung?utm_source=chatgpt.com)
+
+- A tanár vezérli a kérdések előrehaladását.
+- Minden diák ugyanahhoz a kérdéshez igazodik.
+- Külön kell kezelni a késve válaszolókat.
+- A kérdésváltás és beküldés időzítését össze kell hangolni.
+
+SPACE_RACE – Csapatverseny
+
+[Socrative Teacher - Apps on Google Play](https://images.openai.com/static-rsc-4/8HA13tg9qdIGhgc4VYb6tw6j_XRaQBMzy-C-0bRa_FBNJn3seIcsCMlygB9UatPAW9w4_aFhfgP4y_yXa2W4-GDf0T1JHCe4dmIcjD_t6gZC4wKnXnGFbEUlwNqRgICSW3bScrIzWJoUYT1eYifr8QM3W76PvVWqzU5j4ueNz2U?purpose=inline)
+
+[play.google.com](https://play.google.com/store/apps/details?hl=en\&id=com.socrative.teacher\&utm_source=chatgpt.com)
+
+- Csapatokhoz rendelés.
+- Csapatpontszám.
+- Csapaton belüli egyéni válaszok.
+- Versenyállapot és eredménymegjelenítés.
+
+## 5.1. Teacher Paced mód
+
+A `current_question_index` egyetlen mezőben tárolja az aktuális kérdés indexét.
+
+De hiányzik:
+
+- a kérdés megnyitásának időpontja;
+- a kérdés lezárásának időpontja;
+- a kérdésváltás szabálya;
+- az időtúllépés kezelése;
+- a még nem válaszoló diákok kezelése;
+- az újracsatlakozás utáni szinkronizáció;
+- a tanári vezérlési események naplózása.
+
+Különösen fontos a következő helyzet:
+
+A tanár továbblép a következő kérdésre, miközben egy diák válasza még hálózati késés miatt úton van.
+
+Mi történik a válasszal?
+
+Best practice: a kérdésnek legyen egyértelmű szerveroldali állapota, nyitási és zárási időpontja. A beküldés elfogadhatóságát szerveroldali szabály határozza meg.
+
+## 5.2. Space Race mód
+
+A `team_color` önmagában nem elegendő csapatverseny kezelésére.
+
+Hiányzik:
+
+- csapatok egyedi azonosítója;
+- csapatnév;
+- csapatösszetétel;
+- csapatpontszám;
+- pontozási szabály;
+- döntetlenkezelés;
+- csapattag kilépése vagy újracsatlakozása;
+- csapatválasztás lezárása;
+- versenyállapot.
+
+A csapat színe megjelenítési tulajdonság, nem csapatazonosító.
+
+Best practice: külön csapatadat-modell, amelyhez a résztvevők kapcsolódnak.
+
+A csapat eredményét pedig a résztvevők válaszaiból kell kiszámítani, vagy egyértelműen meghatározott, tranzakcióbiztos módon frissíteni.
+
+# 6. A rendszer működéséből hiányzó további területek
+
+Ezek nem feltétlenül adatbázisproblémák. Inkább olyan rendszerszintű követelmények, amelyek nélkül a program éles használata kockázatos lehet.
+
+## 6.1. Naplózás és auditálhatóság
+
+Jelenleg nincs külön eseménynapló.
+
+Pedig fontos lenne visszakeresni például:
+
+- ki indította el a dolgozatot;
+- ki zárta le;
+- ki oldott fel egy tanulói nevet;
+- ki módosította a pontszámot;
+- ki törölt egy kérdést;
+- ki módosította a ponthatárokat;
+- mikor történt egy manuális felülbírálás;
+- milyen hiba miatt szakadt meg egy művelet.
+
+Best practice: külön auditnapló, amely nem az aktuális rekord állapotát, hanem a fontos eseményeket rögzíti.
+
+A naplóbejegyzések tartalmazzák legalább az esemény típusát, időpontját, végrehajtóját és az érintett rekord azonosítóját.
+
+A biztonsági napló és az üzleti auditnapló célját érdemes külön kezelni.
+
+## 6.2. Valós idejű kommunikáció és szinkronizáció
+
+A Socket.io szerepel a technológiai stackben, de a kommunikációs protokoll nincs definiálva.
+
+Hiányzik:
+
+- eseménynevek és eseményszerződések;
+- üzenetazonosítók;
+- eseménysorrend kezelése;
+- újracsatlakozási stratégia;
+- állapot-visszaszinkronizálás;
+- duplikált események kezelése;
+- jogosultságellenőrzés;
+- kapcsolatszakadás észlelése.
+
+Best practice:
+
+A Socket.io-események ne közvetlenül módosítsák egymás frontend-állapotát ellenőrizetlenül.
+
+A helyes folyamat:
+
+1. Kliens műveletet kezdeményez.
+2. Szerver ellenőrzi a jogosultságot és az aktuális állapotot.
+3. Szerver adatbázis-tranzakcióban végrehajtja a műveletet.
+4. Szerver visszaigazolja az eredményt.
+5. Szerver közzéteszi az új állapotot az érintett klienseknek.
+
+A kliensnek újracsatlakozáskor képesnek kell lennie az aktuális szerverállapot lekérésére.
+
+## 6.3. Tesztelési stratégia
+
+A fejlesztési ütemtervben nincs tesztelési lépés.
+
+Ez komoly hiányosság.
+
+Legalább a következő tesztszinteket érdemes kialakítani:
+
+| Teszttípus           | Mit ellenőriz?                     |
+| -------------------- | ---------------------------------- |
+| Unit teszt           | Pontozás, validáció, időkorlátok   |
+| Integrációs teszt    | Adatbázis, API, tranzakciók        |
+| Jogosultsági teszt   | Tanári és diákjogosultságok        |
+| E2E teszt            | Teljes dolgozatírási folyamat      |
+| Terheléses teszt     | 42 kliens párhuzamos használata    |
+| Hibatűrési teszt     | Szerver- és hálózati megszakítás   |
+| Visszaállítási teszt | Biztonsági mentésből helyreállítás |
+
+Különösen fontosak az olyan tesztek, amelyek nem a normál működést vizsgálják.
+
+Például:
+
+- Két tanuló egyszerre küld be választ.
+- Ugyanaz a tanuló kétszer küldi be ugyanazt a választ.
+- A tanár lezárja a dolgozatot, miközben egy válasz érkezik.
+- A szerver újraindul egy beküldés után.
+- A tanuló másik gépről folytatja a dolgozatot.
+- Két tanár egyszerre módosít egy eredményt.
+
+## 6.4. Akadálymentesség és használhatóság
+
+A 3–8. évfolyamos célcsoport miatt ez különösen fontos.
+
+A dokumentumok nem rendelkeznek:
+
+- billentyűzetes navigációról;
+- megfelelő kontrasztról;
+- képernyőolvasó-támogatásról;
+- betűméret- és nagyításkezelésről;
+- mobil vagy kisebb képernyős megjelenítésről;
+- vizuális visszajelzés mellett szöveges visszajelzésről.
+
+A zöld/sárga/piros szín önmagában nem elegendő az eredmény jelzésére.
+
+Best practice: WCAG 2.2 AA követelmények figyelembevétele, szemantikus HTML, billentyűzetes használhatóság és a színtől független állapotjelzés.
+
+## 6.5. Rendszerkonfiguráció és üzemeltetés
+
+A `config.js` szerepel az ütemtervben, de a konfigurációs modell nincs meghatározva.
+
+Külön kezelendő például:
+
+- szerverport;
+- adatbázis elérési útja;
+- feltöltési könyvtár;
+- időkorlátok;
+- biztonsági beállítások;
+- mentési útvonal;
+- naplózási szint;
+- környezeti konfiguráció.
+
+Best practice: a környezeti és alkalmazásszintű konfiguráció elkülönítése, központi validációval.
+
+A működéshez szükséges beállítások ne legyenek szétszórva a forráskódban.
+
+## 6.6. Frissítés és migráció
+
+A fejlesztési terv az adatbázis inicializálását említi, de nincs adatbázis-verziókezelés.
+
+Mi történik, ha fél év múlva új mezőt kell hozzáadni a `participants` táblához?
+
+Újratelepítés nélkül kell frissíteni a rendszert.
+
+Best practice:
+
+Verziózott, egymás után végrehajtható adatbázis-migrációk.
+
+Például:
+
+- `001_initial_schema`;
+- `002_add_quiz_versions`;
+- `003_add_audit_log`.
+
+A migráció legyen ellenőrizhető, tranzakciós, ahol lehetséges, és visszaállítási tervvel rendelkező művelet.
+
+# 7. A legfontosabb háttérben húzódó tervezési ellentétek
+
+Szerintem itt van a projekt valódi tervezési kihívása.
+
+Nem egyszerűen funkciók hiányoznak. Több olyan követelmény van, amelyek önmagukban jók, de egymással össze kell hangolni őket.
+
+| Tervezési ellentét                  | Az egyik oldal                   | A másik oldal                           |
+| ----------------------------------- | -------------------------------- | --------------------------------------- |
+| Egyszerűség – bővíthetőség          | Kevés tábla, egyszerű adatmodell | Verziózás, kérdésbank, csapatok         |
+| Gyorsaság – biztonság               | 3 kattintásos belépés            | Hitelesítés és személyazonosság         |
+| Rugalmasság – integritás            | Szabadon szerkeszthető tesztek   | Történetileg hiteles eredmények         |
+| Valós idejű működés – konzisztencia | Azonnali Socket.io-frissítés     | Tranzakciós adatbázisállapot            |
+| Automatizálás – pedagógiai kontroll | Automatikus pontozás             | Tanári felülbírálás                     |
+| Egyéni haladás – közös vezérlés     | Student Paced                    | Teacher Paced                           |
+| Tanulástámogatás – számonkérés      | Azonnali helyes válasz           | A későbbi kérdések befolyásolása        |
+| Offline működés – biztonság         | Nincs internetkapcsolat          | Helyi hálózati támadások elleni védelem |
+| Gyors adatbevitel – adathitelesség  | Név kiválasztása                 | Valódi tanulói azonosítás               |
+| Könnyű üzemeltetés – adatbiztonság  | Egy SQLite adatbázis             | Mentés, migráció, helyreállítás         |
+
+Ezeket nem lehet egyetlen technikai megoldással feloldani.
+
+A legfontosabb felismerés:
+
+A rendszer egyszerre akar lenni:
+
+1. Gyors órai kvízrendszer.
+2. Dolgozatíró és értékelő rendszer.
+3. Tanulást támogató gyakorlófelület.
+4. Csapatverseny-rendszer.
+5. Hosszú távú tanulói eredménytároló.
+
+Ezek részben eltérő működési követelményeket támasztanak.
+
+Nem feltétlenül kell külön alkalmazásokat készíteni, de a működési szabályokat nem szabad összemosni.
+
+# 8. Milyen dokumentumok hiányoznak még?
+
+A két jelenlegi fájl elsősorban a projekt koncepcióját és adatbázisának első változatát írja le.
+
+Egy ilyen rendszerhez az alábbi specifikációs területeket tartanám szükségesnek.
+
+| Dokumentum / specifikáció | Tartalma                                           | Prioritás |
+| ------------------------- | -------------------------------------------------- | --------- |
+| Üzleti szabályok          | Minden működési szabály egyértelmű definíciója     | Kritikus  |
+| Állapotmodellek           | Teszt, munkamenet, résztvevő, válasz állapotai     | Kritikus  |
+| Jogosultsági modell       | Tanár, diák, adminisztrátor műveletei              | Kritikus  |
+| Adatmodell-specifikáció   | Entitások, kapcsolatok, integritási szabályok      | Kritikus  |
+| Pontozási specifikáció    | Kérdéstípusok és értékelési algoritmusok           | Kritikus  |
+| Munkamenet-specifikáció   | Belépés, helyreállítás, időkorlát, lezárás         | Kritikus  |
+| API-specifikáció          | REST végpontok és adatstruktúrák                   | Magas     |
+| Socket.io protokoll       | Események, szinkronizáció, újracsatlakozás         | Magas     |
+| Biztonsági specifikáció   | Hitelesítés, jogosultság, XSS, CSRF, fájlfeltöltés | Kritikus  |
+| Tesztelési specifikáció   | Tesztszintek és elfogadási feltételek              | Magas     |
+| Adatmegőrzési szabályzat  | Archiválás, törlés, anonimizálás                   | Magas     |
+| Üzemeltetési specifikáció | Mentés, migráció, helyreállítás, frissítés         | Magas     |
+| UI/UX specifikáció        | Oldalak, állapotok, hibajelzések, akadálymentesség | Közepes   |
+
+A prioritás nem azt jelenti, hogy minden dokumentumot külön fájlban kell elkészíteni. A lényeg, hogy minden témának legyen egyértelműen meghatározott és ellenőrizhető helye.
+
+# 9. További konkrét észrevételek, amelyeket nem hagynék figyelmen kívül
+
+Van néhány olyan részlet, amelyet az előző fejezetekben nem emeltem ki külön, pedig fontos.
+
+### 9.1. Törlés és történeti eredmények
+
+A jelenlegi SQL-ben:
+
+```
+FOREIGN KEY (question_id)
+REFERENCES questions(id)
+ON DELETE CASCADE
+```
+
+Ez azt jelenti, hogy egy kérdés törlése a hozzá tartozó válaszokat is törölheti.
+
+A `questions` és `quizzes` kapcsolata szintén CASCADE törlést használ.
+
+Ez veszélyes egy olyan rendszerben, amelyben a korábbi dolgozatok eredményeit archiválni és később újra exportálni kell.
+
+Javaslat: a felhasznált kérdések és tesztverziók ne legyenek fizikailag törölhetők úgy, hogy ezzel történeti eredmények vesszenek el. Használj archiválást, verziózást és megfelelő törlési korlátozásokat.
+
+### 9.2. A `focus_lost_count` értelmezése
+
+A dokumentum a böngészőből való kikattintást puskázásjelzőként kezeli.
+
+Ez önmagában nem bizonyítja a puskázást.
+
+A fókuszvesztést okozhatja például:
+
+- véletlen kattintás;
+- Windows értesítés;
+- másik alkalmazás megnyitása;
+- rendszerüzenet;
+- technikai probléma.
+
+Javaslat: ezt technikai eseményként tárold, ne csalásként vagy bizonyított szabálytalanságként. Az eredményeket ne befolyásolja automatikusan.
+
+### 9.3. A helyes válasz védelme
+
+A `questions.correct_answer` mező a szerveren található, ami helyes.
+
+De a specifikáció nem rendelkezik arról, hogy a diákoldali API pontosan milyen adatokat kaphat meg.
+
+Javaslat: különítsd el a tanári kérdésadatokat és a diáknak kiszolgálható kérdésadatokat.
+
+A helyes válasz nem kerülhet ki a klienshez a visszajelzési szabály által megengedett időpont előtt. A szerveroldali pontozás legyen az egyetlen hiteles értékelés.
+
+### 9.4. Az exportok adatvédelme
+
+Az anonimizálható HTML-export jó ötlet, de az anonimizálás nem merülhet ki a nevek elrejtésében.
+
+A fájlokban maradhatnak:
+
+- azonosítók;
+- osztálynevek;
+- személyes adatok a válaszokban;
+- fájlmetaadatok;
+- egyéb visszaazonosításra alkalmas információk.
+
+A különböző exportformátumoknak is ugyanazokat az adatvédelmi szabályokat kell követniük.
+
+# 10. Mit tisztáznék a fejlesztés folytatása előtt?
+
+Nem javaslom, hogy most rögtön újabb funkciókat kezdj el programozni.
+
+Először az alábbi döntéseket rögzíteném.
+
+| #   | Kérdés                                                             | Miért kritikus?                    |
+| --- | ------------------------------------------------------------------ | ---------------------------------- |
+| 1.  | Egy tantárgy–évfolyam páron lehet-e egyszerre több aktív dolgozat? | A belépési logika alapja           |
+| 2.  | A teszt módosítható-e elindított dolgozat közben?                  | Eredmények hitelessége             |
+| 3.  | A kérdéseknek van-e verziója?                                      | Történeti reprodukálhatóság        |
+| 4.  | Az azonnali visszajelzés minden dolgozatmódban kötelező?           | Pedagógiai működés                 |
+| 5.  | Módosítható-e egy már beküldött válasz?                            | Pontozási és válaszkezelési logika |
+| 6.  | Mi a tanuló elsődleges azonosítója?                                | Névsor, Recovery, export           |
+| 7.  | A tanári felülbírálás hogyan követhető vissza?                     | Auditálhatóság                     |
+| 8.  | Mi történik szerverleálláskor?                                     | Adatvesztés megelőzése             |
+| 9.  | Hogyan működik a Teacher Paced és Space Race állapotkezelése?      | Különböző működési modellek        |
+| 10. | Milyen adatokat és meddig őrzünk meg?                              | Adatvédelem és archiválás          |
+
+Ezeket nem én dönteném el helyetted, mert több esetben pedagógiai vagy intézményi követelményről van szó.
+
+# 11. Javasolt fejlesztési sorrend
+
+A legfontosabb tanácsom: ne a meglévő SQL-séma javításával kezdd, hanem a működési szabályok lezárásával.
+
+A következő sorrendet javaslom:
+
+1. Üzleti szabályok véglegesítése
+
+   A tantárgy–évfolyam csatornamodell, a dolgozatmódok, a belépés, a válaszadás és a lezárás szabályai.
+2. Állapotmodellek elkészítése
+
+   Külön a teszthez, munkamenethez, résztvevőhöz, kérdéshez és válaszhoz.
+3. Adatmodell felülvizsgálata
+
+   Kapcsolatok, kulcsok, megszorítások, verziózás, történeti adatok.
+4. Biztonsági és jogosultsági modell
+
+   Tanári hitelesítés, diákazonosítás, Session Recovery, Socket.io és fájlfeltöltés.
+5. Pontozási és értékelési specifikáció
+
+   Kérdéstípusok, automatikus értékelés, manuális felülbírálás, ponthatárok.
+6. API- és kommunikációs specifikáció
+
+   REST, Socket.io, események, újracsatlakozás és állapotszinkronizáció.
+7. Tesztelési és üzemeltetési terv
+
+   Terhelés, hibakezelés, mentés, visszaállítás és migráció.
+8. Csak ezután a végleges adatbázisséma és implementáció.
+
+# 12. Összesített értékelés
+
+Az alábbi értékelés nem a már elkészült program minősítése, hanem a két dokumentum specifikációs érettségének szakmai értékelése.
+
+| Terület                          | Jelenlegi állapot    |
+| -------------------------------- | -------------------- |
+| Üzleti koncepció                 | Jó                   |
+| Alapvető felhasználói folyamatok | Jó                   |
+| Tantárgy–évfolyam modell         | Részben tisztázott   |
+| Adatbázis alapstruktúra          | Jó kiindulás         |
+| Adatintegritás                   | Hiányos              |
+| Verziókezelés                    | Hiányzik             |
+| Jogosultságkezelés               | Hiányos              |
+| Pontozási specifikáció           | Hiányos              |
+| Állapotkezelés                   | Hiányos              |
+| Párhuzamos működés               | Részben definiált    |
+| Biztonság                        | Hiányos              |
+| Adatvédelem                      | Hiányos              |
+| Tesztelési stratégia             | Hiányzik             |
+| Üzemeltetés és helyreállítás     | Hiányos              |
+| Bővíthetőség                     | Részben megalapozott |
+
+## Végső véleményem
+
+A projekt legnagyobb erőssége a jól átgondolt iskolai munkafolyamat. A virtuális termek, az egyszerű diákbelépés, a párhuzamos tanári munkamenetek, az eredménymátrix és az exportok jó alapot adnak.
+
+A legnagyobb veszély viszont az, hogy a fejlesztés során a működési szabályok a JavaScript-kódba kerülnek, és nem lesz egyetlen, egyértelmű hely, amely meghatározza a rendszer viselkedését.
+
+Én három dolgot tekintenék megkerülhetetlennek:
+
+1. Állapotkezelés: minden fontos folyamatnak legyen definiált állapotgépe és szabályozott átmenete.
+2. Adatintegritás: a korábbi dolgozatok és eredmények utólag ne sérülhessenek meg egy későbbi szerkesztés vagy törlés miatt.
+3. Szerveroldali hitelesség: minden pontozás, jogosultság, időkorlát és állapotváltozás szerveroldalon legyen ellenőrizve.
+
+Ezek nélkül a program működhet, de hosszabb távon nem lesz kellően megbízható.
+
+A következő legjobb lépés szerintem egy részletes rendszerkövetelmény- és ellentmondástérkép elkészítése lenne. Ez összekapcsolná a jelenlegi két dokumentum minden követelményét, a hiányzó döntéseket, az adatbázis-elemeket és a szükséges új specifikációkat. Így a fejlesztés előtt pontosan látnánk, mi végleges, mi tisztázatlan és mit kell még megtervezni.

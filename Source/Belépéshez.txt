@@ -1,0 +1,52 @@
+1. Ki tudja választani a tanuló a tantárgyát, az osztályát, majd azon belül a nevét. Ezzel azonnal hozzáférést kap az adott teszthez, amelyet már elindítottam neki.
+
+Kattintás: A diák megnyitja az oldalt: Kiválasztja a tantárgyat és az osztályt, majd lenyitja a névsort. Ott látja a 25 nevet.
+Hiba: A hiba kezelése: Ha Tóth Béla véletlenül Kovács János nevére kattintott, János neve zárolva lett, Béla pedig János tesztjét látja. Béla nem tud kilépni vagy visszamenni. Fel kell emelnie a kezét, és szólnia kell neked: „Tanár úr, elrontottam, véletlenül Jánost választottam!”.
+Tanári feloldás: Te a tanári asztalnál ülsz, megnyitod az élő eredménytáblát. Látod, hogy Kovács János (0. kérdés - aktív). Rákattintasz a János neve melletti pici „Név felszabadítása” gombra. Amennyiben már elkezdődött a teszt és lett kiértékelt válasz, akkor az érvénytelen lesz.
+
+2. Közben a terem másik végében: Kiss Ádám rákattint a saját nevére.
+3. Azonnali vizuális frissítés: A háttérben a szerver azonnal jelzi az összes többi gépnek a változást. Mivel a tanuló éppen nézi a nyitott listát, Kiss Ádám neve a nyitott listában a szeme előtt vált át feketéről halványszürkére (inaktívra).
+------------
+
+Íme a legelső lépés (a Belépés) teljes, precíz és golyóálló logikai menete, programozásra kész formában:
+
+1. Fázis: Az üres kiinduló állapot (Amikor a diák megnyitja az oldalt)
+
+• Kliens (Diák böngészője): Megnyitja a http://szerver_neve/oldal_neve oldalt.
+• Felület: Két egymásra épülő választómező jelenik meg. A második (Osztály/Névsor) addig le van tiltva, amíg az elsőt ki nem választja.
+• Adatáramlás:
+	1. A diák kiválasztja a Tantárgyat (pl. Digitális kultúra).
+	2. Ennek hatására aktívvá válik és betöltődik az Osztály lista (pl. 7.a, 7.b).
+	3. A diák kiválasztja az osztályát.
+
+2. Fázis: Az élő névsor letöltése
+
+Amint az osztály ki lett választva, a böngésző azonnal kapcsolatot nyit a Windows szerverrel (WebSocketen keresztül), és elkéri az adott osztály aktuális állapotát.
+• A szerver válasza: Egy lista, amely tartalmazza a diákok nevét ÉS a státuszukat.
+	• Példa: [ {"nev": "Kiss Ádám", "statusz": "szabad"}, {"nev": "Kovács Béla", "statusz": "foglalt"} ]
+• Megjelenítés: A diák előtt legördül a névsor.
+	• A "szabad" státuszú nevek normál feketék és kattinthatóak.
+	• A "foglalt" státuszú nevek halványszürkék, inaktívak (disabled), rájuk kattintani nem lehet.
+
+3. Fázis: Élő frissítés a nyitott listában
+
+Miközben a diák nézi a lenyitott névsort, a szerver folyamatosan küldheti a változásokat (ha egy másik gépnél valaki épp kattintott).
+• Esemény: Ha a szerverről érkezik egy jel, hogy {"nev": "Tóth Gábor", "statusz": "foglalt"}, a böngésző JavaScript kódja a nyitott listában azonnal átírja Tóth Gábor elemét inaktívra (szürkére).
+
+4. Fázis: A név kiválasztása (A kritikus pont)
+
+Amikor a diák rákattint egy aktív (fekete) névre, a következő szigorú sorrendnek kell lefutnia:
+1. Azonnali helyi blokkolás: A böngésző azonnal letiltja a teljes listát a diáknál, hogy ne tudjon gyorsan egy másik névre is rákattintani.
+2. Szerveroldali ellenőrzés (A golyóálló zár): A böngésző elküldi a szervernek: „Szeretném lefoglalni Kovács Bélát”. A szerver a saját memóriájában ellenőrzi, hogy Béla valóban szabad-e még (megelőzve azt, ha két diák egyszerre kattintott ugyanarra a névre azonos tizedmásodpercben).
+3. Szerver döntése:
+	• Ha szabad: A szerver átállítja Béla státuszát "foglalt"-ra, ezt kiküldi az összes többi gépnek (hogy náluk is elszürküljön), a kattintó diáknak pedig visszaküldi a jóváhagyást. A diák képernyője ekkor azonnal átvált a tesztre.
+	• Ha már foglalt (mert valaki egy hajszállal gyorsabb volt): A szerver elutasítja a kérést. A diák képernyőjén a lista aktív marad, a hibaforrásként szolgáló név elszürkül, és a diák kénytelen másik nevet választani.
+
+5. Fázis: A tanári feloldás logikája
+
+Ha a diák rossz nevet választott ki, a tanári felületről érkező parancs így fut le:
+1. A tanár rákattint a feloldásra.
+2. A szerver az adatbázisban a név státuszát visszaállítja "szabad"-ra.
+3. A szerver küld egy parancsot az érintett diák böngészőjének: „Irány vissza a névválasztóhoz”.
+4. A szerver a terem összes többi gépének is elküldi: „Ez a név újra szabad (fekete)”.
+Ez a pontos technikai specifikáció a belépési lépéshez. Teljesen így képzelted el az adatok és státuszok mozgását a háttérben, vagy van olyan pont ebben a sorrendben, amit máshogy finomítanál a kódolás előtt?

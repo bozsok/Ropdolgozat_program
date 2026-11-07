@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Röpdolgozat – Tanári Vezérlőpult</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* Admin specifikus elrendezés (Tilos az !important) */
+    .admin-container {
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 16px;
+      flex: 1;
+    }
+    .badge-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .badge-dot-green { background-color: #22c55e; }
+    .badge-dot-gray { background-color: #94a3b8; }
+    .table-responsive {
+      overflow-x: auto;
+      background: #ffffff;
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Bejelentkezési képernyő (Modal vagy panel, ha nincs cookie) -->
+  <div id="login-modal" class="modal-backdrop">
+    <div class="modal-window">
+      <div class="card-header">
+        <h2 class="card-title">🔐 Tanári Bejelentkezés</h2>
+        <p class="card-subtitle">Kérlek, add meg a tanári PIN-kódot a hozzáféréshez!</p>
+      </div>
+      <form id="form-login" onsubmit="return false;">
+        <div class="form-group">
+          <label class="form-label" for="input-pin">Tanári PIN-kód:</label>
+          <input type="password" id="input-pin" class="form-control" placeholder="PIN-kód..." autofocus>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" id="btn-login-submit" class="btn btn-primary btn-block">Bejelentkezés</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Felső Élő Státusz Sáv (Live Badges - Single Source of Truth) -->
+  <div id="badge-nav-bar" class="badge-nav-bar">
+    <span style="color: #94a3b8; font-size: 0.85rem; font-weight: 600; margin-right: 8px;">CSATORNÁK:</span>
+    <div id="live-badges-list" style="display: flex; gap: 8px; overflow-x: auto;">
+      <!-- Dinamikusan frissülő zöld/szürke jelvények -->
+    </div>
+  </div>
+
+  <!-- Fő Alkalmazás Fejléc -->
+  <header class="app-header">
+    <div class="header-brand">
+      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+        <path d="M2 17l10 5 10-5"></path>
+        <path d="M2 12l10 5 10-5"></path>
+      </svg>
+      <div>
+        <h1 class="brand-title">Tanári Vezérlőpult (1. Monitor)</h1>
+      </div>
+    </div>
+
+    <div class="header-meta">
+      <a href="/projector" target="_blank" class="btn btn-secondary" title="Másodlagos kivetítő megnyitása">
+        🖥️ Kivetítő (2. Monitor)
+      </a>
+      <button id="btn-logout" class="btn btn-secondary">Kijelentkezés</button>
+    </div>
+  </header>
+
+  <!-- Fő Tartalom -->
+  <main class="admin-container">
+
+    <!-- Admin Navigációs Fülek -->
+    <div class="admin-nav-tabs">
+      <button class="nav-tab-btn active" data-tab="tab-live">📊 Élő Dolgozat (Mátrix)</button>
+      <button class="nav-tab-btn" data-tab="tab-quizzes">📝 Tesztszerkesztő</button>
+      <button class="nav-tab-btn" data-tab="tab-roster">👥 Osztálynévsorok</button>
+      <button class="nav-tab-btn" data-tab="tab-backup">💾 Biztonsági mentés</button>
+    </div>
+
+    <!-- 1. FÜL: ÉLŐ DOLGOZAT (MÁTRIX ÉS VEZÉRLÉS) -->
+    <section id="tab-live" class="admin-tab-content">
+      
+      <!-- Ha nincs kiválasztott vagy aktív dolgozat -->
+      <div id="no-active-session-box" class="card" style="text-align: center; padding: 40px 20px;">
+        <h3 style="margin-bottom: 12px; color: var(--text-muted);">Jelenleg nincs kiválasztott élő dolgozat.</h3>
+        <p style="color: var(--text-muted); margin-bottom: 24px;">Válassz ki egy aktív dolgozatot a fenti zöld sávból, vagy indíts egy új felmérést!</p>
+        <button id="btn-open-start-modal" class="btn btn-primary btn-lg">🚀 Új Dolgozat Indítása</button>
+      </div>
+
+      <!-- Ha van aktív dolgozat (Élő Mátrix) -->
+      <div id="active-session-panel" style="display: none;">
+        
+        <!-- Munkamenet Eszköztár -->
+        <div class="card" style="padding: 16px 20px; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span id="session-badge-channel" class="live-badge badge-active">🟢 ÉLŐ</span>
+                <h2 id="live-session-title" style="font-size: 1.3rem;">Teszt címe</h2>
+              </div>
+              <p id="live-session-info" style="color: var(--text-muted); font-size: 0.9rem; margin-top: 4px;">
+                Tantárgy: Digitális kultúra | Évfolyam: 6 | Mód: Diák-tempó
+              </p>
+            </div>
+
+            <!-- Egyetlen Lezárás gomb (Rule context 1.3) -->
+            <div style="display: flex; gap: 10px;">
+              <button id="btn-open-start-modal-alt" class="btn btn-secondary">➕ Újabb indítása</button>
+              <button id="btn-finish-session" class="btn btn-danger btn-lg">
+                ⏹️ Dolgozat befejezése (Finish)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Élő Mátrix Táblázat -->
+        <div class="table-responsive">
+          <table id="matrix-table" class="matrix-table">
+            <thead>
+              <tr id="matrix-head-row">
+                <th class="col-name">Tanuló neve</th>
+                <th>Gép</th>
+                <!-- Kérdés sorszámok dinamikusan -->
+                <th>Összpont</th>
+                <th>%</th>
+                <th>Jegy</th>
+                <th>Fókusz</th>
+                <th>Művelet</th>
+              </tr>
+            </thead>
+            <tbody id="matrix-body">
+              <!-- Diákok sora dinamikusan -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Export lehetőségek a mátrix alatt -->
+        <div class="card" style="margin-top: 20px; padding: 18px 24px;">
+          <h4 style="margin-bottom: 12px;">📊 Eredmények letöltése és Exportok:</h4>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <a id="btn-export-excel" href="#" class="btn btn-success" target="_blank">
+              📊 KRÉTA-kompatibilis Excel (.xlsx)
+            </a>
+            <a id="btn-export-html" href="#" class="btn btn-primary" target="_blank">
+              🌐 Interaktív Csoportos HTML (.html)
+            </a>
+            <a id="btn-export-zip" href="#" class="btn btn-secondary" target="_blank">
+              📦 Egyéni Értékelőlapok (.zip)
+            </a>
+            <a id="btn-export-print" href="/print" class="btn btn-secondary" target="_blank">
+              🖨️ Nyomtatható A4 PDF nézet
+            </a>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- 2. FÜL: TESZTSZERKESZTŐ (QUIZ MANAGER) -->
+    <section id="tab-quizzes" class="admin-tab-content" style="display: none;">
+      <div class="admin-toolbar">
+        <h3>Feladatsorok és Kérdések</h3>
+        <button id="btn-new-quiz" class="btn btn-primary">➕ Új Teszt Létrehozása</button>
+      </div>
+
+      <!-- Tesztek kártyalistája -->
+      <div id="quizzes-list-container" class="channel-selector">
+        <!-- Dinamikus tesztkártyák -->
+      </div>
+
+      <!-- Tesztszerkesztő űrlap kártya (alapértelmezetten rejtve) -->
+      <div id="quiz-editor-card" class="card" style="display: none; margin-top: 24px;">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <h3 id="editor-title" class="card-title">Teszt szerkesztése</h3>
+          <button id="btn-close-editor" class="btn btn-secondary">Mégse</button>
+        </div>
+
+        <form id="form-quiz-editor" onsubmit="return false;">
+          <input type="hidden" id="edit-quiz-id">
+          
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+            <div class="form-group">
+              <label class="form-label" for="edit-subject-id">Tantárgy:</label>
+              <select id="edit-subject-id" class="form-control"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="edit-grade-level">Évfolyam:</label>
+              <input type="text" id="edit-grade-level" class="form-control" placeholder="pl. 6">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="edit-time-limit">Időkorlát (perc, 0 = nincs):</label>
+              <input type="number" id="edit-time-limit" class="form-control" min="0" value="10">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="edit-quiz-title">Teszt címe:</label>
+            <input type="text" id="edit-quiz-title" class="form-control" placeholder="pl. 6. osztály – Hálózatok alapjai">
+          </div>
+
+          <!-- Kérdések listája a tesztben -->
+          <div style="margin-top: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h4>Kérdések a feladatsorban:</h4>
+              <button id="btn-add-question" type="button" class="btn btn-secondary">➕ Kérdés hozzáadása</button>
+            </div>
+            <div id="editor-questions-list">
+              <!-- Dinamikus kérdésblokkok -->
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" id="btn-save-quiz" class="btn btn-success btn-lg">💾 Feladatsor Mentése</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- 3. FÜL: OSZTÁLYNÉVSOROK KEZELŐJE (ROSTER MANAGER) -->
+    <section id="tab-roster" class="admin-tab-content" style="display: none;">
+      <div class="admin-toolbar">
+        <h3>Hivatalos Osztálynévsorok</h3>
+        <button id="btn-new-class" class="btn btn-primary">➕ Új Osztály Rögzítése</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 280px 1fr; gap: 20px;">
+        <!-- Osztályok bal oldali listája -->
+        <div class="card" style="padding: 16px;">
+          <h4 style="margin-bottom: 12px;">Osztályok:</h4>
+          <div id="admin-roster-class-list" class="options-list">
+            <!-- Dinamikusan töltődik -->
+          </div>
+        </div>
+
+        <!-- Jobb oldali névsor szerkesztő -->
+        <div class="card" id="roster-editor-box" style="display: none;">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h4 id="roster-class-title">Osztály névsora</h4>
+            <button id="btn-delete-class" class="btn btn-danger">Osztály törlése</button>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="roster-names-textarea">
+              Tanulók nevei (soronként 1 név – KRÉTA-ból közvetlenül kimásolható és beilleszthető):
+            </label>
+            <textarea id="roster-names-textarea" class="form-control" rows="16" placeholder="Kovács Péter&#10;Nagy Anna&#10;Szabó Bence..."></textarea>
+          </div>
+
+          <div style="text-align: right;">
+            <button id="btn-save-roster" class="btn btn-success btn-lg">💾 Névsor Mentése</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. FÜL: BIZTONSÁGI MENTÉS (BACKUP) -->
+    <section id="tab-backup" class="admin-tab-content" style="display: none;">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">💾 Teljes Rendszermentés és Archiválás</h3>
+          <p class="card-subtitle">
+            A gombra kattintva a rendszer az SQLite Backup API segítségével egy konzisztens, teljes ZIP csomagot készít az adatbázisból és a feltöltött képekből.
+          </p>
+        </div>
+        <div style="padding: 20px 0;">
+          <a href="/api/admin/backup" class="btn btn-primary btn-lg" target="_blank">
+            📦 Teljes Biztonsági Mentés Letöltése (.zip)
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Új Dolgozat Indítása Modal -->
+  <div id="modal-start-session" class="modal-backdrop">
+    <div class="modal-window">
+      <div class="card-header">
+        <h3 class="card-title">🚀 Új Dolgozat Indítása</h3>
+        <p class="card-subtitle">Válaszd ki a tantárgyat, az évfolyamot és a tesztet!</p>
+      </div>
+
+      <form id="form-start-session" onsubmit="return false;">
+        <div class="form-group">
+          <label class="form-label" for="start-subject-id">Tantárgy:</label>
+          <select id="start-subject-id" class="form-control"></select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="start-grade-level">Évfolyam (pl. 6):</label>
+          <input type="text" id="start-grade-level" class="form-control" placeholder="pl. 6" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="start-quiz-id">Teszt kiválasztása:</label>
+          <select id="start-quiz-id" class="form-control" required></select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="start-mode">Működési Mód:</label>
+          <select id="start-mode" class="form-control">
+            <option value="STUDENT_PACED">Diák-tempó (Student Paced – önálló haladás)</option>
+            <option value="SPACE_RACE">Űrhajós Csapatverseny (Space Race)</option>
+            <option value="TEACHER_PACED">Tanári léptetés (Teacher Paced)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="start-time-limit">Egyéni időkorlát (perc, 0 = nincs korlát):</label>
+          <input type="number" id="start-time-limit" class="form-control" value="0" min="0">
+        </div>
+
+        <div class="form-group" style="display: flex; gap: 20px; margin-top: 10px;">
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="checkbox" id="start-shuffle-questions"> Kérdések keverése
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="checkbox" id="start-shuffle-options"> Válaszok keverése
+          </label>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-start-session')">Mégse</button>
+          <button type="submit" id="btn-confirm-start" class="btn btn-success btn-lg">🚀 Indítás</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Szkriptek -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/utils.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>
+

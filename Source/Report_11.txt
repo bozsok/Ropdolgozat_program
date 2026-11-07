@@ -1,0 +1,112 @@
+A Report 10 javításait alapvetően elfogadom. A 31 sikeres integrációs teszt fontos előrelépés, különösen azért, mert most már nemcsak az adatbázis-megszorításokat, hanem a tranzakciós visszagörgetést és a gépváltást is vizsgáltátok.
+
+A korábbi két kritikus probléma után a mostani módosítások újabb lényeges hiányosságokat kezelnek:
+
+- A lezárt dolgozatba már új résztvevő vagy válasz sem kerülhet.
+- A hibás értékelési kombinációkat az adatbázis visszautasítja.
+- A dolgozatlezárás atomi művelet.
+- A másik gépről történő névátvétel ellen szerveroldali ellenőrzés működik.
+
+Két ponton azonban még nem tekinteném teljesnek a megoldást: az értékelési CHECK megszorításnál, illetve a gépazonosítás biztonságánál.
+
+## 1. Az értékelési CHECK megszorítás
+
+A jelenlegi feltétel:
+
+```
+CHECK(
+    (eval_status = 'WRONG'
+     AND points_earned = 0.0
+     AND is_correct = 0)
+    OR
+    (eval_status IN ('CORRECT', 'PARTIAL')
+     AND is_correct = 1
+     AND points_earned >= 0.0)
+)
+```
+
+Ez valóban megakadályozza a `WRONG` státusz és a pozitív pontszám együttes használatát.
+
+Viszont két további kombinációt is megenged:
+
+| Státusz   | Pontszám | Jelenleg      |
+| --------- | -------- | ------------- |
+| `CORRECT` | 0        | Engedélyezett |
+| `PARTIAL` | 0        | Engedélyezett |
+
+Ez nem feltétlenül hiba, de tudatos döntést igényel.
+
+Ha a rendszer enged nulla pontértékű kérdéseket, akkor egy helyes válaszra adott nulla pont logikus lehet. Ha viszont a `PARTIAL` valódi részpontszámot jelent, akkor ott célszerű lenne pozitív pontszámot megkövetelni.
+
+Javaslatom: egyelőre ne módosítsuk automatikusan a CHECK-et. Előbb a pontozási szabályt kell egyértelműen rögzíteni.
+
+Még fontosabb, hogy a jelenlegi CHECK nem biztosítja:
+
+\\[ \text{points\\\_earned} \leq \text{questions.points} \\]
+
+Ezt egyszerű SQLite CHECK-kel nem lehet megoldani, mert az nem hivatkozhat másik tábla rekordjára.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://www.sqlite.org\&sz=32)
+
+sqlite.org
+
+
+
+Én a maximális pontszám szerveroldali ellenőrzését és egy célzott integrációs tesztet javasolnék.
+
+## 2. A gépazonosítás nem azonos a hitelesítéssel
+
+A 12-es és 15-ös gép közötti teszt jó, de csak azt igazolja, hogy a rendszer a megkülönböztetett gépazonosítókat helyesen kezeli.
+
+Ha a `pc_number` értékét a böngésző küldi el, azt egy másik kliens is megpróbálhatja ugyanarra az értékre állítani.
+
+Ezért a gépszám önmagában nem lehet hitelesítési bizonyíték.
+
+A megfelelő működés szerintem:
+
+- Azonos böngésző, érvényes token: automatikus folytatás.
+- Másik böngésző, token nélkül: a név és a gépszám ismerete nem elegendő az átvételhez.
+- Gépváltás: tanári jóváhagyás, a régi token visszavonása és új token kiadása.
+
+Az OWASP is a szerveroldali munkamenet-ellenőrzést és a gyanús munkamenet-változások kezelését javasolja.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://cheatsheetseries.owasp.org\&sz=32)
+
+OWASP Cheat Sheet Series
+
+
+
+Ehhez nem kell új szerepkör vagy bonyolult bejelentkezési rendszer.
+
+## 3. A tranzakciós lezárás
+
+A leírt rollback-teszt kifejezetten jó.
+
+Azt bizonyítja, hogy szimulált hiba esetén a résztvevő és a session állapota együtt áll vissza.
+
+Két további esetet érdemes majd ellenőrizni: egyidejű tanári lezárás és diákválasz-beküldés, illetve két tanári gépről egyszerre kezdeményezett lezárás.
+
+Ezeknél a cél az, hogy a session legfeljebb egyszer záródjon le, és egyetlen válasz se kerülhessen be a végleges lezárás után.
+
+## 4. A 31 sikeres integrációs teszt értékelése
+
+A megadott eredmények alapján az ellenőrzött működési útvonalak rendben vannak.
+
+Ugyanakkor érdemes különválasztani:
+
+- 31 sikeres teszt: a vizsgált esetek megfeleltek az elvárt eredményeknek.
+- Teljes rendszerbiztonság: ennél szélesebb állítás, amelyet ezek önmagukban nem bizonyítanak.
+
+A mostani beszámoló alapján nem látok újabb bizonyított kritikus adatbázishibát.
+
+## 5. Mit javaslok?
+
+Nem kezdenék újabb nagy tervezési körbe. Három konkrét teendőt tartok indokoltnak:
+
+1. A `CORRECT`, `PARTIAL` és nulla pont üzleti jelentésének rögzítése.
+2. Annak ellenőrzése, hogy a munkamenet átvételét valóban a token védi-e, és nem csupán a gépszám.
+3. Két párhuzamossági teszt: válaszbeküldés a lezárással egy időben, valamint két egyidejű tanári lezárás.
+
+Összességében: a Report 10 javításait elfogadnám. A következő szakaszban a rendszer működésének, különösen a valós idejű eseményeknek és az alkalmazásszintű hitelesítésnek a tesztelése hozna nagyobb értéket, mint az adatbázisséma további általános bővítése.
+
+Ha ezek az ellenőrzések is sikeresek, az adatbázis-tervezési szakaszt lezártnak tekinteném.

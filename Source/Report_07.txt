@@ -1,0 +1,152 @@
+Az öt megoldásból négyet kisebb pontosítással elfogadnék, az ARCHIVED állapotra épülő törlésvédelmet viszont jelenlegi formájában nem.
+
+A fejlesztés jó irányba halad: nem igényel új architektúrát, és illeszkedik az egyszerű, két szerepkörös röpdolgozat-rendszerhez. Viszont az archiválásnál éppen az a védelem válhat megkerülhetővé, amelyet eddig gondosan kialakítottunk.
+Az öt javaslat értékelése
+Megoldás	Értékelésem
+1. locked_at megváltoztathatatlansága	Elfogadható
+2. Két mezős tanári pontozási előzmény	Pontosítandó
+3. ARCHIVED állapottal törlés engedélyezése	Átdolgozandó
+4. Idempotencia ellenőrzése határidő előtt	Elfogadható
+5. UUID-alapú képfájlok	Kiegészítendő
+
+1. A locked_at trigger
+A megadott SQL helyes. Egyetlen egyszerűsítést javaslok:
+CREATE TRIGGER IF NOT EXISTS trg_prevent_quiz_unlock
+BEFORE UPDATE OF locked_at ON quizzes
+WHEN OLD.locked_at IS NOT NULL
+ AND NEW.locked_at IS NOT OLD.locked_at
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'A teszt zárolási időpontja nem módosítható!'
+    );
+END;
+
+
+Az SQLite IS NOT operátora NULL-biztos összehasonlítást végez, ezért a feltétel rövidebb, de ugyanazt biztosítja. 
+
+www3.sqlite.org+1
+
+Egy gyakorlati figyelmeztetés: a meglévő trg_prevent_quiz_unlock triggert nem írja felül a CREATE TRIGGER IF NOT EXISTS. Migrációkor a régi definíciót ténylegesen le kell cserélni. 
+
+sqlite.org+1
+
+Ezután az első használatkor beállított időbélyeg végleges marad.
+2. A tanári pontszám-felülbírálás előzménye
+A két új mező jó, ha a cél kizárólag az eredeti gépi pontszám és a legutóbbi tanári javítás időpontjának megőrzése.
+
+Van azonban egy lényeges különbség a gépi pontszám megőrzése és a teljes módosítástörténet között.
+
+Tegyük fel:
+Esemény	points_earned	original_points_earned
+Automatikus értékelés	0	0
+Első tanári javítás	0,5	0
+Második tanári javítás	1	0
+
+A két mezőből a végén már nem derül ki, hogy a tanár korábban 0,5 pontot is adott.
+
+Ez nem feltétlenül baj.
+
+Javaslatom: ne nevezzük teljes auditnaplónak. Rögzítsük pontosan, hogy az eredeti automatikus értékelést és az aktuális tanári felülbírálást őrzi meg.
+
+Az original_points_earned értékét az első gépi pontozáskor érdemes rögzíteni, és utána változtathatatlanná tenni. Az overridden_at értékét minden sikeres tanári javításkor frissíteni kell.
+
+Ha ez elegendő az iskola működéséhez, nem indokolt új naplózó tábla.
+3. Az ARCHIVED állapot: itt valódi tervezési hibát látok
+A javasolt működés:
+
+ACTIVE → FINISHED → ARCHIVED → törlés
+
+Önmagában érthető, de a törlésvédelmi triggerek szempontjából problémás.
+
+Tegyük fel, hogy valaki közvetlen SQL-lel végrehajtja:
+UPDATE sessions
+SET status = 'ARCHIVED'
+WHERE id = 123;
+
+
+Ha az adatbázis ezt engedi, a korábban FINISHED állapot miatt védett résztvevők és válaszok törölhetővé válhatnak.
+
+Vagyis az ARCHIVED állapot önmagában nem igazolja, hogy valóban elkészült és ellenőrzött a biztonsági mentés.
+
+Ráadásul a korábbi CHECK szabályt is módosítani kell, különben az új státusz nem lesz használható:
+CHECK (
+    (status = 'ACTIVE' AND ended_at IS NULL)
+    OR
+    (status IN ('FINISHED', 'ARCHIVED')
+     AND ended_at IS NOT NULL)
+)
+
+
+Ez a módosítás szükséges, de a törlésvédelmi problémát nem oldja meg.
+Mit javaslok helyette?
+Az ARCHIVED állapotot megtartanám, de csak akkor engedném beállítani, ha a szerver már sikeresen elkészített és ellenőrzött egy archívumot.
+
+A folyamat legyen:
+1. Archívum előállítása
+   
+   A szerver konzisztens SQLite-pillanatképet készít, és hozzáadja a szükséges képeket.
+2. Archívum ellenőrzése
+   
+   Ellenőrzi az adatbázis épségét és a szükséges fájlok meglétét.
+3. Mentés és megerősítés
+   
+   A tanár letölti az archívumot, és megerősíti, hogy megtartotta.
+4. Archiválási művelet
+   
+   A szerver ellenőrzött műveletként állítja át az érintett sessionök állapotát.
+5. Törlés
+   
+   Csak az archiválási folyamatban kijelölt rekordok távolíthatók el.
+
+A SQLite adatbázis mentésénél nem egyszerű fájlmásolást használnék működő rendszer mellett, hanem a SQLite Backup API-t, amely konzisztens adatbázis-pillanatképet tud készíteni. 
+
+sqlite.org
+
+Viszont még ez sem jelenti azt, hogy a tanári gomb megnyomása önmagában adatbázis-szintű felhatalmazást adhat.
+
+Itt dönteni kell a védelmi modellről: a FINISHED → ARCHIVED átmenethez vagy ellenőrizhető, adatbázisban tárolt archiválási jogosultság/állapot kell, vagy elfogadjuk, hogy a törlési kivétel biztonságát az alkalmazásszerver garantálja.
+
+Mivel korábban kifejezetten a közvetlen SQL-hívásokkal szembeni védelmet választottuk, az első megoldás lenne következetesebb. Ehhez egy minimális archiválási nyilvántartás is szükségessé válhat.
+
+Egy további kérdés: a tanév végi törlés után a zárolt tesztek megmaradnak, vagy azokat is archiválni szeretnéd? A locked_at alapú végleges törlésvédelem miatt ez két eltérő folyamat.
+4. Idempotencia és lejárt határidő
+A gondolat helyes: a korábban elfogadott választ a határidő lejárta után is vissza lehessen igazolni.
+
+Viszont két ellenőrzésnek meg kell előznie ezt:
+1. A kérés hitelesítése: valóban ugyanaz a résztvevő küldte-e?
+2. Az ismételt kérés azonosítása: valóban ugyanannak a válaszbeküldésnek a megismétlése-e?
+Ne legyen elegendő annyit ellenőrizni, hogy már létezik válasz ugyanarra a kérdésre.
+
+Például:
+- Első kérés: „B” válasz.
+- Második kérés: „C” válasz.
+Ez nem feltétlenül hálózati újraküldés, hanem lehet egy második, eltérő beküldési kísérlet.
+
+Ha a rendszerben minden kérdés egyszer válaszolható meg, akkor az első válasz maradjon érvényes, és az eltérő második beküldést külön kell kezelni.
+
+Az idempotencia-ellenőrzés tehát valóban megelőzheti a határidő vizsgálatát, de nem előzheti meg a hitelesítést és a kérés azonosságának ellenőrzését.
+5. UUID-alapú képfájlok
+Ez megfelelő, egyszerű megoldás, de az UUID csak az egyedi fájlnevet garantálja.
+
+Két szabályt még rögzítenék:
+- Fájlmegőrzés: a régi kép nem törölhető, amíg bármelyik megtartott teszt vagy archívum hivatkozik rá.
+- Fájlcsere: meglévő kép módosítása helyett mindig új UUID nevű állomány jön létre. A régi állomány változatlan marad.
+Ha két teszt ugyanazt a képet használja, elegendő ugyanarra a fájlra hivatkozni. Nem szükséges minden tesztmásoláskor fizikailag megduplázni a képet.
+
+Az archívum összeállításakor viszont minden szükséges képfájlt bele kell helyezni, és ellenőrizni kell, hogy valóban szerepel-e benne.
+
+A public/uploads/ könyvtárhoz ne legyen nyilvánosan engedélyezett feltöltés, módosítás vagy törlés; ezek csak a megfelelő szerveroldali végpontokon keresztül történjenek.
+Végső javaslatom
+Feladat	Következő lépés
+locked_at	Elfogadás, trigger cseréje
+Pontozási előzmény	Elfogadás, eredeti pontszám megváltoztathatatlansága
+Archiválás	A törlési jogosultság működésének tisztázása
+Idempotencia	Kérésazonosság és hitelesítés pontosítása
+Képfájlok	Hivatkozások és fájlélettartam szabályozása
+
+A legfontosabb fennmaradó kérdés az archiválás. Nem javaslom, hogy egy egyszerű ARCHIVED státuszváltás automatikusan megszüntesse az eddig felépített adatbázis-szintű törlésvédelmet.
+
+Az első, második, negyedik és ötödik pontot a jelzett finomításokkal elfogadnám. A harmadikat előbb úgy kell átdolgozni, hogy ne lehessen egyetlen közvetlen SQL UPDATE művelettel törölhetővé tenni a lezárt dolgozatok eredményeit.
+
+Ezután már valóban célszerűbb lenne a specifikáció további bővítése helyett a teljes SQL-séma és a triggerek integrációs tesztelésére áttérni.

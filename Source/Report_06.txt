@@ -1,0 +1,134 @@
+A módosításcsomagot alapvetően elfogadnám. A rendszerterv most már megfelelően kezeli a tesztek zárolását, a válaszok eredeti tartalmának védelmét és a dolgozatok közötti adatintegritást.
+
+Ugyanakkor nem javasolnám még a `DATABASE_SCHEMA.sql` végleges lezárását. A 12 trigger sikeres SQLite-fordítása fontos eredmény, de a szintaktikai helyesség nem bizonyítja az összes üzleti szabály helyes működését.
+
+A leírásod alapján öt konkrét kérdést vizsgálnék meg.
+
+## 1. A zárolás valóban megváltoztathatatlan?
+
+Ellenőrzendő
+
+A `trg_prevent_quiz_unlock` megakadályozza, hogy a `locked_at` visszaálljon `NULL`-ra.
+
+De mi történik, ha valaki egy másik, nem NULL időbélyegre módosítja?
+
+Például:
+
+```
+UPDATE quizzes
+SET locked_at = '2030-01-01T00:00:00.000Z'
+WHERE id = 15;
+```
+
+Ha a fejlécet védő trigger minden UPDATE-et tilt zárolt tesztnél, ez már védett. Ha viszont csak bizonyos mezőket ellenőriz, a zárolás időpontja módosítható maradhat.
+
+Javaslat: a `locked_at` mező egyszer beállított értéke semmilyen UPDATE-tel ne legyen megváltoztatható.
+
+Azt is tesztelni kell, hogy az automatikus zárolási trigger működése nem ütközik-e a kvíz UPDATE-védelmével.
+
+## 2. A zárolt teszt védelme a kapcsolódó rekordokra is kiterjed?
+
+Fontos
+
+A leírás alapján a `quizzes`, `questions`, `sessions` és `answers` táblák védelme megfelelő irányú.
+
+Van azonban egy fontos lehetőség: ha a teszt kérdései képeket vagy más csatolt fájlokat használnak, azok tartalmát is meg kell őrizni.
+
+Például egy lezárt dolgozat kérdésében szereplő kép nem változhat meg attól, hogy valaki ugyanazon a fájlútvonalon lecseréli az állományt.
+
+Ehhez nem feltétlenül kell új tábla. Elegendő lehet, ha a zárolt kérdések fájljai változtathatatlanok, és a másolás új fájlhivatkozást vagy szükség esetén új fájlpéldányt hoz létre.
+
+## 3. A tanári felülbírálásnak legyen ellenőrizhető története
+
+A `trg_prevent_answer_core_update` jó megoldás: a diák eredeti válasza nem változhat meg, miközben a tanár javíthatja a pontozást.
+
+Viszont ha egy tanár módosítja a pontszámot, érdemes legalább azt megőrizni, hogy:
+
+- mi volt az eredeti automatikus pontszám;
+- mi lett a végleges pontszám;
+- mikor történt a felülbírálás.
+
+Ez megoldható néhány mezővel vagy egy egyszerű változásnaplóval. Nem javaslok teljes körű auditáló alrendszert.
+
+Fontos: SQLite-trigger önmagában nem tudja hitelesen eldönteni, hogy egy módosítást tanár kezdeményezett-e. A tanári jogosultság ellenőrzése továbbra is a szerver feladata.
+
+## 4. A válaszmentés idempotenciáját adatbázisszinten is biztosítani kell
+
+A `BEGIN IMMEDIATE` megfelelő választás SQLite-ban a párhuzamos írási műveletek rendezésére.
+
+De az idempotencia nem kizárólag tranzakciós kérdés.
+
+Ha egy résztvevő egy kérdésre csak egyszer válaszolhat, akkor érdemes az adatbázisban is biztosítani:
+
+```
+UNIQUE(participant_id, question_id)
+```
+
+Ha ez már szerepel a sémában, nincs további teendő.
+
+Ha a válaszok módosítása vagy több próbálkozás megengedett, más megoldás szükséges.
+
+Egy további finomítás: a korábban sikeresen elmentett válasz ismételt beküldését akkor is fel kell tudni ismerni, ha közben lejárt a határidő. Ezért az idempotens ismétlés felismerése megelőzheti az új válaszokra vonatkozó határidő-ellenőrzést. Így egy elveszett szerverválasz miatt a diák nem kap téves hibát.
+
+## 5. Az archiválás és a törlésvédelmi triggerek összehangolása
+
+Ezt különösen fontos tesztelni
+
+Korábban rögzítettük, hogy a tanév végén a tanár egy egyszerű művelettel archiválhatja és törölheti az eredményeket.
+
+Most viszont a lezárt dolgozatok résztvevői és válaszai adatbázisszinten törlésvédettek.
+
+Ez helyes a normál működés során, de felvet egy kérdést:
+
+Hogyan fogja az archiválási folyamat törölni a lezárt eredményeket, ha a triggerek minden ilyen törlést megakadályoznak?
+
+Erre külön, ellenőrzött megoldást kell tervezni. Nem javaslom, hogy a rendszer egyszerűen kikapcsolja vagy eltávolítsa a védelmi triggereket.
+
+Az archiválási műveletnek világosan el kell különülnie a normál törléstől, és csak sikeres, ellenőrzött archívumkészítés után engedhető meg az adatok eltávolítása.
+
+## 6. Amit most már nem bővítenék tovább
+
+A jelenlegi célhoz nem tartom indokoltnak:
+
+- újabb jogosultsági szerepkörök bevezetését;
+- összetett kérdésverzió-kezelő rendszer kialakítását;
+- külön GDPR-automatizmus létrehozását;
+- általános célú eseményvezérelt infrastruktúrát;
+- a SQLite lecserélését kizárólag a mostani követelmények miatt.
+
+Ezek jelenleg nem adnának arányos többletértéket.
+
+## 7. Következő lépés: automatizált integritási tesztek
+
+Én most már nem újabb triggerek tervezésével folytatnám, hanem a meglévők célzott tesztelésével.
+
+A legfontosabb tesztesetek:
+
+| Teszt                                       | Elvárt eredmény                      |
+| ------------------------------------------- | ------------------------------------ |
+| Első session létrehozása                    | A teszt automatikusan zárolódik      |
+| Zárolt teszt `locked_at` módosítása         | Elutasítás                           |
+| Zárolt teszthez kérdés hozzáadása           | Elutasítás                           |
+| Zárolt kérdés másik tesztbe helyezése       | Elutasítás                           |
+| Másik teszt kérdésének válaszként beküldése | Elutasítás                           |
+| Lezárt dolgozat résztvevőjének törlése      | Elutasítás                           |
+| Lezárt dolgozat válaszának törlése          | Elutasítás                           |
+| Eredeti diákválasz felülírása               | Elutasítás                           |
+| Tanári pontszám-felülbírálás                | Engedélyezett, ellenőrzött           |
+| Azonos válasz ismételt beküldése            | Nincs dupla mentés vagy pontozás     |
+| Határidő után új válasz beküldése           | Elutasítás                           |
+| Archiválás és eredménytörlés                | Csak ellenőrzött folyamatban sikeres |
+
+### Összegzés
+
+A jelenlegi terv már megfelelő alapot ad az implementációhoz. Nem látok indokot jelentős architekturális átalakításra.
+
+Három dolgot tekintenék még lezárandónak:
+
+1. A `locked_at` teljes megváltoztathatatlansága.
+2. Az archiválás és a törlésvédelmi triggerek összehangolása.
+3. Az összes integritási szabály automatizált, pozitív és negatív tesztelése.
+
+A legfontosabb különbség a következő fejlesztési szakaszban az lesz, hogy nemcsak azt ellenőrizzük, hogy a tiltott műveletek valóban elbuknak-e, hanem azt is, hogy a megengedett műveletek a triggerek mellett továbbra is hibátlanul működnek-e.
+
+A tényleges SQL-fájl nélkül ezek a leírás alapján azonosított ellenőrzési pontok, nem bizonyított hibák.

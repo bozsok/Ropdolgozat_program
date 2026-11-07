@@ -1,0 +1,1 @@
+"Olvasd el az AI_RULES.md, PRD.md, TECH_STACK.md és DATABASE_SCHEMA.sql fájlokat! Ezek alapján kezdd el a fejlesztést az AI_RULES.md 6. pontjában leírt 1. és 2. lépéssel: hozd létre a projektstruktúrát, az adatbázis-inicializálást egy minta digitális kultúra teszttel, valamint az alap szervert!"

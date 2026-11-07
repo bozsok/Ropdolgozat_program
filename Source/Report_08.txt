@@ -1,0 +1,109 @@
+Igen, az öt javítás alapelveivel egyetértek. Különösen jó döntésnek tartom, hogy az `ARCHIVED` állapotot elhagyjátok, és az archiválást kizárólag biztonsági mentésként kezelitek. Ezzel megszűnik a korábbi terv egyik legfontosabb belső ellentmondása.
+
+Viszont két állítást pontosítanék:
+
+- A lezárt dolgozatok korlátlan idejű megőrzése technikailag lehetséges, de nem automatikusan követendő adatkezelési gyakorlat. A tanulói eredmények személyes adatok; a tényleges megőrzési időt az iskola adatkezelési szabályzatával és a vonatkozó követelményekkel összhangban kell meghatározni.
+- Az adatbázis-triggeres védelem nagyon erős az alkalmazás normál SQL-műveleteivel szemben, de nem „100%-osan golyóálló”. Egy megfelelő hozzáféréssel rendelkező rendszergazda módosíthatja a sémát, eltávolíthat triggereket, vagy törölheti magát az adatbázisfájlt. Ezért a hozzáférésvédelem és a biztonsági mentés továbbra is szükséges.
+
+## 1. Archiválás: elfogadom, egy fontos pontosítással
+
+Az `ARCHIVED` állapot elhagyását kifejezetten támogatom. Ha nincs szükség az adatok rendszeres eltávolítására, akkor felesleges egy bonyolult archiválási és törlési mechanizmust fenntartani.
+
+A rendszer így két állapottal működhet tovább:
+
+- `ACTIVE` – folyamatban lévő dolgozat.
+- `FINISHED` – lezárt, megőrzött dolgozat.
+
+Az archiválás pedig önálló biztonságimentés-művelet, amely nem módosítja a dolgozatok állapotát.
+
+Egy komoly SQL-részletre azonban figyelni kell.
+
+A korábbi triggerek a lezárt dolgozat résztvevőinek és válaszainak közvetlen törlését tiltják. De mi történik, ha valaki magát a `sessions` rekordot törli?
+
+Ha a kapcsolatoknál `ON DELETE CASCADE` szerepel, a szülőrekord törlése további rekordok törlését kezdeményezheti. A SQLite idegenkulcs-műveleteinek sorrendjét dokumentálja a hivatalos leírás.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://sqlite.org\&sz=32)
+
+sqlite.org
+
+
+
+Ezért külön védelmet javaslok:
+
+```
+CREATE TRIGGER IF NOT EXISTS trg_prevent_finished_session_delete
+BEFORE DELETE ON sessions
+WHEN OLD.status = 'FINISHED'
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'Lezárt dolgozat nem törölhető!'
+    );
+END;
+```
+
+Ezzel a lezárt dolgozat szülőrekordját is véditek. A kapcsolódó `quizzes` és `students` törlési útvonalait szintén érdemes tesztelni.
+
+## 2. `locked_at`: elfogadom
+
+A javasolt trigger logikája megfelelő.
+
+Egyetlen technikai teendő: ha a régi trigger már létezik az adatbázisban, az `IF NOT EXISTS` nem cseréli le a definícióját. Migrációkor a régi triggert el kell távolítani, majd létrehozni az újat.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://www.sqlite.org\&sz=32)
+
+sqlite.org
+
+
+
+Más módosítást nem javaslok.
+
+## 3. Tanári felülbírálás: elfogadom
+
+A két új mező elegendő a meghatározott célhoz.
+
+Viszont az `original_points_earned` rögzítésének sorrendje legyen pontos:
+
+- Az automatikus értékeléskor rögzül az eredeti pontszám.
+- Az első tanári felülbírálás sem változtathatja meg.
+- A későbbi tanári javítások csak az aktuális pontszámot és a legutóbbi módosítás időpontját érinthetik.
+
+Ha az eredeti pontszám kezdetben `NULL`, az azt kitöltő első jogos műveletet még engedni kell. Utána már tilos legyen módosítani.
+
+## 4. Idempotencia: elfogadom
+
+A megadott ellenőrzési sorrend helyes az egyszer véglegesíthető válaszokra épülő rendszerben.
+
+Egy apró pontosítás: a válaszok összehasonlítását a tárolt, normalizált formában végezzétek. Például a JSON válaszlehetőségek sorrendje vagy a szövegek feldolgozása ne okozzon téves eltérésjelzést.
+
+A korábban elmentett válasz visszaigazolásakor pedig a már létező válaszhoz tartozó eredményt adjátok vissza, ne indítsatok új pontozást.
+
+## 5. Képfájlok: elfogadom
+
+Az UUID fájlnevek, a felülírás tiltása és a zárolt tesztekhez tartozó képek megőrzése megfelelő megoldás.
+
+A ZIP-archívum készítésénél viszont figyelni kell arra, hogy a SQLite-pillanatkép és a képfájlok egymással összhangban legyenek. Ha mentés közben képet töltenek fel vagy módosítanak, ne keletkezhessen hiányos archívum.
+
+Erre elegendő lehet a mentés idejére röviden korlátozni a fájlmódosítási műveleteket, majd ellenőrizni az elkészült ZIP tartalmát.
+
+## 6. Végső álláspont
+
+Architekturális terv
+
+Elfogadható
+
+Adatbázis-védelmi szabályok
+
+Még tesztelendő
+
+Archiválási folyamat
+
+Egyszerűsítve
+
+Már nem javaslok újabb funkcionális bővítést. A most kialakított szabályrendszer elég részletes ahhoz, hogy megkezdődjön a tényleges implementáció ellenőrzése.
+
+A következő lépés a teljes SQL-séma automatizált integritási tesztje legyen, különösen a szülőrekordokon keresztüli törlésekre, a triggerek kölcsönhatására és a biztonsági mentés visszaállíthatóságára koncentrálva.
+
+Egyetlen üzleti kérdést még a véglegesítés előtt tisztáznék: a régi tanévben használt, zárolt tesztekből valóban indíthatók legyenek-e új dolgozatok változatlan tartalommal? Ez a jelenlegi tervvel összeegyeztethető, és szerintem hasznos működés.
+
+Összességében egyetértek. A tervezést ezen a ponton lezárnám, és a bizonyítást tesztekkel folytatnám.

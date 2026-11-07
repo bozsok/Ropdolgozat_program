@@ -1,0 +1,182 @@
+Átnéztem a két feltöltött fájlt, és a `DATABASE_SCHEMA(1).sql` sémát tényleges SQLite-motorral is kipróbáltam.
+
+Az eredmény: a tervezett védelem jelentős része működik, de találtam két igazolt, fontos hibát. Ezeket a véglegesítés előtt javítani kell.
+
+## 1. Amit megfelelőnek találtam
+
+A következő megoldások helyesen szerepelnek a fájlokban:
+
+- Az első session létrehozásakor automatikusan kitöltődik a `locked_at`.
+- Az időbélyeg későbbi módosítása tiltott.
+- A zárolt teszt kérdéseinek INSERT, UPDATE és DELETE védelme megfelelő.
+- A kérdés–dolgozat kapcsolat INSERT-kori ellenőrzése szerepel.
+- Az összetett résztvevő–session idegen kulcs és a válaszok egyediségi megszorítása megfelelő.
+- Az `ARCHIVED` állapotot ténylegesen elhagytátok.
+- A lezárt session törlését külön trigger tiltja.
+
+A `project-context.md` is követi a legtöbb korábban meghozott döntést.&#x20;
+
+DATABASE_SCHEMA(1).sql
+
+project-context(1).md
+
+
+
+## 2. Első igazolt hiba: zárolt teszt időkorlátja módosítható
+
+Javítandó
+
+A `trg_lock_quiz_header_update` csak három mezőt véd:
+
+```
+BEFORE UPDATE OF title, subject_id, subject_grade ON quizzes
+```
+
+A `default_time_limit_min` kimaradt.
+
+A próbámban ezt a műveletet az adatbázis engedélyezte, pedig a teszt már zárolt volt:
+
+```
+UPDATE quizzes
+SET default_time_limit_min = 99
+WHERE id = 1;
+```
+
+Ez azt jelenti, hogy a zárolt teszt egyik beállítása utólag módosítható.&#x20;
+
+DATABASE_SCHEMA(1).sql
+
+DATABASE_SCHEMA(1).sql
+
+
+
+Javasolt javítás: a zárolt teszten minden tényleges adatváltoztatást tiltani kell, kivéve az első zárolási időbélyeg automatikus beállítását. Ez tisztább és biztonságosabb, mint egyesével felsorolni a védendő mezőket.
+
+## 3. Második igazolt hiba: a lezárt dolgozat újranyitható, majd törölhető
+
+Kritikus
+
+Ez a fontosabb probléma.
+
+A `sessions` tábla CHECK megszorítása biztosítja, hogy az `ACTIVE` állapothoz `ended_at IS NULL`, a `FINISHED` állapothoz pedig nem NULL lezárási idő tartozzon.
+
+De nem tiltja a `FINISHED` → `ACTIVE` visszaállítást.
+
+A következő műveletsort teszteltem:
+
+```
+-- 1. A dolgozat lezárása
+UPDATE sessions
+SET status = 'FINISHED',
+    ended_at = '2026-11-07T14:00:00.000Z'
+WHERE id = 1;
+
+-- 2. A lezárt dolgozat újranyitása
+UPDATE sessions
+SET status = 'ACTIVE',
+    ended_at = NULL
+WHERE id = 1;
+
+-- 3. A résztvevő törlése
+DELETE FROM participants WHERE id = 1;
+```
+
+SQLite-próba eredménye
+
+Védelem megkerülhető
+
+| Dolgozat lezárása    | &#x20;Sikeres             |
+| -------------------- | ------------------------- |
+| Dolgozat újranyitása | &#x20;Sikeres             |
+| Résztvevő törlése    | &#x20;Sikeres             |
+| Kapcsolódó válaszok  | Törlődtek a CASCADE miatt |
+
+Tehát a jelenlegi adatbázisban a „lezárt dolgozat soha nem törölhető” szabály még nem teljesül.&#x20;
+
+DATABASE_SCHEMA(1).sql
+
+DATABASE_SCHEMA(1).sql
+
+
+
+Javasolt megoldás: vezessünk be egy állapotátmenetet védő triggert:
+
+```
+CREATE TRIGGER IF NOT EXISTS trg_prevent_session_reopen
+BEFORE UPDATE OF status ON sessions
+WHEN OLD.status = 'FINISHED'
+     AND NEW.status IS NOT OLD.status
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'Lezárt dolgozat nem nyitható újra!'
+    );
+END;
+```
+
+Ezzel az igazolt törlési kiskapu megszűnik. Az `ended_at` utólagos átírását is érdemes tiltani.
+
+## 4. További ellenőrzendő pontok
+
+Ezeket a fájlok összevetése alapján azonosítottam, de nem mindegyikre futtattam külön SQLite-próbát.
+
+| Prioritás | Megállapítás                                                                                                                          | Javaslat                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Magas     | A lezárt session `grade_thresholds_json`, `shuffle_questions`, `shuffle_options`, `mode` és más beállításai továbbra is módosíthatók. | Lezárás után minden történeti beállítás legyen változtathatatlan.                    |
+| Magas     | A `participants` történeti adatai, például `student_name`, `question_order_json`, utólag felülírhatók.                                | A lezárt dolgozat résztvevőinek történeti adatait védeni kell.                       |
+| Magas     | Az `answers` rekord `is_correct`, `time_spent_sec`, `answered_at` mezői módosíthatók.                                                 | Csak az értékeléshez ténylegesen szükséges mezők legyenek szerkeszthetők.            |
+| Közepes   | Az `original_points_earned` kezdetben NULL lehet, és később először bármikor kitölthető.                                              | Az eredeti gépi pontszámot az első értékeléssel együtt kell rögzíteni.               |
+| Közepes   | A `students` táblában `UNIQUE(class_name, student_name)` szerepel.                                                                    | Rögzíteni kell, hogyan kezelitek az azonos nevű tanulókat és az osztályváltást.      |
+| Közepes   | A `deadline_at` lehet NULL.                                                                                                           | A `time_limit_min = 0` (időkorlát nélküli dolgozat) működését külön definiálni kell. |
+
+Ezek a `sessions`, `participants` és `answers` mezőiből, valamint a jelenlegi UPDATE-triggerek hatóköréből következnek.&#x20;
+
+DATABASE_SCHEMA(1).sql
+
+DATABASE_SCHEMA(1).sql
+
+
+
+### Egy fontos eltérés a projektleírásban
+
+A `project-context.md` szerint a tanuló a saját nevére kattintva, a `session_token` alapján folytathatja a munkamenetét.&#x20;
+
+project-context(1).md
+
+
+
+A tényleges megvalósításnál tisztázni kell, hogy a szerver hogyan hitelesíti az újracsatlakozást. Pusztán egy név kiválasztása nem bizonyítja, hogy ugyanaz a tanuló tért vissza. Ezt nem feltétlenül kell bonyolultabb bejelentkezéssel megoldani, de egy másik diák ne férhessen hozzá véletlenül a korábbi válaszokhoz.
+
+## 5. Mit javaslok most?
+
+Nem vezetnék be új táblákat vagy új funkciókat. A meglévő adatbázis védelmének befejezésére koncentrálnék, ebben a sorrendben:
+
+1. Lezárt session visszanyitásának tiltása – ez bizonyított adatvesztési kiskaput zár.
+2. Zárolt teszt teljes UPDATE-védelme – ne maradjon ki beállítás.
+3. Lezárt sessionök és résztvevők történeti adatainak védelme – az eredményeket meghatározó adatok maradjanak változatlanok.
+4. Válaszrekordok módosítható mezőinek pontosítása – a tanári felülbírálás működjön, az eredeti válasz és eredményeinek alapadatai ne változhassanak meg.
+5. Automatizált integritási próbák – a tiltott és a megengedett műveleteket egyaránt tesztelni kell.
+
+## Összesített értékelés
+
+Adatmodell felépítése
+
+Megfelelő alap
+
+Tesztek zárolása
+
+Kisebb hiányosság
+
+Lezárt dolgozatok megőrzése
+
+Javítandó
+
+Projektleírás és SQL összhangja
+
+Pontosítandó
+
+Véleményem: a projekt már rendelkezik egy jól körülhatárolt adatmodellel. A gond nem a koncepcióval van, hanem azzal, hogy egyes invariánsokat még nem kényszerít ki teljesen az adatbázis.
+
+A mostani ellenőrzés legfontosabb eredménye, hogy sikerült ténylegesen reprodukálni egy olyan műveletsort, amely a tervezett abszolút törlésvédelmet megkerüli.
+
+Ezért a `DATABASE_SCHEMA.sql` fájlt még nem minősíteném véglegesnek. A fenti javítások és az ismételt SQLite-tesztek után viszont már indokoltnak tartom a fejlesztési ütemterv első lépésének megkezdését.

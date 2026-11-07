@@ -1,0 +1,189 @@
+A két módosítás jó irány, és mindkettő valódi adatkonzisztencia-problémát old meg. Különösen fontos az összetett idegen kulcs: ezzel már nem pusztán az alkalmazás kódja felel azért, hogy a válasz a megfelelő munkamenethez tartozzon.
+
+A rendszer adatbázis-szintű védelme érezhetően erősödött. Viszont van még néhány olyan pont, amit érdemes tisztázni, mielőtt lezárjuk a specifikációt.
+
+## 1. A mostani módosítások értékelése
+
+### 1.1. Státusz és lezárási időpont összhangja
+
+Jó megoldás
+
+A CHECK feltétel helyes, ha a `sessions` táblában valóban csak két állapot lehetséges: `ACTIVE` és `FINISHED`.
+
+Egy fontos kiegészítés:
+
+- A `status` mező legyen `NOT NULL`.
+- Ha később új állapotot vezetsz be (például `CANCELLED`), a CHECK feltételt is módosítani kell.
+- A státuszváltást és az `ended_at` beállítását egyetlen adatbázis-tranzakcióban kell végrehajtani.
+
+A CHECK az adatok pillanatnyi összhangját garantálja, de önmagában nem szabályozza az állapotváltás megengedett sorrendjét.
+
+### 1.2. Munkamenet–résztvevő–válasz integritása
+
+Jó megoldás
+
+A következő kapcsolat helyes:
+
+```
+UNIQUE(id, session_id)
+
+FOREIGN KEY (participant_id, session_id)
+REFERENCES participants(id, session_id)
+ON DELETE CASCADE
+```
+
+Ezzel az adatbázis garantálja, hogy a válaszban szereplő résztvevő és munkamenet összetartozik.
+
+Viszont maradt egy másik integritási kérdés: a válaszhoz rendelt kérdés is ahhoz a teszthez tartozik-e, amelyikből a munkamenet létrejött?
+
+A jelenlegi összetett kulcs ezt még nem garantálja.
+
+Például:
+
+- A résztvevő az A teszt munkamenetében van.
+- A válasz rekordja az A munkamenetre és az A résztvevőre hivatkozik.
+- A `question_id` viszont a B teszt egyik kérdésére mutat.
+
+A három idegen kulcs külön-külön érvényes lehet, miközben a válasz tartalmilag hibás.
+
+Javaslat: ezt is adatbázis-szinten kellene biztosítani, ha a jelenlegi sémával megoldható. Ehhez a tényleges `sessions`, `questions` és `answers` táblák szerkezetét együtt kell megvizsgálni.
+
+### 1.3. Egy veszély, amit a CASCADE miatt külön kiemelnék
+
+A `participants` és `answers` közötti kapcsolatnál most `ON DELETE CASCADE` szerepel.
+
+Ez azt jelenti, hogy ha egy résztvevőt törölsz, a hozzá tartozó válaszok is automatikusan törlődnek.
+
+Ez nem feltétlenül hiba, de ütközhet a korábban rögzített céloddal: a lezárt dolgozatok eredményeinek hosszú távú megőrzésével.
+
+Én ezt javaslom:
+
+- Lezárt dolgozat résztvevője normál működés közben ne legyen törölhető.
+- A résztvevő törlése csak a tanév végi archiválási/törlési folyamat részeként történhessen.
+- Ha az archiválás előtt hiba történik, az eredeti adatok maradjanak érintetlenek.
+
+A `CASCADE` tehát maradhat, ha a törlési folyamat megfelelően kontrollált. De ne lehessen egy egyszerű résztvevőtörléssel véletlenül eredményt megsemmisíteni.
+
+## 2. A zárolt tesztek szabálya
+
+Jó üzleti szabály
+
+A másolásos szerkesztés egyszerű és jól érthető megoldás. Nem kell hozzá Git-szerű verziókezelés.
+
+Egy dolgot viszont pontosan rögzítenék:
+
+A zárolás nem csak a tanári felületre vonatkozik.
+
+A szervernek is el kell utasítania minden olyan módosítási kérést, amely aktív vagy lezárt dolgozathoz kapcsolódó tesztet vagy kérdést próbál megváltoztatni.
+
+A felületen elrejtett vagy letiltott szerkesztőgomb nem biztonsági védelem.
+
+További tisztázandó kérdés: ha egy kérdés több tesztben is szerepelhet, akkor a kérdés módosítása milyen hatással van a többi tesztre? A másoláskor a kérdéseket is önálló példányként kell létrehozni, vagy a kérdésbankban közös kérdésrekordokat használsz?
+
+Ez utóbbi adatmodell szempontjából fontos különbség.
+
+## 3. Szerveroldali időkezelés
+
+Jó megoldás
+
+A `deadline_at` bevezetése helyes. A kliens órája nem lehet mérvadó.
+
+Három további szabályt rögzítenék.
+
+1\. Az időbélyeg tárolási formátuma
+
+SQLite esetén nincs külön natív dátum-idő adattípus. Válasszatok egységes formátumot:
+
+- UTC Unix-időbélyeg egész másodpercben, vagy
+- egységes, UTC ISO 8601 formátum.
+
+Én az egész Unix-időbélyeget választanám, ha az alkalmazás többi időkezelése is ezt használja.
+
+2\. A határidő ellenőrzése nem függhet egy időzített kliensművelettől.
+
+A szervernek minden válaszbeküldéskor ellenőriznie kell:
+
+```
+server_current_time < deadline_at
+```
+
+Ha a határidő lejárt, a választ már nem fogadhatja el.
+
+A háttérfolyamat automatikusan lezárhatja a lejárt dolgozatokat, de a válaszbeküldés ellenőrzése ettől függetlenül is kötelező.
+
+3\. Határidő és válaszbeküldés versenyhelyzete
+
+Mi történik, ha a diák pontosan a határidő pillanatában küldi be a választ?
+
+Ezt egyértelműen meg kell határozni. Például: csak az a válasz fogadható el, amelynek szerveroldali feldolgozása a határidő előtt történik.
+
+Az ellenőrzésnek és a válasz mentésének tranzakcióban kell történnie, hogy egy párhuzamos lezárás ne okozhasson ellentmondást.
+
+## 4. Amire még nem tértünk ki eléggé
+
+Az alábbiak szerintem fontosabbak, mint újabb adatbázis-megszorítások bevezetése.
+
+| Terület              | Tisztázandó kérdés                                                            |
+| -------------------- | ----------------------------------------------------------------------------- |
+| Válaszbeküldés       | Mi történik, ha a kliens kétszer küldi el ugyanazt a választ?                 |
+| Kapcsolatvesztés     | Mi történik, ha a diák internetkapcsolata megszakad, majd visszatér?          |
+| Párhuzamos műveletek | Mi történik, ha a tanár lezárja a dolgozatot, miközben a diák éppen válaszol? |
+| Pontozás             | Milyen szabály alapján történik a részpontszámítás?                           |
+| Kérdéssorrend        | A kérdések és válaszlehetőségek keverése hogyan marad reprodukálható?         |
+| Képek                | Mi történik, ha egy tesztben használt képet törölnek vagy lecserélnek?        |
+| Eredmények           | A lezárt dolgozat pontozása később is pontosan rekonstruálható marad?         |
+| Archiválás           | Mi történik, ha az archiválás közben megszakad a folyamat?                    |
+
+Ezek közül négyet különösen fontosnak tartok.
+
+### 4.1. Ismételt válaszbeküldés (idempotencia)
+
+Gyakori hálózati helyzet:
+
+1. A diák elküldi a választ.
+2. A szerver elmenti.
+3. A válasz visszaigazolása nem jut el a böngészőbe.
+4. A böngésző újra elküldi ugyanazt a választ.
+
+Ha nincs megfelelő védelem, ugyanaz a művelet kétszer is feldolgozódhat.
+
+Javaslat: a válaszbeküldés legyen idempotens. Ugyanazon művelet ismételt elküldése ne hozzon létre újabb választ vagy újabb pontszámítást.
+
+### 4.2. Kapcsolatvesztés és visszacsatlakozás
+
+A `deadline_at` már megoldja az időkeret újraindulásának problémáját, de a munkamenet folytatásának szabályait is rögzíteni kell.
+
+Például:
+
+- A diák ugyanonnan folytatja, ahol megszakadt a kapcsolata?
+- A már elküldött válaszok biztosan megmaradnak?
+- A még el nem küldött válaszok elveszhetnek?
+- Mi történik, ha közben a tanár lezárta a dolgozatot?
+
+Ezek nem pusztán felületi kérdések. A szerveroldali állapotkezelést érintik.
+
+### 4.3. Kérdések és válaszlehetőségek sorrendje
+
+Ha a rendszer véletlenszerű sorrendben jeleníti meg a kérdéseket vagy válaszlehetőségeket, akkor a ténylegesen megjelenített sorrendet is meg kell őrizni.
+
+Különben egy későbbi eredményellenőrzésnél nem biztos, hogy rekonstruálható lesz, mit látott a diák.
+
+### 4.4. Képek és egyéb csatolt állományok
+
+Ha egy kérdés képet tartalmaz, a kép a kérdés tartalmának része.
+
+Ezért a zárolásnak a kapcsolódó állományokra is ki kell terjednie. Egy lezárt dolgozatnál ne lehessen úgy lecserélni vagy eltávolítani a képet, hogy az eredeti kérdés tartalma megváltozzon.
+
+## 5. Mit javítanék még a specifikációban?
+
+Nem vezetnék be újabb nagy alrendszereket. A következő öt szabályt rögzíteném:
+
+1. Adatintegritás: a válasz résztvevője, munkamenete és kérdése ugyanahhoz a dolgozathoz tartozzon.
+2. Törlésvédelem: lezárt dolgozat résztvevője és válaszai normál művelettel ne legyenek törölhetők.
+3. Időkezelés: a határidő szerveroldali ellenőrzése minden válaszbeküldésnél kötelező legyen.
+4. Idempotencia: egy válaszbeküldési művelet ismétlése ne eredményezhessen dupla feldolgozást.
+5. Történeti hitelesség: a lezárt dolgozatban megjelenített kérdések, válaszlehetőségek, képek és pontozási szabályok utólag is rekonstruálhatók legyenek.
+
+Összességében: a mostani két módosítás jó, és a rendszer alapvető adatvédelmi és konzisztencia-szabályai egyre jobban körvonalazódnak. A következő legfontosabb feladat már nem újabb általános szabályok gyűjtése, hanem a válaszok, kérdések és munkamenetek közötti teljes integritás ellenőrzése.
+
+Ha feltöltöd a friss `DATABASE_SCHEMA.sql` és `project-context.md` fájlokat, konkrétan ellenőrzöm a megvalósítást is: nemcsak azt, hogy a szabályok szerepelnek-e, hanem azt is, hogy az SQL valóban kikényszeríti-e őket.

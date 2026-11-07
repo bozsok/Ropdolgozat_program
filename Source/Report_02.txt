@@ -1,0 +1,329 @@
+A módosítások alapján egyértelműen jó irányba haladtál. Ráadásul a három kiegészítésedet is elfogadom: nem szabad egy iskolai röpdolgozat-rendszert indokolatlan vállalati komplexitással terhelni.
+
+Egyetértek az alábbi egyszerűsítésekkel:
+
+1. RBAC helyett két szerepkör: tanár és diák. Ehhez nincs szükség többszintű szerepkör- és jogosultsághierarchiára. Ettől függetlenül a tanári és diákoldali műveleteket szerveroldalon külön kell védeni.
+2. Nincs szükség Git-szerű verziókezelésre: ha az aktív vagy lezárt dolgozathoz tartozó teszt zárolt, módosítás helyett pedig másolat készül, akkor ez egy teljesen megfelelő, egyszerűbb modell.
+3. Nincs szükség külön adatmegsemmisítési automatizmusra: a tanév végi tanári archiválás és törlés megfelelő működési modell lehet. A mentések és az archivált állományok adatkezelését viszont ettől még szabályozni kell.
+
+Ezeket nem tekintem hiányosságnak.
+
+A hat módosításodat külön-külön értékelem, majd megmutatom, milyen további problémákat érdemes még ellenőrizni.
+
+# 1. A hat módosítás szakmai értékelése
+
+## 1.1. Csatorna-egyediség – feltételes egyedi index
+
+Helyes megoldás
+
+Ez kifejezetten jó döntés.
+
+A részleges egyedi index pontosan arra való, hogy egy adott feltétel teljesülésekor biztosítsa az egyediséget.
+
+A tervezett logika:
+
+```
+CREATE UNIQUE INDEX idx_active_session_channel
+ON sessions(subject_id, grade_level)
+WHERE status = 'ACTIVE';
+```
+
+Ennek eredménye:
+
+| Tantárgy          | Évfolyam | Állapot  | Engedélyezett? |
+| ----------------- | -------- | -------- | -------------- |
+| Digitális kultúra | 6        | ACTIVE   | Igen           |
+| Digitális kultúra | 6        | ACTIVE   | Nem            |
+| Digitális kultúra | 7        | ACTIVE   | Igen           |
+| Technika          | 6        | ACTIVE   | Igen           |
+| Digitális kultúra | 6        | FINISHED | Igen           |
+
+Egy fontos következmény:
+
+A tanár nem indíthat újabb 6. évfolyamos Digitális kultúra dolgozatot addig, amíg az előző aktív dolgozatot le nem zárta.
+
+Ez megfelel a dokumentumban meghatározott csatornamodellnek.
+
+Egy további részletre figyelnék: a `status` és az `ended_at` összhangjára. Ne lehessen például `FINISHED` állapotú dolgozat `ended_at = NULL` értékkel, vagy aktív dolgozat lezárási időponttal.
+
+Ezt CHECK megszorítással is érdemes biztosítani.
+
+## 1.2. Archívumvédelem – ON DELETE RESTRICT
+
+Helyes megoldás
+
+Ezt is támogatom.
+
+Az eredmények történeti hitelessége fontosabb, mint az egyszerű fizikai törlés.
+
+A `RESTRICT` megakadályozza, hogy a hivatkozott rekordot úgy töröljük, hogy ezzel a hozzá kapcsolódó adatokat is elveszítsük.
+
+Egy fontos pontosítás:
+
+A `RESTRICT` nem helyettesíti a teszt zárolását.
+
+Két külön védelmi mechanizmus:
+
+- Zárolás: megakadályozza a teszt és kérdései módosítását, amíg aktív vagy lezárt dolgozat tartozik hozzá.
+- RESTRICT: megakadályozza a hivatkozott rekordok fizikai törlését.
+
+A kettő együtt megfelelő.
+
+Egy további javaslatom: a tanév végi törlésnél legyen egyértelmű, hogy a törlési folyamat mely rekordokat érinti. Ne maradjanak árva válaszok, résztvevők vagy képfájlok.
+
+## 1.3. Diákok stabil belső azonosítása
+
+Helyes irány
+
+Ez jelentős előrelépés.
+
+A `student_id` bevezetésével a név már nem az elsődleges azonosító.
+
+A két adatnak külön szerepe van:
+
+- `student_id`: belső, stabil hivatkozás;
+- `student_name`: történeti névpillanatkép.
+
+Ez nagyon jó megközelítés.
+
+Egy dolgot azonban ellenőriznék:
+
+A `students` táblában jelenleg a `UNIQUE(class_name, student_name)` korlátozás szerepel.
+
+Ez azt jelenti, hogy ha egy tanuló osztályt vált, és új rekordot hozol létre, új `student_id`-t kap.
+
+Így a belső azonosító mégsem lesz hosszú távon stabil.
+
+Ha a cél az, hogy ugyanaz a tanuló 5.a-ból 6.a-ba lépve is ugyanazzal az azonosítóval szerepeljen, akkor a tanuló személyét és osztálytagságát külön kell kezelni.
+
+Például:
+
+- `students`: a tanuló személye;
+- `student_class_memberships`: osztályhoz tartozása, időszakokkal.
+
+Ez nem vállalati túlbonyolítás, hanem valódi adatmodellbeli különbség.
+
+Ha viszont minden tanévben új névsort importálsz, és nem cél a tanulók éveken át történő összekapcsolása, akkor nem feltétlenül kell most bevezetni.
+
+## 1.4. CHECK megszorítások
+
+Helyes megoldás
+
+Nagyon jó, hogy az alkalmazásoldali ellenőrzés mellett adatbázisszinten is megjelennek az üzleti szabályok.
+
+Egy dolgot külön kiemelnék:
+
+A SQLite `CHECK` megszorításainál figyelni kell a `NULL` értékekre is. A CHECK önmagában nem helyettesíti a `NOT NULL` korlátozást.
+
+Például:
+
+```
+points REAL NOT NULL
+    CHECK(points >= 0)
+```
+
+Ez megfelelő.
+
+A továbbiakban még ezeket ellenőrizném:
+
+- `points_earned <= points` – de ezt az adatbázis több tábláját érintő kapcsolat miatt nem egyszerű CHECK-kel megoldani;
+- `time_spent_sec >= 0`;
+- `focus_lost_count >= 0`;
+- `current_question_index >= 0`;
+- `default_time_limit_min >= 0`;
+- `time_limit_min >= 0`;
+- százalékos ponthatárok 0–100 közötti értékei.
+
+A `UNIQUE(quiz_id, question_order)` szintén helyes.
+
+Egy apró technikai megjegyzés: ha a tanár két kérdés sorszámát felcseréli, az átmeneti ütközést is kezelned kell. A sorrendmódosítást tranzakcióban, megfelelő átmeneti sorszámozással érdemes végrehajtani.
+
+## 1.5. Szerveroldali időkorlát – deadline_at
+
+Nagyon jó megoldás
+
+Ezt kifejezetten fontosnak tartom.
+
+A kliens órája nem lehet hiteles időforrás.
+
+A `deadline_at` segítségével a szerver egyértelműen eldöntheti, hogy a tanuló még beküldhet-e választ.
+
+Például:
+
+```
+joined_at  = 10:15:00
+deadline_at = 10:25:00
+```
+
+A böngésző csak a hátralévő időt jeleníti meg.
+
+Három dolgot még tisztáznék:
+
+1. A `deadline_at` létrehozásakor a szerver UTC-időbélyeget használjon.
+2. Újracsatlakozáskor ne számolja újra a határidőt.
+3. A határidő elérésekor a szerver automatikusan zárja le a résztvevő dolgozatát, akkor is, ha a böngésző már nem kapcsolódik.
+
+A tanári lezárás természetesen ettől függetlenül azonnali lezárást eredményezhet.
+
+## 1.6. Kriptográfiai munkamenet-token
+
+Jó irány, egy pontosítással
+
+A `crypto.randomUUID()` megfelelően véletlenszerű, UUID v4 alapú azonosítót generál. A 122 bitnyi véletlenszerűség ehhez a felhasználási célhoz megfelelő.
+
+Az egyedi index szintén helyes.
+
+Viszont fontos különbséget tennék:
+
+- az egyediség biztosítása;
+- a token biztonságos kezelése.
+
+Az index az elsőt biztosítja, nem a másodikat.
+
+Javaslatom:
+
+- a tokent kizárólag a szerver generálja;
+- ne legyen benne név, osztály vagy más személyes adat;
+- ne kerüljön naplóba;
+- ne legyen URL-ben továbbítva;
+- lehetőség szerint a szerveren csak a token hash-e legyen tárolva;
+- a token visszavonható legyen.
+
+A hash tárolása különösen akkor hasznos, ha az adatbázis illetéktelen kézbe kerülne.
+
+# 2. Amit még mindenképpen hozzátennék
+
+A hat módosítás jó, de van néhány olyan probléma, amelyet ezek még nem oldanak meg.
+
+Ezeket már nem új funkcióként, hanem a meglévő megoldások teljességéhez szükséges kiegészítésként kezelem.
+
+## 2.1. A teszt zárolását ténylegesen ki kell kényszeríteni
+
+Fontos
+
+Azt írod, hogy az aktív vagy lezárt dolgozathoz tartozó teszt és kérdései zárolva vannak.
+
+Ez helyes üzleti szabály.
+
+De az `ON DELETE RESTRICT` csak a törlést akadályozza meg. Az `UPDATE` műveletet nem.
+
+Tehát technikailag továbbra is módosítható lenne egy kérdés szövege, helyes válasza vagy pontszáma.
+
+Javaslat:
+
+A szerveroldali tesztszerkesztő minden módosítás előtt ellenőrizze, hogy tartozik-e a teszthez aktív vagy lezárt dolgozat.
+
+A szabály:
+
+```
+Ha a teszthez ACTIVE vagy FINISHED
+munkamenet tartozik:
+    szerkesztés tiltva
+    módosítás csak másolatként lehetséges
+```
+
+Ezt érdemes adatbázis-triggerrel is védeni, ha azt szeretnéd, hogy ne csak a normál alkalmazási útvonalon legyen érvényesíthető.
+
+## 2.2. A válasz és a résztvevő kapcsolatának integritása
+
+Korábban említettem, és a mostani módosítások mellett is fenntartom.
+
+Az `answers` táblában szereplő három kapcsolatnak összhangban kell lennie:
+
+- a válasz munkamenete;
+- a válasz résztvevője;
+- a válaszolt kérdés.
+
+Nem elegendő, hogy mindhárom idegen kulcs külön-külön létező rekordra mutasson.
+
+Azt is biztosítani kell, hogy mind ugyanahhoz a dolgozathoz tartozzanak.
+
+Ez adatbázisszintű integritási kérdés.
+
+## 2.3. Azonos nevű tanulók
+
+A jelenlegi:
+
+```
+UNIQUE(class_name, student_name)
+```
+
+kizárja, hogy ugyanabban az osztályban két azonos nevű tanuló legyen.
+
+A valóságban ez előfordulhat.
+
+A stabil `student_id` bevezetésével már nincs szükség arra, hogy a név legyen egyedi.
+
+Érdemes átgondolni, hogy azonos nevű tanulóknál milyen megkülönböztetést szeretnél a belépési felületen.
+
+## 2.4. Párhuzamos válaszbeküldés és idempotencia
+
+A 42 kliens miatt ez fontos.
+
+Előfordulhat, hogy egy diák válaszbeküldése sikeres, de a visszaigazolás nem érkezik meg hozzá.
+
+A böngésző újraküldi a kérést.
+
+A rendszernek ilyenkor nem szabad két külön beküldésként kezelnie ugyanazt a műveletet.
+
+Javaslat:
+
+- minden beküldéshez egyedi műveletazonosító;
+- szerveroldali duplikációellenőrzés;
+- tranzakciós mentés;
+- azonos művelet ismétlésekor az eredeti eredmény visszaadása.
+
+Ez különösen fontos az UPSERT használata mellett.
+
+## 2.5. A tanév végi archiválás legyen tranzakciós folyamat
+
+Az egyszerű tanári gomb teljesen megfelelő felhasználói megoldás.
+
+A háttérben azonban ne egyetlen, ellenőrizetlen törlési művelet történjen.
+
+Javasolt folyamat:
+
+1. Tanár kiválasztja a tanévet.
+2. A rendszer ellenőrzi, hogy nincs-e aktív dolgozat.
+3. Elkészíti az archívumot.
+4. Ellenőrzi az archívum épségét.
+5. Megerősítést kér a törléshez.
+6. A kapcsolódó adatokat konzisztens módon törli.
+7. Naplózza az archiválást és törlést.
+
+A képek, exportok és egyéb fájlok kezeléséről se feledkezz meg.
+
+# 3. Az új módosítások után hogyan látom a rendszert?
+
+A jelenlegi tervezési filozófia
+
+Két szerepkör: tanár és diák
+
+Tesztvédelem: aktív/lezárt dolgozat esetén zárolás
+
+Adatintegritás: idegen kulcsok, CHECK, UNIQUE, RESTRICT
+
+Időkezelés: szerveroldali határidő
+
+Munkamenet-védelem: egyedi kriptográfiai token
+
+Adatmegőrzés: tanévenkénti archiválás
+
+Ez egy arányos, iskolai környezethez illeszkedő architektúra. Nem kell hozzá vállalati szintű infrastruktúra.
+
+# 4. Végső prioritási sorrendem
+
+| Prioritás | Teendő                                                  |
+| --------- | ------------------------------------------------------- |
+| 1.        | Teszt- és kérdésszerkesztés zárolásának kikényszerítése |
+| 2.        | Résztvevő–munkamenet–kérdés kapcsolatok integritása     |
+| 3.        | Tanulói azonosítók és osztályváltás szabályozása        |
+| 4.        | Válaszbeküldés idempotenciája                           |
+| 5.        | Tanév végi archiválás és törlés biztonságos folyamata   |
+| 6.        | Token biztonságos tárolása                              |
+| 7.        | Határidő- és munkamenet-állapotok konzisztenciája       |
+| 8.        | Automatizált tesztek a fenti szabályokra                |
+
+Összegzés: a hat módosításodat elfogadom. Nem javaslom a három elvetett nagyobb rendszer bevezetését. A projektnek most már nem több általános architekturális komplexitásra, hanem a meglévő egyszerű modell következetes és kikényszeríthető szabályaira van szüksége.
+
+Egy fontos korlátozás: a mostani értékelés a hat módosításról adott összefoglalódon alapul, nem az új SQL-fájl közvetlen ellenőrzésén. A konkrét indexek, constraint-ek és kapcsolatok tényleges helyességét az aktualizált fájl alapján lehet véglegesen jóváhagyni.

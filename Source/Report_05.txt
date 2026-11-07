@@ -1,0 +1,165 @@
+Ez a javítás már sokkal közelebb van egy konzisztens, adatbázis-szinten védett rendszerhez. Mind a négy módosítást támogatom, de három helyen még pontosítanám a szabályokat. Különösen az első pontnál van egy SQLite-specifikus részlet, amit nem hagynék figyelmen kívül.
+
+## 1. Tartós tesztzárolás – `locked_at`
+
+Az elv helyes
+
+Az automatikus zárolás jó megoldás:
+
+```
+CREATE TRIGGER IF NOT EXISTS trg_auto_lock_quiz_on_session
+AFTER INSERT ON sessions
+BEGIN
+    UPDATE quizzes
+    SET locked_at = CURRENT_TIMESTAMP
+    WHERE id = NEW.quiz_id
+      AND locked_at IS NULL;
+END;
+```
+
+A trigger előnyei:
+
+- Nem az alkalmazásra bízza a zárolás kezdeményezését.
+- Közvetlen SQL-beszúrás esetén is működik.
+- Az első indítás időpontját rögzíti.
+- A későbbi sessionök nem írják felül az eredeti időpontot.
+
+Három dolgot viszont még hozzá kell tenni.
+
+1.1. A `locked_at` visszaállításának tiltása
+
+Külön triggerrel kell megakadályozni, hogy egy már zárolt tesztet valaki visszaállítson:
+
+```
+CREATE TRIGGER IF NOT EXISTS trg_prevent_quiz_unlock
+BEFORE UPDATE OF locked_at ON quizzes
+WHEN OLD.locked_at IS NOT NULL
+ AND NEW.locked_at IS NULL
+BEGIN
+    SELECT RAISE(ABORT, 'A teszt zárolása nem oldható fel!');
+END;
+```
+
+Ez biztosítja, hogy a zárolás ne legyen visszavonható.
+
+1.2. A kérdés zárolásánál a régi és az új tesztet is ellenőrizni kell.
+
+Ezt már korábban is jeleztem. A kérdés másik teszthez rendelése sem kerülheti meg a védelmet.
+
+1.3. A zárolás időpontja
+
+A `CURRENT_TIMESTAMP` SQLite-ban UTC időt ad vissza, de alapértelmezés szerint másodperc pontosságú, `YYYY-MM-DD HH:MM:SS` formátumban, `Z` jelölés nélkül.
+
+Mivel a projektben UTC ISO 8601 formátumot rögzítettetek, ezt egységesíteni kell. Például:
+
+```
+strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+```
+
+Így a zárolás időbélyege is illeszkedik a projekt időkezeléséhez.
+
+Fontos: a `DATETIME` SQLite-ban nem valódi, különálló dátum-idő adattípus, hanem deklarált típusaffinitás. A formátumot az alkalmazásnak és a megszorításoknak kell következetesen biztosítaniuk.
+
+## 2. A session `quiz_id` megváltoztathatatlansága
+
+Teljesen támogatom
+
+A javasolt trigger jó:
+
+```
+CREATE TRIGGER IF NOT EXISTS trg_prevent_session_quiz_change
+BEFORE UPDATE OF quiz_id ON sessions
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'A munkamenet tesztje utólag nem módosítható!'
+    );
+END;
+```
+
+Ezzel a session létrehozásakor rögzített tesztazonosító később nem változtatható meg.
+
+Egy apró megjegyzés: ez akkor is tiltja a módosítást, ha valaki ugyanarra az értékre állítaná vissza a `quiz_id`-t. Ez nem okoz problémát, de ha csak tényleges értékváltozásnál szeretnétek tiltani, használható a `WHEN OLD.quiz_id <> NEW.quiz_id` feltétel.
+
+Én a szigorú változatot hagynám meg: egy létrehozott session tesztazonosítója egyáltalán ne legyen módosítható.
+
+## 3. A válaszok megváltoztathatatlansága
+
+Jó, de pontosítani kell
+
+Ez a módosítás különösen fontos, mert megvédi a már leadott válasz eredeti tartalmát.
+
+A három alapvető szabály helyes:
+
+| Mezőcsoport                                              | Módosíthatóság                     |
+| -------------------------------------------------------- | ---------------------------------- |
+| `session_id`, `participant_id`, `question_id`            | Nem módosítható                    |
+| `submitted_answer`                                       | Nem módosítható                    |
+| `eval_status`, `points_earned`, `is_manually_overridden` | Tanári felülbírálással módosítható |
+
+A kritikus rész a tanári felülbírálás hitelesítése.
+
+Az SQLite-trigger nem tudja önmagában megállapítani, hogy a módosítást valóban egy tanár kezdeményezte-e. Ehhez az alkalmazás szerveroldali jogosultság-ellenőrzése szükséges.
+
+A helyes felosztás:
+
+- Az adatbázis megvédi a válasz eredeti tartalmát.
+- A szerver ellenőrzi, hogy a felhasználó tanár-e.
+- A szerver csak a megengedett értékelési mezőket módosítja.
+- Az adatbázis ellenőrzi, hogy a válasz módosítása egyáltalán megengedett-e.
+
+További fontos részlet: a tanári felülbírálás csak akkor történhessen meg, ha a dolgozat már lezárult, vagy ha a specifikáció kifejezetten engedélyezi az aktív dolgozat közbeni javítást.
+
+Én ezt is rögzíteném.
+
+A lezárt dolgozat válaszainak törlését pedig külön `BEFORE DELETE` triggerrel tiltanám. Ne csak a résztvevő törlésén keresztül legyenek védettek.
+
+## 4. Határidő: `server_utc_now < deadline_at`
+
+Egyértelmű és helyes
+
+Ezt a szabályt támogatom.
+
+A határidő pillanatában már nem fogadható el válasz. A szerveroldali ellenőrzésnek minden beküldéskor meg kell történnie, nem elegendő a háttérfolyamat automatikus lezárására hagyatkozni.
+
+A tranzakcióban a következőket kell kezelni:
+
+1. A session még `ACTIVE` állapotú-e?
+2. A határidő még nem járt-e le?
+3. A résztvevő ehhez a sessionhöz tartozik-e?
+4. A kérdés a session tesztjéhez tartozik-e?
+5. A válasz már korábban rögzítésre került-e?
+6. Ha nem, a válasz mentése és értékelése.
+
+Az ellenőrzés és a mentés között nem történhet olyan párhuzamos művelet, amely érvénytelenné teszi az ellenőrzés eredményét.
+
+## 5. Egy további fontos kérdés: a zárolás és a másolás kapcsolata
+
+A `locked_at` bevezetésével egy új üzleti szabályt is érdemes rögzíteni:
+
+A másoláskor a kérdések önálló másolatként jönnek létre, nem a régi teszt kérdéseire mutató közös hivatkozásként.
+
+Például:
+
+- Eredeti teszt: `Quiz A`
+- Elindul az első dolgozat → `Quiz A` zárolódik.
+- A tanár másolatot készít → `Quiz B`.
+- A `Quiz B` kérdései önállóan szerkeszthetők.
+- A `Quiz A` és annak kérdései változatlanok maradnak.
+
+Ez biztosítja, hogy az új teszt szerkesztése ne veszélyeztesse a régi dolgozatok eredményeit.
+
+## 6. Végső értékelés
+
+| Módosítás                          | Értékelés                                      |
+| ---------------------------------- | ---------------------------------------------- |
+| `locked_at` és automatikus zárolás | Jó, a feloldás tiltását hozzá kell tenni       |
+| Session `quiz_id` védelme          | Jó                                             |
+| Válasz alapadatainak védelme       | Jó                                             |
+| Tanári felülbírálás                | Szerveroldali jogosultság-ellenőrzés szükséges |
+| Lezárt válaszok törlésvédelme      | Külön trigger szükséges                        |
+| Szigorú határidő                   | Jó                                             |
+
+Az én álláspontom: ezt a módosításcsomagot már elfogadnám a specifikáció részeként, a fenti kiegészítésekkel. Nem javaslok újabb táblákat vagy összetett jogosultsági rendszert.
+
+A következő lépésként a triggerek teljes SQL-implementációját érdemes együtt ellenőrizni, különösen a `CASCADE` műveletek, a kérdésmásolás és az archiválás egymásra gyakorolt hatását.

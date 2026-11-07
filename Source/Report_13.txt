@@ -1,0 +1,54 @@
+A Report 12 módosításait elfogadnám. A négy fejlesztés valóban megoldja a korábban azonosított problémákat, és különösen fontos előrelépés a gépváltás és a téves névfoglalás szétválasztása.
+
+A beszámolód alapján a rendszer már nemcsak az adatbázis integritására, hanem a valós tantermi helyzetek kezelésére is megfelelő figyelmet fordít.
+1. A módosítások szakmai értékelése
+Módosítás	Értékelés
+Hibajelzés pontplafon túllépésekor	Elfogadom
+Gépváltás a válaszok megőrzésével	Elfogadom
+Téves névfoglalás külön törlési művelete	Elfogadom
+Két adatbázis-kapcsolatos lezárási teszt	Jó ellenőrzés
+Formatív pedagógiai cél dokumentálása	Elfogadom
+
+1.1. Pontozás
+Az automatikus pontlevágás eltávolítása helyes döntés. A tanár pontosan azt látja, hogy mit rontott el, és az adatbázis továbbra is kikényszeríti a maximális pontszámot.
+
+Egyetlen technikai feltételt tartanék fontosnak: a szerver az érvénytelen számértékeket (NaN, Infinity, nem szám típusú bemenet) is utasítsa el. JavaScriptben erre például a Number.isFinite() használható.
+1.2. Gépváltás és névfeloldás
+Ez a módosítás a Report 12 legértékesebb része.
+
+A két tanári művelet célja most már egyértelmű:
+- Gépváltás: ugyanaz a résztvevő, ugyanazok a válaszok, új hitelesítő token.
+- Név törlése: téves résztvevőrekord és a hozzá tartozó válaszok eltávolítása, kizárólag aktív dolgozatban.
+Egyetlen biztonsági részletet ellenőriznék: a tanári engedélyezés után az új gépen a tanuló miként kapja meg az új tokent.
+
+Ha a tanári jóváhagyás után bármelyik böngésző pusztán a diák nevének kiválasztásával átveheti a munkamenetet, akkor az átvétel egy rövid időre illetéktelen felhasználó számára is lehetséges.
+
+Javaslat: a tanári engedélyezés legyen egyszer használható, és kötődjön a kiválasztott új géphez vagy egy egyszer használatos átvételi kódhoz. Így nem szükséges új bejelentkezési rendszer.
+1.3. Párhuzamos lezárás
+A két független SQLite-kapcsolatos teszt megfelelő irány.
+
+Az elvárt eredmény teljesült a beszámolód szerint: az első lezárás sikeres, a második nem módosítja a már lezárt sessiont.
+
+Fontos különbség, hogy két külön kapcsolat használata önmagában még nem bizonyít ténylegesen átfedő tranzakciókat. Ha a teszt valóban egyszerre indította a lezárási kísérleteket, akkor az erősebb bizonyíték, mint két egymás utáni hívás.
+2. A tesztcsomag állapota
+Beszámolt sikeres tesztlépések
+Mind sikeres
+
+41/41
+
+
+8 + 6 + 6 + 4 + 17 = 41 fő teszteset; a Report 12 négy összetett tesztje további kilenc altesztet tartalmaz.
+Ez már értékes regressziós tesztkészlet. Ugyanakkor a tesztek kódját és futási naplóit ebben a körben nem kaptam meg, ezért az eredményt a beszámolód alapján értékelem.
+3. Szükséges-e újabb tervezési kör?
+Nem javaslok újabb általános adatbázis-tervezési kört.
+
+A korábban azonosított, lényeges adatkonzisztencia-problémákra mostanra születtek konkrét megoldások. Két célzott ellenőrzés maradna:
+1. A tanári gépváltási engedély ne legyen felhasználható jogosulatlan munkamenet-átvételre.
+2. A pontozási végpont ne fogadjon el nem véges vagy hibás számértékeket.
+Ezeket megvalósítási ellenőrzésnek tekinteném, nem új architekturális követelménynek.
+4. Mit javaslok következő lépésnek?
+Most a tantermi működés végponttól végpontig tartó tesztelésére térnék át. A három dolgozatmódot (STUDENT_PACED, TEACHER_PACED, SPACE_RACE) külön-külön kell ellenőrizni a tanári és diákfelület valódi, böngészős használatával.
+
+Különösen a tanári élő mátrix, a Socket.io állapotszinkronizáció, a gépváltás és az exportok működésére koncentrálnék.
+
+Végső értékelésem: a Report 12 a korábbi hibajavítási folyamat megfelelő lezárása. A rendszer adatbázis- és alapvető munkamenet-kezelési terve kellően kiforrott ahhoz, hogy a hangsúly a teljes alkalmazás gyakorlati tesztelésére kerüljön.

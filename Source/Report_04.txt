@@ -1,0 +1,187 @@
+Igen, a három trigger jó irány, és az alapötlet mindhárom esetben helyes. Viszont a bemutatott SQL-t még nem tekinteném véglegesnek. Van néhány fontos peremhelyzet, amelyet érdemes most kezelni, mert különben az adatbázis-védelem látszólag működik, de bizonyos műveletekkel megkerülhető.
+
+A legfontosabb különbség: a triggereknek nemcsak a normál alkalmazásműködést, hanem a közvetlen SQL-módosításokat és a kapcsolódó törléseket is védeniük kell.
+1. Kérdés–dolgozat összetartozás
+Az ellenőrzés logikája helyes
+A trg_validate_answer_question megfelelően ellenőrzi, hogy a question_id a sessionhöz tartozó tesztből származik-e.
+
+A lekérdezés logikája:
+- megkeresi a sessiont;
+- megnézi, melyik kvízhez tartozik;
+- ellenőrzi, hogy a beküldött kérdés ugyanahhoz a kvízhez tartozik-e;
+- eltérés esetén megszakítja a beszúrást.
+Egy fontos kiegészítés: az answers táblában a question_id és session_id összetartozását nemcsak INSERT-nél, hanem UPDATE-nél is ellenőrizni kell, ha a rendszer engedi ezek módosítását.
+
+Javaslat: vagy tiltsátok az answers.question_id és answers.session_id utólagos módosítását, vagy készítsetek ezekre is ellenőrző triggert.
+
+A participant_id–session_id összetett idegen kulcsotokkal együtt így már mindhárom kapcsolat ellenőrizhető.
+2. Lezárt dolgozat résztvevőinek védelme
+A trigger alkalmas erre
+A bemutatott trigger helyesen használja az OLD.session_id értéket, és még a résztvevő törlése előtt ellenőrzi a munkamenet státuszát.
+
+Én kissé egyszerűsíteném a feltételt:
+CREATE TRIGGER IF NOT EXISTS trg_prevent_participant_delete_when_finished
+BEFORE DELETE ON participants
+WHEN EXISTS (
+    SELECT 1
+    FROM sessions
+    WHERE id = OLD.session_id
+      AND status = 'FINISHED'
+)
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'Tilos törölni résztvevőt lezárt dolgozatból!'
+    );
+END;
+
+
+Ez ugyanazt a szabályt érvényesíti, csak közvetlenebb formában.
+
+A CASCADE megtartható. Aktív dolgozatnál a résztvevő törlése automatikusan törli a válaszait. Lezárt dolgozatnál viszont a trigger megakadályozza a résztvevő törlését, így a kapcsolódó CASCADE művelet sem tudja végrehajtani a törlést.
+
+Van azonban két kiegészítés:
+- Az SQLite idegenkulcs-ellenőrzését minden adatbázis-kapcsolatnál be kell kapcsolni: PRAGMA foreign_keys = ON;. Ez kapcsolatonkénti beállítás.
+- A lezárt dolgozat válaszait közvetlenül az answers táblából se lehessen törölni vagy módosítani, ha azok történeti hitelességét is meg akarjuk őrizni. Ehhez külön BEFORE DELETE és BEFORE UPDATE trigger szükséges.
+A második pontot fontosnak tartom: a résztvevő védelme önmagában még nem védi a hozzá tartozó eredményeket minden lehetséges SQL-művelettől.
+3. Tesztzárolás adatbázisszinten
+A jelenlegi megoldás még nem teljes
+Az alapelv jó, de a két triggernek van néhány megkerülhető pontja.
+
+3.1. A kérdés másik teszthez rendelése
+
+A jelenlegi trg_lock_question_update csak az OLD.quiz_id értéket ellenőrzi.
+
+Ez a módosítás például problémás lehet:
+- a kérdés jelenleg egy még nem használt teszthez tartozik;
+- egy UPDATE során áthelyezik egy már használt tesztbe;
+- a trigger csak az eredeti tesztet ellenőrzi, ezért nem feltétlenül tiltja meg a műveletet.
+A feltételnek az eredeti és az új tesztet is ellenőriznie kell:
+CREATE TRIGGER IF NOT EXISTS trg_lock_question_update
+BEFORE UPDATE ON questions
+WHEN EXISTS (
+    SELECT 1
+    FROM sessions
+    WHERE quiz_id = OLD.quiz_id
+)
+OR EXISTS (
+    SELECT 1
+    FROM sessions
+    WHERE quiz_id = NEW.quiz_id
+)
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'Zárolt kérdés: Dolgozathoz rendelt teszt kérdése nem módosítható!'
+    );
+END;
+
+
+3.2. Az INSERT és DELETE műveletek is veszélyesek
+
+Ha csak az UPDATE tiltott, akkor egy használt teszthez még mindig hozzá lehet adni új kérdést, illetve abból törölni lehet egy meglévőt.
+
+Ezért a zárolási szabályt mindhárom műveletre ki kell terjeszteni:
+Tábla	INSERT	UPDATE	DELETE
+quizzes	Nem feltétlenül tiltandó	Tiltandó	Tiltandó
+questions	Használt tesztnél tiltandó	Tiltandó	Tiltandó
+
+A quizzes INSERT műveletét nem szükséges tiltani, hiszen egy új teszt létrehozása természetes művelet. A questions INSERT viszont csak akkor engedhető, ha a célteszt még nem használt.
+
+3.3. A legfontosabb probléma: a session létezésére épített zárolás
+
+A jelenlegi megoldás ezt ellenőrzi:
+EXISTS (
+    SELECT 1 FROM sessions WHERE quiz_id = OLD.id
+)
+
+
+Ez addig jó, amíg a kapcsolódó session rekord megmarad.
+
+De mi történik, ha a tanév végi archiválás során törlitek a session rekordokat? A teszt ezután ismét szerkeszthetővé válhat.
+
+Ha a szabály valóban az, hogy egy tesztet az első használatától kezdve végleg zárolni kell, akkor a zárolás állapotát magán a teszten is meg kell őrizni.
+
+Erre egy egyszerű locked_at mezőt javaslok:
+locked_at TEXT NULL
+
+
+- Új tesztnél NULL.
+- Az első session létrehozásakor a szerver vagy egy adatbázis-trigger beállítja az aktuális UTC időpontot.
+- A locked_at értéke később nem állítható vissza NULL-ra.
+- A teszt és a kérdései módosítását ellenőrző triggerek ezt a mezőt vizsgálják.
+Így a zárolás akkor is megmarad, ha a session rekordokat később archiváláskor eltávolítjátok.
+
+A locked_at bevezetése előtt a meglévő sessionökkel rendelkező teszteknél természetesen vissza kell tölteni a zárolási értéket.
+
+Ezt tartom a három felvetés közül a legfontosabb javításnak.
+4. Szerveroldali időkezelés és tranzakciós idempotencia
+Jó megoldás, két pontosítással
+4.1. UTC ISO 8601
+Ez megfelelő választás, de az egységes formátumot szigorúan rögzíteni kell.
+
+Például:
+2026-11-07T13:45:30.000Z
+
+
+A következő szabályokat alkalmaznám:
+- Mindig UTC, tehát mindig Z végződés.
+- Mindig azonos pontosság, például ezredmásodperc.
+- Ne keveredjenek a Z, +01:00 és helyi időzónás értékek.
+- A szerver állítsa elő és ellenőrizze az időbélyegeket.
+Ennek azért van jelentősége, mert az SQLite a szöveges dátumokat nem automatikusan kezeli egységes időzónájú időpontként. Az azonos formátumú UTC szövegek lexikografikus összehasonlítása viszont megfelelő.
+4.2. A határidő feltételénél pontosítsatok
+Ezt írtad:
+server_utc_now <= deadline_at
+
+
+Ez azt jelenti, hogy a határidő pontos pillanatában még elfogadható a válasz.
+
+Ez teljesen érvényes üzleti szabály, de legyen egyértelműen rögzítve. A másik lehetőség:
+server_utc_now < deadline_at
+
+
+Ebben az esetben a határidő pillanatától már nem fogadható el válasz.
+
+Én az utóbbit választanám, mert egyszerűbb a lejárat értelmezése. A lényeg, hogy ne legyen eltérés a szerveroldali ellenőrzés, az automatikus lezárás és a specifikáció között.
+4.3. Idempotencia: az ellenőrzés mellé adatbázis-kényszer is kell
+A leírt folyamat helyes:
+1. Ellenőrzés, hogy a session még aktív és nem járt le.
+2. Ellenőrzés, hogy a résztvevő már beküldte-e a választ.
+3. Ha igen, a korábban mentett eredmény visszaadása.
+4. Ha nem, a válasz mentése és értékelése.
+De az ellenőrzés önmagában nem elegendő. Két, közel egy időben érkező kérés mindkettőnél azt találhatja, hogy még nincs válasz.
+
+Ezért az adatbázisban is kell egy egyedi megszorítás, például:
+UNIQUE(participant_id, question_id)
+
+
+Ez akkor megfelelő, ha egy résztvevő egy kérdésre csak egyszer adhat választ.
+
+A szerveroldali műveletet egy tranzakcióban kell végrehajtani. SQLite esetén erre a BEGIN IMMEDIATE is jó választás, mert a tranzakció kezdetén megszerzi az írási zárolást.
+
+Egy fontos üzleti döntés még hiányzik: mi történjen, ha ugyanaz a résztvevő ugyanarra a kérdésre egy másik választ küld be?
+- Ha a kérdés egyszer válaszolható meg, az első sikeres válasz maradjon érvényben.
+- Ha engedélyezett a válasz módosítása, akkor más idempotencia-mechanizmus kell, például egyedi beküldési azonosító (request_id).
+A kettőt nem szabad összekeverni. Az idempotencia az ismételt műveletet kezeli, nem feltétlenül a szándékosan megváltoztatott választ.
+5. További hiányzó védelmek
+A mostani megoldások után még három dolgot vennék fel a specifikációba.
+Terület	Javasolt védelem
+Session tesztazonosítója	Egy már létrehozott session quiz_id értéke ne legyen utólag módosítható.
+Lezárt válaszok	A lezárt sessionhöz tartozó válaszok UPDATE és DELETE művelete legyen tiltott.
+Teszt zárolási állapota	A zárolás ne legyen visszavonható, és ne függjön a session rekordok későbbi meglététől.
+
+Az első pont különösen fontos: hiába véded a kérdéseket és a tesztet, ha valaki utólag át tudja állítani, hogy egy session melyik teszthez tartozik.
+
+6. Összesített értékelés
+Megoldás	Értékelés	Szükséges kiegészítés
+Kérdés–dolgozat trigger	Megfelelő	UPDATE-re is ellenőrzés
+Résztvevő törlésvédelme	Megfelelő	Lezárt válaszok külön védelme
+Teszt UPDATE-védelme	Hiányos	INSERT/DELETE védelem, tartós zárolás
+Kérdés UPDATE-védelme	Hiányos	OLD és NEW teszt, INSERT/DELETE védelem
+UTC ISO 8601	Megfelelő	Rögzített formátum és pontosság
+Tranzakciós idempotencia	Kiegészítendő	Egyedi megszorítás és egyértelmű válaszszabály
+
+A végső javaslatom: ne bonyolítsuk tovább feleslegesen az adatmodellt. A meglévő táblák és az SQLite-triggerek elegendők ezeknek a szabályoknak a megvalósításához. A locked_at mezőt viszont mindenképpen bevezetném, mert a sessionök létezésére alapozott zárolás nem tartós védelem.
+
+A fenti értékelés a bemásolt SQL-részletekre vonatkozik. A teljes séma ismerete nélkül a triggerek egymásra hatását és az összes idegen kulcsot még nem lehet véglegesen ellenőrizni.

@@ -1,0 +1,79 @@
+A javításokat megfelelőnek tartom, és a bemutatott teszteredmények alapján a korábban azonosított két konkrét hibát sikerült kezelnetek. Különösen fontos, hogy nemcsak új triggerek kerültek a rendszerbe, hanem a működő backend lezárási sorrendjét is hozzáigazítottátok az adatbázis szabályaihoz.
+
+A teljes megoldást azonban még nem minősíteném hibamentesnek. A mostani összefoglalód alapján értékelek; a frissített SQL-, backend- és tesztfájlokat nem láttam, ezért a tesztek sikerességét önállóan nem ellenőriztem.
+1. A javítások értékelése
+Terület	Értékelés	Megjegyzés
+Zárolt teszt teljes UPDATE-védelme	Jó	Az első azonosított hiba megszűnhetett
+Lezárt session újranyitásának tiltása	Jó	A kritikus törlési kiskaput kezeli
+ended_at megváltoztathatatlansága	Jó	Megőrzi a lezárás időpontját
+Lezárt session beállításainak védelme	Jó	A történeti értékelés hitelességét szolgálja
+Résztvevői adatok védelme	Jó	Megőrzi a dolgozatkori állapotot
+Válaszok időadatainak védelme	Jó	Kizárja az utólagos átírást
+original_points_earned NOT NULL	Jó	Kötelezővé teszi az eredeti pontszám rögzítését
+Időkorlát nélküli dolgozat	Jó	A NULL határidő megfelelő reprezentáció
+Session Recovery	Tesztelendő	A gépváltás és tokenkezelés teljes folyamata fontos
+Backend lezárási sorrend	Jó	Megfelelő műveleti sorrend, ha egy tranzakcióban történik
+
+2. Egy fontos részlet a trg_lock_quiz_update triggernél
+A leírás szerint a zárolt teszt minden adatmezője védett, ugyanakkor felsorolásodban csak négy mező szerepel:
+
+title, subject_id, subject_grade, default_time_limit_min.
+
+A korábbi sémában ezek mellett volt updated_at mező is.
+
+Ha az új trigger BEFORE UPDATE ON quizzes formában tilt minden módosítást, akkor az automatikus locked_at beállítással is összeütközhet.
+
+A helyes megoldás az, hogy a valóban változtathatatlan mezőket védi, miközben az első zárolás időbélyegének beállítása megengedett.
+
+Ez tehát nem bizonyított hiba, hanem a friss trigger pontos definíciójában ellenőrizendő részlet.
+3. A backend lezárási sorrendje
+Ezzel a változtatással teljesen egyetértek:
+1. Az aktív résztvevők lezárása.
+2. A session FINISHED állapotba helyezése.
+3. A lezárási időpont rögzítése.
+Ezt egyetlen tranzakcióban hajtanám végre.
+
+Így ha bármelyik művelet hibára fut, a teljes lezárás visszagörgethető. Nem marad olyan részleges állapot, ahol a résztvevők már lezártak, de a dolgozat még aktív.
+
+A status és az ended_at értékét ugyanabban az UPDATE utasításban célszerű módosítani.
+4. Amit még ellenőriznék
+Nem javaslok újabb funkciókat, viszont négy célzott ellenőrzést indokoltnak tartok.
+
+A. Közvetlen válaszbeszúrás lezárt dolgozatba
+
+A korábban bemutatott trg_validate_answer_question ellenőrzi a kérdés–dolgozat összetartozását, de önmagában nem tiltja az új válasz beszúrását FINISHED sessionbe.
+
+Ha nincs erre másik trigger, egy közvetlen SQL INSERT továbbra is sikerülhet.
+
+Ez különösen fontos, mert az új válasz módosíthatná egy lezárt dolgozat eredményét. Érdemes ezt külön negatív teszttel ellenőrizni.
+
+B. Résztvevő hozzáadása lezárt dolgozathoz
+
+Hasonló kérdés: közvetlen SQL-lel létrehozható-e új participants rekord egy már lezárt sessionhöz?
+
+A korábban megismert sémában ezt sem tiltotta önálló megszorítás.
+
+C. Tanári felülbírálás és pontozási konzisztencia
+
+Az értékeléshez több mező tartozik: eval_status, is_correct, points_earned, is_manually_overridden, overridden_at.
+
+Ezeket a szervernek egy tranzakcióban, következetesen kell frissítenie, különben előállhat például CORRECT státusz hibás pontozási jelzővel.
+
+D. Újracsatlakozás és tokenbiztonság
+
+A böngészőtokenes visszacsatlakozás megfelelő megoldás lehet. Tesztelném, hogy egy másik böngésző vagy tanuló pusztán a név ismeretében nem szerezheti meg a korábbi munkamenethez tartozó tokent.
+
+5. A tesztelési eredmények jelentősége
+A hét negatív teszt jó bizonyíték arra, hogy a felsorolt tiltott SQL-műveletek a vizsgált esetekben valóban elutasításra kerültek.
+
+A 17 lépéses rendszerteszt sikeres futása pedig azt mutatja, hogy a módosítások nem akadályozták meg az ellenőrzött alapműveleteket és exportfolyamatokat.
+
+Az exit code: 0 önmagában nem bizonyít teljes hibamentességet, de a célzott negatív tesztekkel együtt már kifejezetten értékes ellenőrzési eredmény.
+6. Végső javaslatom
+Most már nem a teljes adatmodell további átalakítását javaslom. A korábbi hibák javítását elfogadnám, és az alábbi három teszttel egészíteném ki az ellenőrzést:
+1. INSERT INTO answers ... egy FINISHED sessionhöz → elutasítás.
+2. INSERT INTO participants ... egy FINISHED sessionhöz → elutasítás.
+3. A dolgozat lezárásának megszakítása a tranzakció közben → minden részleges változtatás visszagörgetése.
+Ezek azért fontosak, mert a rendszer eddig elsősorban a történeti rekordok módosítása és törlése ellen védekezett. A lezárt dolgozat történeti hitelességét azonban az utólagos rekordbeszúrás is veszélyeztetheti.
+
+Összességében: a javításcsomag jó, a tervezési munka érett állapotba került. Ha ez a három ellenőrzés is sikeres, és a teljes rendszer pozitív tesztjei továbbra is lefutnak, akkor már nem látok indokot arra, hogy újabb általános adatbázis-tervezési körökkel késleltessük a fejlesztést.

@@ -1,0 +1,783 @@
+/* ==========================================================================
+   RÖPDOLGOZAT PROGRAM - 100% OFFLINE STÍLUSLAP (public/css/style.css)
+   SZABÁLY: Tilos az !important használata (Rule 2)
+   SZABÁLY: Tilos külső CDN vagy webfont (AI_RULES 1)
+   ========================================================================== */
+
+:root {
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: Consolas, Monaco, "Courier New", monospace;
+
+  /* Színpaletta */
+  --bg-main: #f4f6f9;
+  --bg-card: #ffffff;
+  --text-main: #1f2937;
+  --text-muted: #6b7280;
+  --text-light: #9ca3af;
+  --border-color: #e5e7eb;
+  --border-focus: #3b82f6;
+
+  /* Állapotszínek */
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-light: #dbeafe;
+
+  --success: #16a34a;
+  --success-bg: #dcfce7;
+  --success-border: #86efac;
+
+  --warning: #d97706;
+  --warning-bg: #fef3c7;
+  --warning-border: #fde68a;
+
+  --danger: #dc2626;
+  --danger-bg: #fee2e2;
+  --danger-border: #fca5a5;
+
+  --info: #0284c7;
+  --info-bg: #e0f2fe;
+
+  /* Térközök és árnyékok */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  line-height: 1.5;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ==========================================================================
+   TIPOGRÁFIA ÉS KÓDKIEMELÉS
+   ========================================================================== */
+
+h1, h2, h3, h4, h5 {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.inline-code {
+  font-family: var(--font-mono);
+  background-color: #f1f5f9;
+  color: #0f172a;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid #cbd5e1;
+  font-size: 0.95em;
+}
+
+/* ==========================================================================
+   ELRENDEZÉS ÉS FEJLÉC
+   ========================================================================== */
+
+.app-header {
+  background-color: #ffffff;
+  border-bottom: 1px solid var(--border-color);
+  padding: 12px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--primary);
+}
+
+.brand-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pc-badge {
+  background-color: var(--primary-light);
+  color: var(--primary);
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+}
+
+.timer-badge {
+  background-color: #fef3c7;
+  color: #b45309;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #fde68a;
+}
+
+.timer-urgent {
+  background-color: var(--danger-bg);
+  color: var(--danger);
+  border-color: var(--danger-border);
+  animation: pulse-urgent 1s infinite alternate;
+}
+
+@keyframes pulse-urgent {
+  from { opacity: 1; }
+  to { opacity: 0.7; }
+}
+
+/* ==========================================================================
+   TARTALOM ÉS KÁRTYÁK
+   ========================================================================== */
+
+.main-container {
+  flex: 1;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.card-header {
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.card-title {
+  font-size: 1.35rem;
+  color: var(--text-main);
+}
+
+.card-subtitle {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   ŰRLAPOK ÉS GOMBOK
+   ========================================================================== */
+
+.form-group {
+  margin-bottom: 18px;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text-main);
+}
+
+.form-control {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background-color: #ffffff;
+  transition: border-color 0.15s ease;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.15s ease, transform 0.05s ease;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: #ffffff;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+}
+
+.btn-success {
+  background-color: var(--success);
+  color: #ffffff;
+}
+
+.btn-success:hover {
+  background-color: #15803d;
+}
+
+.btn-danger {
+  background-color: var(--danger);
+  color: #ffffff;
+}
+
+.btn-danger:hover {
+  background-color: #b91c1c;
+}
+
+.btn-secondary {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.btn-secondary:hover {
+  background-color: #d1d5db;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.btn-lg {
+  padding: 14px 28px;
+  font-size: 1.15rem;
+}
+
+/* ==========================================================================
+   DIÁK FELÜLET (STUDENT UI)
+   ========================================================================== */
+
+/* Belépési lépések */
+.step-box {
+  display: none;
+}
+
+.step-box.active {
+  display: block;
+}
+
+.channel-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.select-card {
+  padding: 16px;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: center;
+  font-weight: 600;
+  background-color: #ffffff;
+  transition: all 0.15s ease;
+}
+
+.select-card:hover {
+  border-color: var(--primary);
+  background-color: var(--primary-light);
+}
+
+.select-card.selected {
+  border-color: var(--primary);
+  background-color: var(--primary-light);
+  color: var(--primary);
+}
+
+/* Space Race színválasztó */
+.color-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.color-card {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+  border: 3px solid transparent;
+}
+
+.color-card.selected {
+  border-color: #1f2937;
+  transform: scale(1.05);
+}
+
+.color-blue { background-color: #2563eb; }
+.color-red { background-color: #dc2626; }
+.color-green { background-color: #16a34a; }
+.color-yellow { background-color: #ca8a04; }
+
+/* Kérdések és opciók */
+.question-container {
+  margin-bottom: 24px;
+}
+
+.question-text {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+.question-image {
+  max-width: 100%;
+  max-height: 350px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  border: 1px solid var(--border-color);
+}
+
+.options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.option-btn {
+  padding: 14px 18px;
+  font-size: 1.05rem;
+  font-weight: 500;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background-color: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: all 0.15s ease;
+}
+
+.option-btn:hover {
+  border-color: var(--primary);
+  background-color: #f8fafc;
+}
+
+.option-btn.selected {
+  border-color: var(--primary);
+  background-color: var(--primary-light);
+  color: #1e3a8a;
+  font-weight: 600;
+}
+
+.option-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #f1f5f9;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.option-btn.selected .option-letter {
+  background-color: var(--primary);
+  color: #ffffff;
+}
+
+/* Azonnali Socrative Visszajelzés Kártya (Zöld / Piros) */
+.feedback-box {
+  margin-top: 20px;
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  display: none;
+}
+
+.feedback-box.show {
+  display: block;
+}
+
+.feedback-correct {
+  background-color: var(--success-bg);
+  border: 1px solid var(--success-border);
+  color: #14532d;
+}
+
+.feedback-wrong {
+  background-color: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: #7f1d1d;
+}
+
+.feedback-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.feedback-detail {
+  font-size: 0.95rem;
+  margin-top: 4px;
+}
+
+/* Óra végi értékelőlap a diáknak */
+.student-summary {
+  text-align: center;
+  padding: 20px;
+}
+
+.score-display {
+  font-size: 3rem;
+  font-weight: 800;
+  color: var(--primary);
+  margin: 16px 0;
+}
+
+.grade-badge-lg {
+  display: inline-block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  padding: 8px 24px;
+  border-radius: var(--radius-lg);
+  background-color: #f1f5f9;
+  color: #0f172a;
+  margin-bottom: 24px;
+}
+
+/* ==========================================================================
+   TANÁRI VEZÉRLŐPULT (ADMIN UI) ÉS ÉLŐ MÁTRIX
+   ========================================================================== */
+
+/* Felső Live Badges Sáv */
+.badge-nav-bar {
+  background-color: #1e293b;
+  padding: 8px 24px;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  align-items: center;
+}
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  background-color: #334155;
+  color: #e2e8f0;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.live-badge:hover {
+  background-color: #475569;
+}
+
+.live-badge.badge-active {
+  background-color: #059669;
+  color: #ffffff;
+}
+
+.live-badge.badge-active::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: #34d399;
+  border-radius: 50%;
+  animation: pulse-dot 1.5s infinite;
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.8; }
+}
+
+/* Admin fejléc műveleti gombok */
+.admin-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.admin-nav-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 8px;
+  margin-bottom: 20px;
+}
+
+.nav-tab-btn {
+  padding: 8px 16px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.nav-tab-btn.active {
+  background-color: var(--primary-light);
+  color: var(--primary);
+}
+
+/* Élő Mátrix Táblázat */
+.matrix-container {
+  overflow-x: auto;
+  background-color: #ffffff;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.matrix-table th,
+.matrix-table td {
+  padding: 10px 14px;
+  border: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.matrix-table th {
+  background-color: #f8fafc;
+  font-weight: 700;
+  color: var(--text-main);
+  position: sticky;
+  top: 0;
+}
+
+.matrix-table th.col-name {
+  text-align: left;
+  min-width: 180px;
+}
+
+.matrix-cell {
+  cursor: pointer;
+  font-weight: 700;
+  border-radius: 4px;
+  transition: transform 0.1s ease;
+  min-width: 44px;
+}
+
+.matrix-cell:hover {
+  transform: scale(1.08);
+}
+
+.cell-correct {
+  background-color: var(--success);
+  color: #ffffff;
+}
+
+.cell-partial {
+  background-color: var(--warning);
+  color: #ffffff;
+}
+
+.cell-wrong {
+  background-color: var(--danger);
+  color: #ffffff;
+}
+
+.cell-empty {
+  background-color: #f3f4f6;
+  color: #9ca3af;
+}
+
+/* Fókuszvesztés jelzés a tanárnak */
+.focus-alert {
+  color: var(--danger);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ==========================================================================
+   KIVETÍTŐ (SPACE RACE - PROJECTOR UI)
+   ========================================================================== */
+
+.race-container {
+  padding: 24px;
+  background-color: #0f172a;
+  color: #ffffff;
+  min-height: calc(100vh - 70px);
+}
+
+.race-track {
+  background-color: #1e293b;
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 20px;
+  position: relative;
+  border: 1px solid #334155;
+}
+
+.race-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.track-line {
+  height: 48px;
+  background-color: #0f172a;
+  border-radius: 24px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #334155;
+}
+
+.rocket-runner {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: left 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.rocket-icon {
+  width: 36px;
+  height: 36px;
+}
+
+/* ==========================================================================
+   TOAST ÉS MODAL ELEMEK
+   ========================================================================== */
+
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 9999;
+}
+
+.toast-item {
+  padding: 12px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  color: #ffffff;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+}
+
+.toast-item.toast-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-info { background-color: var(--info); }
+.toast-success { background-color: var(--success); }
+.toast-danger { background-color: var(--danger); }
+.toast-warning { background-color: var(--warning); }
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-backdrop.active {
+  display: flex;
+}
+
+.modal-window {
+  background-color: #ffffff;
+  border-radius: var(--radius-lg);
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  padding: 24px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 16px;
+}
+

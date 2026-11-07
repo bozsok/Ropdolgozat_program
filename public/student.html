@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Röpdolgozat – Diák Felület</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Fejléc -->
+  <header class="app-header">
+    <div class="header-brand">
+      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+      </svg>
+      <div>
+        <h1 class="brand-title">Röpdolgozat</h1>
+      </div>
+    </div>
+
+    <div class="header-meta">
+      <div id="pc-badge" class="pc-badge" style="display: none;">
+        🖥️ <span id="pc-number-text">Gép</span>
+      </div>
+      <div id="timer-badge" class="timer-badge" style="display: none;">
+        ⏱️ <span id="timer-text">--:--</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Fő Tartalom -->
+  <main class="main-container">
+
+    <!-- 1. LÉPÉS: Belépés (3 Kattintás, 0 Gépelés) -->
+    <div id="login-container" class="card">
+      <div class="card-header">
+        <h2 class="card-title">Csatlakozás az órai dolgozathoz</h2>
+        <p class="card-subtitle">Válaszd ki a tantárgyat, az osztályodat, majd a nevedet a listából!</p>
+      </div>
+
+      <!-- 1.1 Tantárgy kiválasztása -->
+      <div id="step-subject" class="form-group">
+        <label class="form-label">1. Tantárgy kiválasztása:</label>
+        <div id="subject-list" class="channel-selector">
+          <!-- Dinamikusan töltődik be -->
+        </div>
+      </div>
+
+      <!-- 1.2 Osztály kiválasztása -->
+      <div id="step-class" class="form-group" style="display: none; margin-top: 24px;">
+        <label class="form-label">2. Osztály kiválasztása:</label>
+        <div id="class-list" class="channel-selector">
+          <!-- Dinamikusan töltődik be -->
+        </div>
+      </div>
+
+      <!-- Dolgozat státusz infó üzenet -->
+      <div id="session-info-box" style="display: none; margin-top: 20px;" class="card">
+        <div id="session-info-content"></div>
+      </div>
+
+      <!-- 1.3 Névválasztó (Hivatalos osztálynévsor) -->
+      <div id="step-student" class="form-group" style="display: none; margin-top: 24px;">
+        <label class="form-label">3. Kattints a saját nevedre:</label>
+        <div id="student-list" class="channel-selector">
+          <!-- Dinamikusan töltődik be -->
+        </div>
+      </div>
+
+      <!-- 1.4 Space Race színválasztó (ha a session módban van) -->
+      <div id="step-team" class="form-group" style="display: none; margin-top: 24px;">
+        <label class="form-label">4. Válassz csapatszínt az űrhajós versenyhez:</label>
+        <div class="color-picker-grid">
+          <div class="color-card color-blue selected" data-color="Kék">🚀 Kék</div>
+          <div class="color-card color-red" data-color="Piros">🚀 Piros</div>
+          <div class="color-card color-green" data-color="Zöld">🚀 Zöld</div>
+          <div class="color-card color-yellow" data-color="Sárga">🚀 Sárga</div>
+        </div>
+        <div style="margin-top: 20px;">
+          <button id="btn-start-race" class="btn btn-primary btn-block btn-lg">Indulás a tesztre! 🚀</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. LÉPÉS: Tesztfelület -->
+    <div id="quiz-container" class="card" style="display: none;">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h2 id="quiz-title" class="card-title">Dolgozat címe</h2>
+          <p id="student-display-name" class="card-subtitle">Tanuló neve</p>
+        </div>
+        <div style="font-weight: 700; font-size: 1.1rem; color: var(--primary);">
+          <span id="question-progress">1 / 5</span>
+        </div>
+      </div>
+
+      <div class="question-container">
+        <!-- Kérdés szövege kódkiemeléssel -->
+        <div id="question-text" class="question-text">Kérdés betöltése...</div>
+
+        <!-- Opcionális kérdés-kép -->
+        <div id="question-image-box" style="display: none; text-align: center;">
+          <img id="question-image" class="question-image" src="" alt="Kérdéshez kapcsolódó ábra">
+        </div>
+
+        <!-- Válaszlehetőségek (ABCD, TF, SHORT) -->
+        <div id="options-container" class="options-list">
+          <!-- Dinamikus tartalom -->
+        </div>
+
+        <!-- SHORT válasz szövegmező -->
+        <div id="short-answer-container" style="display: none; margin-top: 16px;">
+          <input type="text" id="short-answer-input" class="form-control" placeholder="Írd be a választ..." autocomplete="off">
+        </div>
+      </div>
+
+      <!-- Műveleti gombok -->
+      <div id="action-buttons-box" style="margin-top: 24px;">
+        <button id="btn-submit-answer" class="btn btn-primary btn-block btn-lg" disabled>
+          Válasz beküldése és ellenőrzése
+        </button>
+      </div>
+
+      <!-- Azonnali Socrative kiértékelés (Zöld / Piros) -->
+      <div id="feedback-card" class="feedback-box">
+        <div id="feedback-title" class="feedback-title"></div>
+        <div id="feedback-body" class="feedback-detail"></div>
+        <div style="margin-top: 16px; text-align: right;">
+          <button id="btn-next-question" class="btn btn-primary">
+            Következő kérdés ➔
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. LÉPÉS: Dolgozat végi értékelőlap -->
+    <div id="summary-container" class="card" style="display: none;">
+      <div class="card-header">
+        <h2 class="card-title">Dolgozat befejezve!</h2>
+        <p class="card-subtitle">Köszönjük a munkádat! A válaszaid rögzítésre kerültek.</p>
+      </div>
+
+      <div class="student-summary">
+        <p style="font-size: 1.1rem; color: var(--text-muted);">Elért összpontszám:</p>
+        <div id="final-score" class="score-display">0 / 0 pont</div>
+        <div id="final-grade" class="grade-badge-lg">Érdemjegy: –</div>
+
+        <div id="feedback-allowed-box" style="margin-top: 24px;">
+          <p style="color: var(--text-muted);">Nyugodtan bezárhatod az ablakot, vagy várhatsz a tanár további utasításaira.</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Szkriptek -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/utils.js"></script>
+  <script src="/js/student.js"></script>
+</body>
+</html>
+

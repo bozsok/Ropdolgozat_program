@@ -1,0 +1,86 @@
+A Report 11 javításait szakmailag megfelelőnek tartom. A korábban azonosított problémákra célzott, arányos megoldásokat vezettetek be. Különösen pozitív, hogy az adatbázis-triggerek mellett az alkalmazásszintű ellenőrzéseket és az integrációs teszteket is fejlesztettétek.
+
+A beszámoló alapján a négy tesztcsomag összesen 37 sikeres tesztesetet tartalmaz (8 + 6 + 6 + 17).
+
+A frissített forráskódokat és a tesztnaplókat most nem mellékelted, ezért az eredményeket a beszámolód alapján értékelem, nem függetlenül igazolt futtatásként.
+1. A javítások értékelése
+Terület	Értékelés
+WRONG, CORRECT, PARTIAL szabályozás	Megfelelő
+Pontplafon INSERT/UPDATE triggerek	Megfelelő elv
+Tokenalapú munkamenet-helyreállítás	Megfelelő elv
+Gépazonosító és hitelesítés szétválasztása	Megfelelő
+Két tanári lezárás kezelése	Megfelelő
+Lezárás utáni válaszbeküldés tiltása	Megfelelő
+Automatikus integrációs tesztek	Jó előrelépés
+
+2. Három fontos finomítás
+2.1. A tanári felülbírálásnál nem alkalmaznék automatikus pontlevágást
+Ezt írtad:
+Math.min(answer.max_points, ...)
+
+
+Ez megakadályozza a pontplafon túllépését, de egy hibás tanári adatbevitelt észrevétlenül módosíthat.
+
+Például egy 2 pontos kérdésnél a tanár véletlenül 3 pontot adna. A rendszer ezt automatikusan 2 pontra csökkenti.
+
+Én inkább egyértelmű hibajelzést adnék:
+A megadott pontszám meghaladja a kérdés maximális pontértékét (2 pont).
+
+Így a tanár látja a problémát, és maga javíthatja.
+
+A SQLite-trigger természetesen maradjon meg végső védelmi rétegként.
+2.2. A tanári névfeloldás jelenleg adatvesztést is okozhat
+Ez a legfontosabb fennmaradó üzleti kérdés.
+
+A leírásod szerint gépváltás esetén a tanár törli a meglévő résztvevőrekordot, majd a diák újra belép.
+
+Csakhogy a résztvevőhöz tartozó válaszokat a CASCADE szintén törli.
+
+Például:
+1. A tanuló megválaszol 8 kérdésből 6-ot.
+2. Meghibásodik a gépe.
+3. A tanár feloldja a nevét.
+4. A korábbi 6 válasz törlődik.
+5. A tanuló elölről kezdi a dolgozatot.
+Ez ellentmond a korábban meghatározott munkamenet-helyreállítás céljának.
+
+Javaslatom: különítsük el a két tanári műveletet.
+Művelet	Hatás
+Téves névfoglalás feloldása	A résztvevő és válaszai törölhetők, ha a dolgozat még aktív
+Gépváltás engedélyezése	A résztvevő és válaszai megmaradnak; új token keletkezik, a régi érvénytelenné válik
+
+Ehhez nem szükséges új tábla. A meglévő résztvevőrekord session_token és pc_number mezője használható, amennyiben az aktív munkamenetben ezek kontrollált módosítását a triggerek megengedik.
+
+Ez jelentős gyakorlati javulás lenne a 42 gépes tantermi működésben.
+2.3. A két tanári lezárás tesztje legyen valóban párhuzamos
+A második lezárás elutasítása helyes.
+
+Viszont különbség van két egymás után végrehajtott lezárási hívás és két ténylegesen párhuzamos kérés között.
+
+A valódi konkurenciatesztben két független adatbázis-kapcsolat vagy megfelelően párhuzamosított kérés próbálja ugyanazt a sessiont lezárni.
+
+Az elvárt eredmény:
+- pontosan egy lezárás sikeres;
+- a második nem ír felül semmit;
+- a résztvevők állapota konzisztens;
+- az ended_at változatlan marad.
+Ez nem új funkció, hanem a meglévő garancia erősebb bizonyítása.
+3. Egy korábbi döntés következménye
+A rendszer minden kérdés beküldésekor azonnal megjeleníti a helyes választ is.
+
+Ez tanulási célú röpdolgozatoknál megfelelő lehet, de érdemes tudatosítani: a tanulók továbbadhatják egymásnak a helyes válaszokat, miközben mások még dolgoznak.
+
+Ezért a STUDENT_PACED, TEACHER_PACED és SPACE_RACE módoknál különösen fontos, hogy az azonnali visszajelzés szándékos pedagógiai döntés legyen, ne véletlenül örökölt működés.
+
+Nem javaslok most új beállítást. Elég egyértelműen dokumentálni.
+4. Végső értékelésem
+A Report 11 után az adatbázis-tervezést és az alapvető integritási szabályokat lényegében lezárhatónak tartom.
+
+A következő két módosítást azonban még megvalósítanám:
+1. Gépváltás adatvesztés nélkül: új token és gépazonosító, a korábbi válaszok megtartásával.
+2. Pontplafon túllépésénél hibaüzenet: automatikus pontlevágás helyett.
+A valódi párhuzamossági tesztet pedig hozzáadnám a meglévő tesztcsomaghoz.
+
+Ezek után már nem újabb általános SQL-szabályokat keresnék, hanem a program tényleges tantermi használhatóságára, a három dolgozatmód működésére és az exportok megbízhatóságára koncentrálnék.
+
+Összességében: elfogadom a Report 11 módosításait, és a projektet alkalmasnak tartom a következő fejlesztési szakaszra.

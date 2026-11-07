@@ -1,0 +1,87 @@
+# RENDSZERTERV ÉS ÖSSZEFOGLALÓ: Iskolai Helyi Hálózatos Röpdolgozat Rendszer (Socrative-klón)
+
+## 1. Alapvető célkitűzés és környezet
+- **Cél:** Általános iskolai (3–8. osztály) Digitális kultúra tantárgy kézzel írt röpdolgozatainak és a 7 éve használt fizetős Socrative rendszernek a kiváltása saját fejlesztésű, modern, AI-val támogatott szoftverrel.
+- **Helyi infrastruktúra (LAN):**
+  - **Szerver:** 1 db Windows Server 2022 (helyi hálózaton elérhető, internetkapcsolat nélkül is működőképes).
+  - **Kliensek:** 22 db Windows 10-es asztali számítógép a szaktanteremben.
+  - **Tanári gép:** 1 db kétmonitoros számítógép a vezérléshez.
+  - **Meglévő kapcsolat:** A kliensgépek látnak egy felcsatolt hálózati meghajtót a szerverről (az IP-kapcsolat tehát él), de a program biztonsági és adatépségi okokból NEM használhat nyilvános megosztott mappát.
+  - **Külső Linux/PHP szerver:** Elvetve, mert internetfüggő; a belső Windows Server 2022 garantálja a 100%-os offline üzembiztonságot.
+
+---
+
+## 2. Architektúra és Technológiai Stack (Best Practice)
+
+### Helyi Webszerver Architektúra
+Telepítendő `.exe` kliensprogramok helyett **böngészőalapú (webes) rendszer** fut a Windows Server 2022-n (pl. `http://192.168.1.100:3000`).
+- **Előnyök:** Nincs kliensoldali telepítés és frissítés; a 22 gépre csak egy asztali parancsikon kerül.
+- **Biztonság:** A helyes válaszok sosem kerülnek le a diák gépére (F12 / Vizsgálat ablakban sem látszanak), a kiértékelést kizárólag a szerver végzi.
+
+### Szoftverkomponensek
+1. **Backend (Szerver):** Node.js (Express) vagy Python (FastAPI).
+   - *Jogosultság kezelése:* Ha nincs teljes rendszergazdai jog (ellenőrzés: `net session` paranccsal), a Node.js/Python hordozható (`.zip` / Portable) verziója telepítés nélkül is futtatható. Csak a Windows Tűzfalon kell engedélyezni a portot.
+2. **Adatbázis:** **SQLite** (WAL módban).
+   - *Miért nem JSON?* 22 diák egyidejű mentésekor a JSON fájlnál versenyhelyzet (race condition) lép fel: a párhuzamos fájlfelülírások miatt válaszok veszhetnek el, vagy megsérülhet a fájl szerkezete.
+   - *Miért SQLite?* Egyetlen `.db` fájl a szerver egy nem megosztott mappájában, nem igényel külön adatbázis-szerver telepítést (a Node.js `better-sqlite3` vagy Python `sqlite3` csomagja automatikusan létrehozza). Kezeli a konkurens írásokat (ACID tranzakciók), gyors SQL-lekérdezéseket tesz lehetővé, és a *DB Browser for SQLite* (Portable) programmal Excel-szerűen bármikor megtekinthető/szerkeszthető.
+   - *Hibrid opció:* Maguk a tesztkérdések (amiket órán csak olvasunk) tárolhatók `.json` fájlokban is a könnyű hordozhatóságért, de az élő munkamenet és a válaszok kötelezően SQLite-ba mennek.
+3. **Valós idejű kommunikáció:** WebSockets (`Socket.io`) vagy Server-Sent Events (SSE) az azonnali, oldalfrissítés nélküli tanári eredménytáblához és a kérdések központi léptetéséhez.
+4. **Frontend (Felület):** HTML + Tailwind CSS + Vanilla JS. Minden fájlt, betűtípust és ikont helyben a szerveren kell tárolni (offline működés, CDN-függőség nélkül).
+
+---
+
+## 3. Funkcionális követelmények
+
+### Kérdéstípusok és Tesztkészítés (Authoring)
+- **Klasszikus Socrative hármas (1. fázis):**
+  1. Feleletválasztós (ABCD)
+  2. Igaz / Hamis
+  3. Rövid szöveges válasz
+  *(Később bővíthető: sorbarendezés, párosítás, képrészletre kattintás).*
+- **Belső grafikus szerkesztőfelület:** Új tesztek és kérdések létrehozása, képfeltöltéssel, helyes válaszok és pontszámok megadásával.
+- **Socrative `.xlsx` importáló:** A 7 év alatt felhalmozott Socrative tesztek Excel exportjainak 1-kattintásos beolvasása és konvertálása a saját adatbázisba.
+- **AI JSON/Szöveg gyorsimport:** AI által generált kérdéssorok azonnali beillesztése szövegdobozon keresztül.
+
+### Futtatási és Vezérlési Módok
+1. **Saját tempójú (Student Paced):** A diákok önállóan haladnak, beállítható globális **időkorláttal** (pl. 20 perces visszaszámláló, ami után a teszt automatikusan lezárul).
+2. **Tanár által léptetett (Teacher Paced):** A tanár vezérli, melyik kérdést látja az osztály.
+3. **Csapatverseny (Space Race):** Játékosított, vizuális verseny mód.
+
+---
+
+## 4. Egyedi („Out-of-the-Box”) fejlesztések a szaktanteremre szabva
+
+- **Fix gép-azonosítás URL paraméterrel:** A 22 kliensgépen a parancsikon tartalmazza a gép számát (pl. `http://szerver:3000/?gep=14`). A tanári gépen a terem alaprajzán azonnal látszik, melyik gép aktív, a kisebb (3–4. osztályos) gyerekeknek pedig nem kell szobakódot gépelniük, akár egy legördülő osztálynévsorból is kiválaszthatják a nevüket.
+- **Kétmonitoros „Mission Control” tanári felület:**
+  - *1. monitor (Privát tanári vezérlő):* Élő mátrix (ki hol tart, mit rontott el), időzítő, fókuszvesztés-riasztás, kérdésléptetés.
+  - *2. monitor (Kivetítő / Másodlagos kijelző):* Space Race állása, nagy visszaszámláló óra, vagy a teszt végén név nélküli (anonimizált) statisztika a közös megbeszéléshez.
+- **Fókuszvesztés-figyelő (Puskázásgátló):** A böngésző (`visibilitychange` és `blur` eseményekkel) azonnal jelzi a tanári gépen (pl. sárga háttérrel), ha a diák lekicsinyíti az ablakot, új fület nyit, vagy átkattint más programba.
+- **Helyi kulcsszavas előpontozás:** Rövid szöveges válaszoknál a szerver automatikusan összeveti a diák válaszát a megadott kulcsszavakkal.
+
+---
+
+## 5. Exportálás, Kiértékelés és Riportok
+
+### A) Csoportos eredmények (Teljes osztály egyben)
+1. **Színezett Excel (`.xlsx`):** A Socrative-hoz hasonló táblázat (sorok: diákok, oszlopok: kérdések, zöld/piros cellaszínezés a konkrét válaszokkal). **Extra:** Beépített ponthatár-kalkulátor, ami külön oszlopban azonnal kiszámolja a KRÉTA-ba beírható érdemjegyet (1–5).
+2. **Interaktív egyfájlos HTML Riport (`.html`):** Offline megnyitható, szűrhető, sorba rendezhető statisztikai oldal, egykattintásos név-elrejtéssel (anonim mód) az órai kivetítéshez.
+
+### B) Egyéni dolgozatok (Személyenkénti letöltés és kiosztás)
+1. **Önálló, díszes HTML értékelőlapok (`.zip`-be csomagolva):** Minden diáknak külön `.html` fájl generálódik (kártyás dizájn, képek, diák válasza vs. helyes válasz, lenyitható magyarázatok). Pillekönnyű, KRÉTA üzenetben is küldhető.
+2. **Nyomtatható / PDF nézet (`.pdf`):** A tanári felületen egy *„Összes egyéni lap nyomtatása / PDF”* gomb egymás alá tölti be a 22 diák lapját CSS `@media print` oldalelváltással (minden diák új A4-es oldalon), ami a böngészőből 2 másodperc alatt tűéles PDF-be menthető.
+3. **Azonnali digitális kiosztás az órán:** A teszt lezárásakor (tanári engedélyezéssel) a 22 kliensgép képernyőjén azonnal megjelenik a diák saját, személyre szabott értékelőlapja a helyes válaszokkal, így az óra utolsó 5 percében helyben átbeszélhető a dolgozat.
+
+---
+
+## 6. Az SQLite Adatbázis Alapsémája (4 tábla)
+1. **`quizzes` (Tesztek):** `id`, `title` (cím), `created_at` (létrehozás dátuma), `time_limit` (alapértelmezett időkorlát).
+2. **`questions` (Kérdések):** `id`, `quiz_id`, `question_text` (kérdés), `type` (ABCD / TF / SHORT), `options` (válaszlehetőségek JSON-ban), `correct_answer` (helyes válasz), `image_path` (kép), `points` (pontszám).
+3. **`sessions` (Megírt dolgozatok / Órai alkalmak):** `id`, `quiz_id`, `class_name` (osztály, pl. 6.a), `mode` (saját tempó / tanári / verseny), `grade_thresholds` (ponthatárok), `started_at`, `ended_at`.
+4. **`answers` (Diákok válaszai):** `id`, `session_id`, `student_name` (diák neve), `pc_number` (gép száma), `question_id`, `submitted_answer` (beküldött válasz), `is_correct` (helyes-e), `time_spent_sec` (válaszidő másodpercben).
+
+---
+
+## 7. Fejlesztési Ütemterv (3 Fázis)
+- **1. Fázis (Alaprendszer / MVP):** SQLite adatbázis + Diák belépés (gép-azonosítóval) + Saját tempójú tesztírás (3 kérdéstípus, időzítő) + Élő tanári eredménytábla + Csoportos/Egyéni exportok.
+- **2. Fázis (Tartalomkezelő):** Socrative `.xlsx` importáló + Saját vizuális tesztszerkesztő (képfeltöltéssel) + AI gyorsimport.
+- **3. Fázis (Extra módok):** Teacher Paced (tanári léptetés) + Space Race (csapatverseny) + Fókuszvesztés-figyelő.
