@@ -10,13 +10,13 @@ router.get('/', (req, res) => {
   res.sendFile(path.join(config.publicDir, 'student.html'));
 });
 
-// Tanári fő vezérlőpult (PIN védelem)
-router.get('/admin', requireAdminAuth, (req, res) => {
+// Tanári fő vezérlőpult (A felület beépített PIN modallal védi a hozzáférést)
+router.get('/admin', (req, res) => {
   res.sendFile(path.join(config.publicDir, 'admin.html'));
 });
 
-// Tanári másodlagos kivetítő monitor (PIN védelem)
-router.get('/projector', requireAdminAuth, (req, res) => {
+// Tanári másodlagos kivetítő monitor
+router.get('/projector', (req, res) => {
   res.sendFile(path.join(config.publicDir, 'projector.html'));
 });
 

@@ -60,6 +60,7 @@
   const summaryContainer = document.getElementById('summary-container');
   const finalScore = document.getElementById('final-score');
   const finalGrade = document.getElementById('final-grade');
+  const btnRestartStudent = document.getElementById('btn-restart-student');
 
   /**
    * Alkalmazás inicializálása
@@ -360,8 +361,12 @@
 
       if (data.participant.is_finished === 1) {
         showSummary({
-          totalPoints: 0,
-          maxPoints: data.quiz.total_points
+          totalPoints: data.results ? data.results.total_points : 0,
+          maxPoints: (data.results && data.results.max_points) || data.quiz.total_points,
+          percentage: data.results ? data.results.percentage : 0,
+          grade: data.results ? data.results.grade : null,
+          gradeText: data.results ? data.results.grade_text : '',
+          showFeedback: data.participant.show_feedback_on_end === 1
         });
         return true;
       }
@@ -445,11 +450,13 @@
     optionsContainer.innerHTML = '';
     shortAnswerContainer.style.display = 'none';
     shortAnswerInput.value = '';
+    shortAnswerInput.disabled = false;
 
     // Kérdéstípus szerinti megjelenítés
     if (q.question_type === 'ABCD') {
       const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
-      q.options.forEach((optText, optIdx) => {
+      const opts = (Array.isArray(q.options) && q.options.length > 0) ? q.options : ['A', 'B', 'C', 'D'];
+      opts.forEach((optText, optIdx) => {
         const btn = document.createElement('div');
         btn.className = 'option-btn';
         btn.dataset.value = optText;
@@ -483,7 +490,8 @@
       });
     } else if (q.question_type === 'SHORT') {
       shortAnswerContainer.style.display = 'block';
-      shortAnswerInput.focus();
+      shortAnswerInput.disabled = false;
+      setTimeout(() => shortAnswerInput.focus(), 50);
       shortAnswerInput.oninput = () => {
         btnSubmitAnswer.disabled = shortAnswerInput.value.trim().length === 0;
       };
@@ -530,6 +538,7 @@
       const result = await res.json();
       if (!res.ok) {
         alert(result.error || 'Hiba a válasz mentésekor!');
+        btnSubmitAnswer.disabled = false;
         return;
       }
 
@@ -606,14 +615,49 @@
       // ignore
     }
 
-    quizContainer.style.display = 'none';
-    summaryContainer.style.display = 'block';
+    let summaryData = null;
+    try {
+      const res = await fetch(`/api/student/session-data?token=${encodeURIComponent(sessionToken)}`);
+      if (res.ok) {
+        const data = await res.json();
+        summaryData = {
+          totalPoints: data.results ? data.results.total_points : 0,
+          maxPoints: (data.results && data.results.max_points) || (currentQuiz ? currentQuiz.total_points : 0),
+          percentage: data.results ? data.results.percentage : 0,
+          grade: data.results ? data.results.grade : null,
+          gradeText: data.results ? data.results.grade_text : '',
+          showFeedback: data.participant.show_feedback_on_end === 1
+        };
+      }
+    } catch {
+      // ignore
+    }
+
+    showSummary(summaryData);
   }
 
   function showSummary(data) {
     loginContainer.style.display = 'none';
     quizContainer.style.display = 'none';
     summaryContainer.style.display = 'block';
+
+    if (data) {
+      if (data.totalPoints !== undefined && data.maxPoints !== undefined) {
+        finalScore.textContent = `${data.totalPoints} / ${data.maxPoints} pont (${data.percentage || 0}%)`;
+      }
+      if (data.gradeText && data.grade) {
+        finalGrade.textContent = `Érdemjegy: ${data.gradeText} (${data.grade})`;
+      } else if (data.grade) {
+        finalGrade.textContent = `Érdemjegy: ${data.grade}`;
+      }
+    }
+
+    if (btnRestartStudent) {
+      btnRestartStudent.onclick = () => {
+        sessionStorage.removeItem('ropdolgozat_token');
+        window.location.reload();
+      };
+    }
   }
 
   /**

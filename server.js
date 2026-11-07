@@ -64,8 +64,8 @@ function getNetworkAddresses() {
   return addresses;
 }
 
-// Szerver indítása az alapértelmezett 3000-es porton (Rule 7)
-server.listen(config.port, () => {
+// Szerver indítása az alapértelmezett 3000-es porton minden IPv4 hálózati csatolón (0.0.0.0)
+server.listen(config.port, '0.0.0.0', () => {
   const ips = getNetworkAddresses();
   console.log('================================================================');
   console.log(`  Röpdolgozat program szerver elindult a(z) ${config.port}-es porton!`);

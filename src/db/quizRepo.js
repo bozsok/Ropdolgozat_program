@@ -105,6 +105,11 @@ function getQuizById(quizId, isStudentView = false) {
       parsedOptions = [];
     }
 
+    // ABCD típusú kérdésnél biztosítjuk, hogy mindig legyenek opciók (fallback)
+    if (q.question_type === 'ABCD' && (!Array.isArray(parsedOptions) || parsedOptions.length === 0)) {
+      parsedOptions = ['A', 'B', 'C', 'D'];
+    }
+
     // Puskázásgátló védelem (AI_RULES 1.2): Diák felé semmi körülmények között nem mehet le a megoldás!
     if (isStudentView) {
       return {

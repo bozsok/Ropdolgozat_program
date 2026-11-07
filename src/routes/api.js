@@ -6,6 +6,8 @@ const { requireAdminAuth, isValidToken, loginAdmin, logoutAdmin } = require('../
 const rosterRepo = require('../db/rosterRepo');
 const quizRepo = require('../db/quizRepo');
 const sessionRepo = require('../db/sessionRepo');
+const grader = require('../services/grader');
+const db = require('../db/init');
 const exporter = require('../services/exporter');
 const backup = require('../services/backup');
 
@@ -420,6 +422,15 @@ router.get('/student/session-data', (req, res) => {
       });
     }
 
+    // Tanuló pontszámának és jegyének kalkulációja
+    const pointsRow = db.prepare('SELECT COALESCE(SUM(points_earned), 0.0) AS total_points FROM answers WHERE participant_id = ?').get(participant.id);
+    const totalPoints = pointsRow ? Number(pointsRow.total_points.toFixed(2)) : 0;
+    const totalMax = quiz.total_points || 0;
+    const percentage = totalMax > 0 ? Math.round((totalPoints / totalMax) * 100) : 0;
+    const thresholds = JSON.parse(participant.grade_thresholds_json || '{"2":30,"3":55,"4":75,"5":90}');
+    const grade = grader.calculateGrade(percentage, thresholds);
+    const gradeText = grader.getGradeText(grade);
+
     res.json({
       participant: {
         id: participant.id,
@@ -438,6 +449,13 @@ router.get('/student/session-data', (req, res) => {
         title: quiz.title,
         questions: orderedQuestions,
         total_points: quiz.total_points
+      },
+      results: {
+        total_points: totalPoints,
+        max_points: totalMax,
+        percentage,
+        grade,
+        grade_text: gradeText
       }
     });
   } catch (err) {

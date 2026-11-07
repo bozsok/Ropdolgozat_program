@@ -56,9 +56,8 @@ function requireAdminAuth(req, res, next) {
     });
   }
 
-  // Ha böngészős navigáció (pl. /admin), a frontend felület login képernyőt jelenít meg
-  // vagy átirányítjuk
-  return res.redirect('/admin?login=1');
+  // Ha védett böngészős navigáció (pl. /print bejelentkezés nélkül), átirányítás a tanári vezérlőpultra
+  return res.redirect('/admin');
 }
 
 /**

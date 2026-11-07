@@ -1,11 +1,12 @@
 {
   "name": "ropdolgozat-program",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Offline Iskolai Helyi Hálózatos Röpdolgozat Rendszer",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "init-db": "node src/db/init.js"
+    "init-db": "node src/db/init.js",
+    "test": "node scratch/test_full_system.js && node scratch/test_report12_fixes.js"
   },
   "dependencies": {
     "archiver": "^7.0.1",
