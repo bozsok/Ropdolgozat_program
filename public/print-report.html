@@ -34,9 +34,23 @@
 
       try {
         if (!sessionId) {
+          // 1. Megpróbáljuk megkeresni az aktív dolgozatot, amelyben vannak diákok
           const sRes = await fetch('/api/sessions/active');
           const active = await sRes.json();
-          if (active.length > 0) sessionId = active[0].id;
+          const activeWithStudents = Array.isArray(active) ? active.find(s => s.participant_count > 0) : null;
+          if (activeWithStudents) {
+            sessionId = activeWithStudents.id;
+          } else if (Array.isArray(active) && active.length > 0) {
+            sessionId = active[0].id;
+          } else {
+            // 2. Ha nincs aktív dolgozat, az archívumból választjuk a legutóbbi kitöltött dolgozatot
+            const allRes = await fetch('/api/admin/sessions');
+            if (allRes.ok) {
+              const all = await allRes.json();
+              const withStudents = Array.isArray(all) ? (all.find(s => s.participant_count > 0) || all[0]) : null;
+              if (withStudents) sessionId = withStudents.id;
+            }
+          }
         }
 
         if (!sessionId) {

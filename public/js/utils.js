@@ -97,6 +97,8 @@ function closeModal(modalId) {
 // Ablakon kívüli kattintás a modal bezárásához
 window.addEventListener('click', (e) => {
   if (e.target.classList.contains('modal-backdrop')) {
+    // A login-modal kötelező hitelesítési ablak, mellékattintással tilos bezárni!
+    if (e.target.id === 'login-modal') return;
     e.target.classList.remove('active');
   }
 });

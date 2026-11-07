@@ -18,10 +18,14 @@
   const inputPin = document.getElementById('input-pin');
   const btnLoginSubmit = document.getElementById('btn-login-submit');
   const btnLogout = document.getElementById('btn-logout');
+  const headerMetaBox = document.getElementById('header-meta-box');
+  const badgeNavBar = document.getElementById('badge-nav-bar');
+  const adminMainContainer = document.getElementById('admin-main-container');
 
   const liveBadgesList = document.getElementById('live-badges-list');
   const navTabBtns = document.querySelectorAll('.nav-tab-btn');
   const tabContents = document.querySelectorAll('.admin-tab-content');
+  const tabBtnLive = document.getElementById('tab-btn-live');
 
   // Mátrix elemek
   const noActiveSessionBox = document.getElementById('no-active-session-box');
@@ -30,6 +34,7 @@
   const liveSessionTitle = document.getElementById('live-session-title');
   const liveSessionInfo = document.getElementById('live-session-info');
   const btnFinishSession = document.getElementById('btn-finish-session');
+  const badgeSessionFinished = document.getElementById('badge-session-finished');
   const matrixTable = document.getElementById('matrix-table');
   const matrixHeadRow = document.getElementById('matrix-head-row');
   const matrixBody = document.getElementById('matrix-body');
@@ -37,6 +42,13 @@
   const btnExportExcel = document.getElementById('btn-export-excel');
   const btnExportHtml = document.getElementById('btn-export-html');
   const btnExportZip = document.getElementById('btn-export-zip');
+  const btnExportPrint = document.getElementById('btn-export-print');
+
+  // Reports (Archívum) elemek
+  const reportsTableBody = document.getElementById('reports-table-body');
+  const inputSearchReports = document.getElementById('input-search-reports');
+  const btnRefreshReports = document.getElementById('btn-refresh-reports');
+  let allReports = [];
 
   // Start modal
   const modalStartSession = document.getElementById('modal-start-session');
@@ -75,6 +87,24 @@
   const btnDeleteClass = document.getElementById('btn-delete-class');
   let selectedRosterClass = null;
 
+  function openLoginModal() {
+    openModal('login-modal');
+    if (adminMainContainer) adminMainContainer.style.display = 'none';
+    if (badgeNavBar) badgeNavBar.style.display = 'none';
+    if (headerMetaBox) headerMetaBox.style.display = 'none';
+    if (inputPin) {
+      inputPin.value = '';
+      setTimeout(() => inputPin.focus(), 100);
+    }
+  }
+
+  function closeLoginModal() {
+    closeModal('login-modal');
+    if (adminMainContainer) adminMainContainer.style.display = 'block';
+    if (badgeNavBar) badgeNavBar.style.display = 'flex';
+    if (headerMetaBox) headerMetaBox.style.display = 'flex';
+  }
+
   /**
    * Alkalmazás indítása
    */
@@ -82,10 +112,11 @@
     // Hitelesítés ellenőrzése
     const isAuth = await checkAuth();
     if (!isAuth) {
-      openModal('login-modal');
+      openLoginModal();
       return;
     }
 
+    closeLoginModal();
     setupSocket();
     await loadInitialData();
   }
@@ -116,20 +147,33 @@
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        closeModal('login-modal');
+        closeLoginModal();
         setupSocket();
         await loadInitialData();
       } else {
-        alert(data.message || 'Helytelen tanári PIN-kód!');
+        alert(data.message || 'Helytelen tanári jelszó!');
+        inputPin.value = '';
+        inputPin.focus();
       }
     } catch (err) {
       alert('Hálózati hiba a bejelentkezés során!');
     }
   });
 
+  inputPin.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      btnLoginSubmit.click();
+    }
+  });
+
   // Kijelentkezés
   btnLogout.addEventListener('click', async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    openLoginModal();
     window.location.reload();
   });
 
@@ -231,14 +275,42 @@
       noActiveSessionBox.style.display = 'none';
       activeSessionPanel.style.display = 'block';
 
-      // Fejléc frissítése
-      liveSessionTitle.textContent = data.session.quiz_title;
-      liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${data.session.mode}`;
+      // Fejléc és státusz frissítése
+      const isFinished = data.session.status === 'FINISHED';
+      if (isFinished) {
+        if (sessionBadgeChannel) {
+          sessionBadgeChannel.className = 'live-badge badge-finished';
+          sessionBadgeChannel.textContent = '⏹️ LEZÁRT ARCHÍVUM';
+        }
+        if (tabBtnLive) {
+          tabBtnLive.textContent = '📊 Lezárt Dolgozat (Mátrix)';
+        }
+        liveSessionTitle.textContent = data.session.quiz_title + ' [LEZÁRT ARCHÍVUM]';
+        const endedFormatted = data.session.ended_at ? data.session.ended_at.replace('T', ' ').substring(0, 16) : '–';
+        liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${data.session.mode} | Befejezve: ${endedFormatted}`;
+        if (btnFinishSession) btnFinishSession.style.display = 'none';
+        if (badgeSessionFinished) badgeSessionFinished.style.display = 'inline-block';
+      } else {
+        if (sessionBadgeChannel) {
+          sessionBadgeChannel.className = 'live-badge badge-active';
+          sessionBadgeChannel.textContent = '🟢 ÉLŐ';
+        }
+        if (tabBtnLive) {
+          tabBtnLive.textContent = '📊 Élő Dolgozat (Mátrix)';
+        }
+        liveSessionTitle.textContent = data.session.quiz_title;
+        liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${data.session.mode}`;
+        if (btnFinishSession) btnFinishSession.style.display = 'inline-block';
+        if (badgeSessionFinished) badgeSessionFinished.style.display = 'none';
+      }
 
       // Export linkek beállítása
       btnExportExcel.href = `/api/admin/export/excel/${sessionId}`;
       btnExportHtml.href = `/api/admin/export/html/${sessionId}`;
       btnExportZip.href = `/api/admin/export/zip/${sessionId}`;
+      if (btnExportPrint) {
+        btnExportPrint.href = `/print?sessionId=${sessionId}`;
+      }
 
       renderMatrix(data);
 
@@ -253,6 +325,19 @@
     currentSessionId = null;
     noActiveSessionBox.style.display = 'block';
     activeSessionPanel.style.display = 'none';
+    if (tabBtnLive) {
+      tabBtnLive.textContent = '📊 Élő Dolgozat (Mátrix)';
+    }
+    if (sessionBadgeChannel) {
+      sessionBadgeChannel.className = 'live-badge badge-active';
+      sessionBadgeChannel.textContent = '🟢 ÉLŐ';
+    }
+    if (badgeSessionFinished) {
+      badgeSessionFinished.style.display = 'none';
+    }
+    if (btnFinishSession) {
+      btnFinishSession.style.display = 'inline-block';
+    }
   }
 
   /**
@@ -478,7 +563,7 @@
       if (res.ok) {
         showToast('Dolgozat sikeresen lezárva!', 'success');
         await loadActiveSessions();
-        showNoSessionView();
+        await switchSession(currentSessionId);
       } else {
         const err = await res.json();
         alert(err.error || 'Hiba a dolgozat lezárásakor!');
@@ -968,6 +1053,113 @@
   });
 
   /**
+   * Korábbi és aktív dolgozatok (Reports archívum) betöltése
+   */
+  async function loadReports() {
+    try {
+      const res = await fetch('/api/admin/sessions', {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (res.status === 401) {
+        openLoginModal();
+        return;
+      }
+      if (!res.ok) {
+        console.error('Hiba a jelentések lekérésekor, status:', res.status);
+        return;
+      }
+      const data = await res.json();
+      allReports = Array.isArray(data) ? data : [];
+      filterAndRenderReports();
+    } catch (err) {
+      console.error('Hiba a jelentések betöltésekor:', err);
+    }
+  }
+
+  function filterAndRenderReports() {
+    if (!reportsTableBody) return;
+    const query = inputSearchReports ? inputSearchReports.value.trim().toLowerCase() : '';
+
+    let filtered = allReports;
+    if (query) {
+      filtered = allReports.filter(s => 
+        (s.quiz_title && s.quiz_title.toLowerCase().includes(query)) ||
+        (s.subject_name && s.subject_name.toLowerCase().includes(query)) ||
+        (s.class_name && s.class_name.toLowerCase().includes(query)) ||
+        (s.grade_level && String(s.grade_level).includes(query))
+      );
+    }
+
+    if (filtered.length === 0) {
+      reportsTableBody.innerHTML = `
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 32px; color: var(--text-muted);">
+            Nem található a keresésnek megfelelő dolgozat az archívumban.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    reportsTableBody.innerHTML = '';
+    filtered.forEach(s => {
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--border-color)';
+
+      const startedFormatted = s.started_at ? s.started_at.replace('T', ' ').substring(0, 16) : '–';
+      const isAct = s.status === 'ACTIVE';
+      const statusBadge = isAct
+        ? `<span class="badge" style="background-color: rgba(34, 197, 94, 0.15); color: var(--success); font-weight: 600;">🟢 Folyamatban</span>`
+        : `<span class="badge" style="background-color: rgba(100, 116, 139, 0.15); color: var(--text-muted); font-weight: 600;">⏹️ Lezárva</span>`;
+
+      tr.innerHTML = `
+        <td style="padding: 12px 16px; font-size: 0.9rem; color: var(--text-muted);">${startedFormatted}</td>
+        <td style="padding: 12px 16px;"><strong>${escapeHtml(s.subject_name)}</strong> <span style="color: var(--text-muted);">(${s.grade_level}. évf.)</span></td>
+        <td style="padding: 12px 16px; font-weight: 600;">${escapeHtml(s.quiz_title)}</td>
+        <td style="padding: 12px 16px;">${s.class_name ? escapeHtml(s.class_name) : '<span style="color: var(--text-muted);">–</span>'}</td>
+        <td style="padding: 12px 16px; text-align: center;"><strong>${s.participant_count || 0}</strong> diák</td>
+        <td style="padding: 12px 16px; text-align: center;">${statusBadge}</td>
+        <td style="padding: 12px 16px; text-align: right;">
+          <div style="display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end;">
+            <button class="btn btn-primary btn-sm btn-view-report" data-id="${s.id}" title="Mátrix és diákválaszok megnyitása">
+              👁️ Mátrix
+            </button>
+            <a href="/api/admin/export/excel/${s.id}" class="btn btn-success btn-sm" title="KRÉTA Excel riport letöltése" target="_blank">
+              📊 Excel
+            </a>
+            <a href="/api/admin/export/html/${s.id}" class="btn btn-secondary btn-sm" title="Csoportos interaktív HTML letöltése" target="_blank">
+              🌐 HTML
+            </a>
+            <a href="/api/admin/export/zip/${s.id}" class="btn btn-secondary btn-sm" title="Egyéni tanulói lapok ZIP letöltése" target="_blank">
+              📦 ZIP
+            </a>
+            <a href="/print?sessionId=${s.id}" class="btn btn-secondary btn-sm" title="Nyomtatható A4 PDF lapok" target="_blank">
+              🖨️ PDF
+            </a>
+          </div>
+        </td>
+      `;
+
+      const btnView = tr.querySelector('.btn-view-report');
+      if (btnView) {
+        btnView.addEventListener('click', () => {
+          switchSession(s.id);
+        });
+      }
+
+      reportsTableBody.appendChild(tr);
+    });
+  }
+
+  if (inputSearchReports) {
+    inputSearchReports.addEventListener('input', filterAndRenderReports);
+  }
+
+  if (btnRefreshReports) {
+    btnRefreshReports.addEventListener('click', loadReports);
+  }
+
+  /**
    * Fülváltás kezelése
    */
   navTabBtns.forEach(btn => {
@@ -985,6 +1177,10 @@
     tabContents.forEach(c => {
       c.style.display = c.id === tabId ? 'block' : 'none';
     });
+
+    if (tabId === 'tab-reports') {
+      loadReports();
+    }
   }
 
   // Futtatás indításkor

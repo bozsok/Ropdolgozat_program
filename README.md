@@ -1,4 +1,4 @@
-# Röpdolgozat program (v1.1.0)
+# Röpdolgozat program (v1.2.0)
 
 > **100% Offline Helyi Hálózatos Iskolai Röpdolgozat Rendszer (Socrative-klón)**  
 > Kifejezetten általános iskolai 3–8. évfolyamos oktatási környezetre (Digitális kultúra, Technika és Fejlesztő foglalkozás tantárgyakhoz) tervezve.  
@@ -59,6 +59,8 @@ A tanuló minden kérdés beküldésekor azonnal látja a minősítést: helyes 
 ---
 
 ## 4. Rendszerkövetelmények és Telepítés
+
+> Részletes pendrive-os és Windows Server 2022 éles üzembe helyezési útmutató: [`telepítés.md`](file:///d:/dev/Röpdolgozat%20program/telep%C3%ADt%C3%A9s.md)
 
 ### Előfeltételek
 * **Operációs rendszer:** Windows Server 2022, Windows 10/11, vagy Linux disztribúció
@@ -128,13 +130,14 @@ A dolgozat befejezésekor (vagy az archívumból utólag bármikor) 4 professzio
 ## 7. Projekt Könyvtárstruktúra
 
 ```text
-├── CHANGELOG.md              # Részletes verziótörténet és változási napló (v1.1.0)
+├── CHANGELOG.md              # Részletes verziótörténet és változási napló (v1.2.0)
 ├── config.js                 # Központi konfiguráció (port: 3000, PIN, elérési utak, ponthatárok)
 ├── DATABASE_SCHEMA.sql       # Teljes relációs adatbázis séma 7 táblával és 22 triggerrel
 ├── package.json              # Node.js projektleíró és függőségek
 ├── project-context.md        # Rendszermegállapodás és működési szabályzat
 ├── server.js                 # Express szerver és Socket.io belépési pont
 ├── start_server.bat          # Windows indítószkript ellenőrzéssel és UTF-8 támogatással
+├── telepítés.md              # Részletes Windows Server 2022 üzembe helyezési útmutató
 ├── data/                     # SQLite adatbázis és feltöltött képek (gitignore védi)
 │   └── uploads/              # Feltöltött médiafájlok (.gitkeep)
 ├── public/                   # 100% Offline kliensoldali fájlok (Zero-Build)

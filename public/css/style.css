@@ -530,6 +530,15 @@ h1, h2, h3, h4, h5 {
   color: #ffffff;
 }
 
+.live-badge.badge-finished {
+  background-color: #64748b;
+  color: #ffffff;
+}
+
+.live-badge.badge-finished::before {
+  display: none;
+}
+
 .live-badge.badge-active::before {
   content: "";
   display: inline-block;

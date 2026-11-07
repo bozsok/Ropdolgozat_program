@@ -201,6 +201,16 @@ router.get('/sessions/active', (req, res) => {
   }
 });
 
+// Összes dolgozat lekérése (Eredmények / Reports archívumhoz)
+router.get('/admin/sessions', requireAdminAuth, (req, res) => {
+  try {
+    const sessions = sessionRepo.getAllSessions();
+    res.json(sessions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Adott tantárgy és évfolyam aktív dolgozatának keresése (diák belépéshez)
 router.get('/sessions/active-by-channel', (req, res) => {
   try {

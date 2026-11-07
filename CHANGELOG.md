@@ -4,6 +4,50 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.2.0] – 2026-11-07
+
+### Korábbi dolgozatok archívuma (Reports), nyomtatható egyéni A4 PDF, hitelesítési és felületi finomhangolások
+
+A tanári munkaállomás és a vizsgafelület éles tantermi használatra való felkészítése során elvégzett strukturális bővítések, hitelesítési javítások és vizuális egyértelműsítések összefoglalása.
+
+#### Hozzáadva (Added)
+* **Korábbi dolgozatok és eredmények archívuma (Reports felület és API):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A tanári vezérlőpulton új **📑 Eredmények (Reports)** fül (`tab-reports`) került kialakításra, ahol a pedagógus időrendben áttekintheti az összes korábbi és folyamatban lévő dolgozatot.
+  - Szerveroldali adatbázis-lekérdezés (`getAllSessions()`) és védett REST API végpont (`GET /api/admin/sessions`), amely visszaadja a dolgozatok alapadatait (dátum, tantárgy, évfolyam, dolgozat címe, osztály, létszám, lezárt vagy aktív állapot).
+  - Kliensoldalon dinamikus keresőmező az azonnali szűréshez (dolgozat címe, tantárgy, osztály vagy évfolyam szerint), valamint közvetlen exportgombok a táblázat minden sorában: **👁️ Mátrix**, **📊 Excel**, **🌐 HTML**, **📦 ZIP** és **🖨️ PDF**.
+
+* **Lezárt dolgozatok egyértelmű vizuális jelölése (Lezárt Archívum Mátrix nézet):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Amikor a tanár az Eredmények (Reports) fülről megnyitja egy lezárt dolgozat táblázatát (`switchSession`), a felület egyértelművé teszi az archív állapotot, megszüntetve a megtévesztő jelzéseket:
+    - A fejléckapszula a zöld pulzáló `🟢 ÉLŐ` helyett diszkrét szürke hátterű **`⏹️ LEZÁRT ARCHÍVUM`** (`.live-badge.badge-finished`) jelvényre vált.
+    - Az adminisztrációs navigációs fül felirata dinamikusan **`📊 Lezárt Dolgozat (Mátrix)`** szövegre módosul.
+    - A dolgozat címe kiegészül a `[LEZÁRT ARCHÍVUM]` megjelöléssel, az adatsávban pedig megjelenik a lezárás pontos ideje (`Befejezve: YYYY-MM-DD HH:MM`).
+    - A piros `⏹️ Dolgozat befejezése (Finish)` gomb elrejtődik, helyette a **`⏹️ Dolgozat lezárva`** állapotjelző látható.
+    - Egy élő csatornára kattintva vagy új dolgozat indításakor a felület maradéktalanul visszatér a zöld `🟢 ÉLŐ` és `📊 Élő Dolgozat (Mátrix)` üzemmódba.
+
+* **Részletes Windows Server 2022 üzembe helyezési és telepítési dokumentáció:**
+  - **Fájl:** [`telepítés.md`](file:///d:/dev/Röpdolgozat%20program/telepítés.md)
+  - Lépésről lépésre követhető, teljes körű rendszergazdai útmutató készült az éles tantermi környezet kialakításához: pendrive-os fájlmásolás, Node.js LTS környezet beállítása, Windows Defender tűzfalszabály létrehozása a 3000-es porthoz, automatikus indítás konfigurálása a rendszerindítási mappába (`shell:common startup`), valamint a tanulói munkaállomások asztali parancsikonjainak előkészítése.
+
+#### Javítva (Fixed)
+* **Nyomtatható A4 PDF nézet dinamikus munkamenet-hozzárendelése (Print Report Fallback):**
+  - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/print-report.html`](file:///d:/dev/Röpdolgozat%20program/public/print-report.html)
+  - **Hiba:** A nyomtatási gomb (`btnExportPrint`) statikusan a paraméter nélküli `/print` címre mutatott, így lezárt dolgozat megtekintésekor az új böngészőlapon a „Nincs diák ebben a dolgozatban.” figyelmeztetés fogadta a tanárt.
+  - **Javítás:** A gomb hivatkozása a kiválasztott dolgozathoz dinamikusan hozzárendeli a munkamenet-azonosítót (`/print?sessionId=${sessionId}`), továbbá a `print-report.html` intelligens visszaesési (fallback) logikát kapott a megadott archív dolgozat diákjainak és eredményeinek megbízható betöltésére.
+
+* **Kijelentkezési és felhatalmazási JSON-válasz javítása (SyntaxError JSON.parse elhárítása):**
+  - **Fájlok:** [`src/middleware/auth.js`](file:///d:/dev/Röpdolgozat%20program/src/middleware/auth.js), [`public/js/utils.js`](file:///d:/dev/Röpdolgozat%20program/public/js/utils.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - **Hiba:** A `requireAdminAuth` köztesréteg `req.path.startsWith('/api/')` feltétele alútvonalakon hamis értéket adott, emiatt jogosulatlan állapotban az API végpontok HTML átirányítást küldtek a várt 401 JSON helyett. Ez a kliensoldali jelentésbetöltéskor `SyntaxError: JSON.parse: unexpected character at line 1 column 1` hibát okozott. Emellett az ablakon kívüli kattintás a bejelentkező modal ablakot is bezárta.
+  - **Javítás:** A köztesréteg a globális `req.originalUrl` és `req.baseUrl` útvonalakat vizsgálja, 401-es hibakódnál tiszta JSON választ ad. A `utils.js` kizárja a `login-modal`-t az ablakon kívüli kattintásos bezárásból, a kijelentkezéskor pedig a vezérlőpult elemei rejtve maradnak a sikeres bejelentkezésig. A cookie törlése explicit `path: '/'` attribútumot kapott.
+
+* **Kettőzött KRÉTA érdemjegy kiírásának elhárítása a tanulói képernyőn:**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - **Hiba:** A dolgozat befejezésekor a tanuló záróképernyőjén az érdemjegy duplán jelent meg, például: `Jó (4) (4)`.
+  - **Javítás:** A szerveroldali `data.gradeText` változó már tartalmazza a zárójeles jegyet (`Jó (4)`), így a mögé fűzött extra numerikus jegy elhagyásra került.
+
+---
+
 ## [1.1.0] – 2026-11-07
 
 ### Tantermi hálózati stabilizáció, kliensoldali hibajavítások és UX-bővítések

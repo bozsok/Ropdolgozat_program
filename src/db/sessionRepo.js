@@ -35,6 +35,43 @@ function getActiveSessions() {
 }
 
 /**
+ * Összes dolgozat (aktív és lezárt archívum) listázása az Eredmények (Reports) fülhöz
+ */
+function getAllSessions() {
+  const stmt = db.prepare(`
+    SELECT 
+      s.id,
+      s.subject_id,
+      sub.name AS subject_name,
+      s.grade_level,
+      s.class_name,
+      s.quiz_id,
+      q.title AS quiz_title,
+      s.mode,
+      s.status,
+      s.time_limit_min,
+      s.started_at,
+      s.ended_at,
+      COUNT(DISTINCT p.id) AS participant_count,
+      COUNT(DISTINCT a.id) AS total_answers_count,
+      ROUND(AVG(p_points.user_total), 1) AS avg_points
+    FROM sessions s
+    JOIN subjects sub ON sub.id = s.subject_id
+    JOIN quizzes q ON q.id = s.quiz_id
+    LEFT JOIN participants p ON p.session_id = s.id
+    LEFT JOIN answers a ON a.session_id = s.id
+    LEFT JOIN (
+      SELECT participant_id, SUM(points_earned) AS user_total
+      FROM answers
+      GROUP BY participant_id
+    ) p_points ON p_points.participant_id = p.id
+    GROUP BY s.id
+    ORDER BY s.started_at DESC
+  `);
+  return stmt.all();
+}
+
+/**
  * Egy adott tantárgy-évfolyam csatorna aktív dolgozatának lekérése
  */
 function getActiveSessionByChannel(subjectId, gradeLevel) {
@@ -748,6 +785,7 @@ function getLiveMatrixData(sessionId) {
 
 module.exports = {
   getActiveSessions,
+  getAllSessions,
   getActiveSessionByChannel,
   getSessionById,
   startSession,

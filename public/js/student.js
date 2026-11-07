@@ -645,8 +645,8 @@
       if (data.totalPoints !== undefined && data.maxPoints !== undefined) {
         finalScore.textContent = `${data.totalPoints} / ${data.maxPoints} pont (${data.percentage || 0}%)`;
       }
-      if (data.gradeText && data.grade) {
-        finalGrade.textContent = `Érdemjegy: ${data.gradeText} (${data.grade})`;
+      if (data.gradeText) {
+        finalGrade.textContent = `Érdemjegy: ${data.gradeText}`;
       } else if (data.grade) {
         finalGrade.textContent = `Érdemjegy: ${data.grade}`;
       }

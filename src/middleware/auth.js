@@ -49,7 +49,13 @@ function requireAdminAuth(req, res, next) {
   }
 
   // Ha API hívás
-  if (req.path.startsWith('/api/') || req.xhr || req.headers.accept?.includes('application/json')) {
+  const isApi = (req.originalUrl && req.originalUrl.startsWith('/api/')) || 
+                (req.baseUrl && req.baseUrl.startsWith('/api/')) || 
+                (req.path && req.path.startsWith('/api/')) || 
+                req.xhr || 
+                req.headers.accept?.includes('application/json');
+
+  if (isApi) {
     return res.status(401).json({
       success: false,
       message: 'A művelethez tanári bejelentkezés szükséges!'
@@ -72,6 +78,7 @@ function loginAdmin(res, pin) {
   res.cookie(config.cookieName, token, {
     httpOnly: true,
     sameSite: 'lax',
+    path: '/',
     maxAge: 24 * 60 * 60 * 1000 // 24 óra
   });
   return true;
@@ -81,7 +88,11 @@ function loginAdmin(res, pin) {
  * Tanári kijelentkezés
  */
 function logoutAdmin(res) {
-  res.clearCookie(config.cookieName);
+  res.clearCookie(config.cookieName, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax'
+  });
 }
 
 module.exports = {
