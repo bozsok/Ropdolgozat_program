@@ -3,10 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Röpdolgozat – Diák Felület</title>
+  <title>Röpdolgozat program</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
+
+  <!-- Bejelentkezési képernyő (Tanári belépéshez) -->
+  <div id="login-modal" class="modal-backdrop">
+    <div class="modal-window">
+      <div class="card-header">
+        <h2 class="card-title">🔐 Tanári Bejelentkezés</h2>
+        <p class="card-subtitle">Kérlek, add meg a tanári jelszót a vezérlőpult eléréséhez!</p>
+      </div>
+      <form id="form-teacher-login" onsubmit="return false;">
+        <div class="form-group">
+          <label class="form-label" for="input-pin">Tanári jelszó:</label>
+          <input type="password" id="input-pin" class="form-control" placeholder="Jelszó..." autocomplete="current-password">
+        </div>
+        <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+          <button type="button" id="btn-login-cancel" class="btn btn-secondary">Mégse</button>
+          <button type="submit" id="btn-login-submit" class="btn btn-primary">Bejelentkezés</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <!-- Fejléc -->
   <header class="app-header">
@@ -16,7 +36,7 @@
         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
       </svg>
       <div>
-        <h1 class="brand-title">Röpdolgozat</h1>
+        <h1 class="brand-title">Röpdolgozat program</h1>
       </div>
     </div>
 
@@ -27,60 +47,67 @@
       <div id="timer-badge" class="timer-badge" style="display: none;">
         ⏱️ <span id="timer-text">--:--</span>
       </div>
+      <button id="btn-open-login" class="btn btn-secondary" title="Tanári bejelentkezés">
+        🔐 Tanári belépés
+      </button>
     </div>
   </header>
 
   <!-- Fő Tartalom -->
   <main class="main-container">
 
-    <!-- 1. LÉPÉS: Belépés (3 Kattintás, 0 Gépelés) -->
-    <div id="login-container" class="card">
-      <div class="card-header">
+    <!-- 1. LÉPÉS: Belépés (3 Kompakt Lenyíló Lista, 0 Gépelés) -->
+    <div id="login-container" class="card" style="max-width: 520px; margin: 0 auto;">
+      <div class="card-header" style="text-align: center; margin-bottom: 24px;">
         <h2 class="card-title">Csatlakozás az órai dolgozathoz</h2>
         <p class="card-subtitle">Válaszd ki a tantárgyat, az osztályodat, majd a nevedet a listából!</p>
       </div>
 
       <!-- 1.1 Tantárgy kiválasztása -->
-      <div id="step-subject" class="form-group">
-        <label class="form-label">1. Tantárgy kiválasztása:</label>
-        <div id="subject-list" class="channel-selector">
-          <!-- Dinamikusan töltődik be -->
-        </div>
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label class="form-label" for="select-subject" style="font-weight: 600;">1. Tantárgy:</label>
+        <select id="select-subject" class="form-control" style="font-size: 1.05rem; padding: 10px 14px;">
+          <!-- Dinamikusan töltődik be, alapértelmezett a Digitális kultúra -->
+        </select>
       </div>
 
       <!-- 1.2 Osztály kiválasztása -->
-      <div id="step-class" class="form-group" style="display: none; margin-top: 24px;">
-        <label class="form-label">2. Osztály kiválasztása:</label>
-        <div id="class-list" class="channel-selector">
-          <!-- Dinamikusan töltődik be -->
-        </div>
-      </div>
-
-      <!-- Dolgozat státusz infó üzenet -->
-      <div id="session-info-box" style="display: none; margin-top: 20px;" class="card">
-        <div id="session-info-content"></div>
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label class="form-label" for="select-class" style="font-weight: 600;">2. Osztály:</label>
+        <select id="select-class" class="form-control" style="font-size: 1.05rem; padding: 10px 14px;">
+          <!-- 3.a - 7.c opciók, alapértelmezett a 3.a -->
+        </select>
       </div>
 
       <!-- 1.3 Névválasztó (Hivatalos osztálynévsor) -->
-      <div id="step-student" class="form-group" style="display: none; margin-top: 24px;">
-        <label class="form-label">3. Kattints a saját nevedre:</label>
-        <div id="student-list" class="channel-selector">
-          <!-- Dinamikusan töltődik be -->
-        </div>
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label class="form-label" for="select-student" style="font-weight: 600;">3. Tanuló neve:</label>
+        <select id="select-student" class="form-control" style="font-size: 1.05rem; padding: 10px 14px;" disabled>
+          <option value="">-- Válassz a névsorból --</option>
+        </select>
+      </div>
+
+      <!-- Dolgozat státusz infó üzenet -->
+      <div id="session-info-box" style="display: none; margin-bottom: 20px;">
+        <div id="session-info-content"></div>
       </div>
 
       <!-- 1.4 Space Race színválasztó (ha a session módban van) -->
-      <div id="step-team" class="form-group" style="display: none; margin-top: 24px;">
-        <label class="form-label">4. Válassz csapatszínt az űrhajós versenyhez:</label>
+      <div id="step-team" class="form-group" style="display: none; margin-bottom: 20px;">
+        <label class="form-label" style="font-weight: 600;">4. Válassz csapatszínt az űrhajós versenyhez:</label>
         <div class="color-picker-grid">
           <div class="color-card color-blue selected" data-color="Kék">🚀 Kék</div>
           <div class="color-card color-red" data-color="Piros">🚀 Piros</div>
           <div class="color-card color-green" data-color="Zöld">🚀 Zöld</div>
           <div class="color-card color-yellow" data-color="Sárga">🚀 Sárga</div>
         </div>
-        <div style="margin-top: 20px;">
-          <button id="btn-start-race" class="btn btn-primary btn-block btn-lg">Indulás a tesztre! 🚀</button>
-        </div>
+      </div>
+
+      <!-- Csatlakozás gomb -->
+      <div style="margin-top: 12px;">
+        <button id="btn-join-session" class="btn btn-primary btn-block btn-lg" disabled>
+          🚀 Csatlakozás a dolgozathoz
+        </button>
       </div>
     </div>
 

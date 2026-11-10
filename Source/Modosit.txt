@@ -1,0 +1,88 @@
+Side Question: Szóval, szeretnék változásokat. Vizsgáld meg, hogy a jelenlegi rendszerbe hogyan illeszthetők az alábbi változások:
+- egyetlen közös felület lenne mind a tanárnak mind a diáknak
+- a közös felületen felül a fejlécben lenne egy 'Bejelentkezés' gomb, erre kattintva megjelenik a jelszó beviteli mező és azt kitöltve helyesen eljutunk az admin felületre
+- a közös felületen középen van a tantárgy választó lenyíló lista, alapértelmezetten a 'Digitális kultúra' az aktív
+- a közös felületen a tanatárgy választó  alatt van az osztály választó, amely szintén lenyíló lista lenne, alapértelmezetten a 3.a osztály az aktív. Az osztályok 3 a,b,c - 7 a,b,c.
+- a közös felületen az osztály választó alatt lenne a névkiválasztó lenyaló lista, alapértelmezetten addig inaktív, amíg osztály nem választunk. Kiválasztva az osztályt betöltésre kerülne az adott osztály névsora, amelyből a tanuló kiválaszthatja  a sajátját. Táves választás esetén a meglévő biztonsági, tanár általi feloldás marad.
+
+A felvázolt változtatások **tökéletesen, logikusan és zökkenőmentesen illeszthetők** a jelenlegi architektúrába. Sőt, ez a felépítés kifejezetten **egyszerűbbé, tisztábbá és még felhasználóbarátabbá** teszi a rendszert mind a diákok, mind a pedagógusok számára.
+
+Az alábbiakban pontról pontra bemutatom, hogyan valósítható meg ez a koncepció a meglévő kódbázisra építve:
+
+---
+
+### 1. Közös felület és fejlécbeli „Bejelentkezés” gomb
+
+* **Jelenlegi állapot:**  
+  A diák a kezdőlapra (`/`), a tanár pedig közvetlenül a különálló tanári oldalra ([`/admin`](file:///d:/dev/Röpdolgozat%20program/public/admin.html)) navigált.
+* **Az új illeszkedés:**
+  - A szerver fő címe (`http://<szerver_ip>:3000/`) lesz az **egyetlen közös kapu**. Sem a diáknak, sem a tanárnak nem kell többé külön alútvonalakat megjegyeznie.
+  - A közös fejléc jobb felső sarkába elhelyezünk egy diszkrét **„🔐 Bejelentkezés”** (vagy „Tanári belépés”) gombot.
+  - Erre kattintva felugrik a már meglévő, bevált jelszókérő modal ablak.
+  - Helyes jelszó megadásakor a rendszer beállítja a meglévő hitelesítési sütit (`teacher_pin`), és a böngésző automatikusan átvált az adminisztrációs vezérlőpultra ([`/admin`](file:///d:/dev/Röpdolgozat%20program/public/admin.html)). Kijelentkezéskor pedig a rendszer automatikusan visszairányítja a tanárt erre a közös főoldalra.
+
+---
+
+### 2. A 3 egymás alatti lenyíló lista (`<select>`) felépítése
+
+A jelenlegi kártyás, sok helyet foglaló gombok helyett egyetlen kompakt, áttekinthető és görgetésmentes kártyára kerül a 3 vezérlőelem:
+
+```text
+┌────────────────────────────────────────────────────────┐
+│  Csatlakozás az órai dolgozathoz                       │
+├────────────────────────────────────────────────────────┤
+│  1. Tantárgy:                                          │
+│  [ Digitális kultúra                                ▼] │
+│                                                        │
+│  2. Osztály:                                           │
+│  [ 3.a                                              ▼] │
+│                                                        │
+│  3. Tanuló neve:                                       │
+│  [ -- Válassz a névsorból --                         ▼] │
+│                                                        │
+│  [ 🚀 Csatlakozás a dolgozathoz                      ] │
+└────────────────────────────────────────────────────────┘
+```
+
+#### A) Tantárgyválasztó lenyíló lista
+* Az adatbázisból automatikusan lekéri a tantárgyakat ([`GET /api/subjects`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)).
+* Alapértelmezetten a **„Digitális kultúra”** lesz kiválasztva (mivel az adatbázisban `is_default: 1`).
+
+#### B) Osztályválasztó lenyíló lista (3.a–7.c)
+* A lista tartalmazza az iskola összes standard osztályát:  
+  **3.a, 3.b, 3.c, 4.a, 4.b, 4.c, 5.a, 5.b, 5.c, 6.a, 6.b, 6.c, 7.a, 7.b, 7.c** (15 osztály).
+* Alapértelmezett értéke a **3.a**.
+* Az osztály kiválasztásakor a program az első karakterből azonnal beazonosítja az **évfolyamot** (pl. `3.a` ➔ 3. évfolyam; `6.b` ➔ 6. évfolyam), és a háttérben azonnal ellenőrzi az ahhoz éppen futó aktív dolgozatot.
+
+#### C) Névválasztó lenyíló lista
+* Alapértelmezésben – amíg nincs érvényes osztály kiválasztva – inaktív (`disabled`).
+* Mivel a `3.a` az alapértelmezett, az oldal betöltésekor azonnal lekéri a `3.a` hivatalos névsorát az adatbázisból ([`GET /api/classes/3.a/students`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)), és feloldja a listát.
+* Ha a diák átvált egy másik osztályra (pl. `6.a`), a névkiválasztó lenyíló lista tartalma automatikusan frissül az adott osztály tanulóira.
+
+---
+
+### 3. A meglévő védelmi és vizsgarendszerek megmaradása
+
+A változtatás a háttérbeli üzleti logikát és a csalásbiztos működést nem gyengíti, azok 100%-ban megmaradnak:
+
+1. **Téves névválasztás tanári törlése ([`resetParticipant`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)):**  
+   Ha a diák véletlenül a padtársa nevét választja ki a listából, a tanár a vezérlőpulton a meglévő **`🗑️ Név törlése`** gombbal egyetlen kattintással felszabadítja a nevet és törli a téves rekordot.
+2. **Gépváltás adatvesztés nélkül ([`authorizeSeatChange`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)):**  
+   Ha elromlik egy tanulói gép, a tanári engedélyezés és a célgépes védelem változatlanul garantálja, hogy a diák az új gépéről egyetlen pont elvesztése nélkül folytathassa a dolgozatot.
+3. **Session Recovery (Munkamenet-helyreállítás):**  
+   Ha a diák véletlenül frissíti a böngészőt (F5), a kriptográfiai munkamenet-token alapján a rendszer nem jeleníti meg újra a lenyíló listákat, hanem azonnal visszaugrik az aktuális kérdéshez.
+4. **Fókuszvesztés-figyelés és Space Race:**  
+   A puskázásgátló ablakváltás-figyelő és a csapatverseny színválasztója változatlanul bekapcsolódik a névválasztást követően.
+
+---
+
+### Összegzés és előnyök
+
+| Szempont | Jelenlegi kártyás megoldás | Új, egységes lenyíló listás megoldás |
+| :--- | :--- | :--- |
+| **Elérési cím** | Külön diák (`/`) és külön tanári (`/admin`) URL | **Egyetlen közös cím** (`/`), a fejlécben tanári bejelentkezéssel |
+| **Képernyőfelület** | Sok kártya, görgetést igénylő felület | **1 kompakt doboz**, 100% görgetésmentes megjelenés |
+| **Kezelés gyorsasága** | Több lépcsős kártyakeresés | **3 gyors lenyíló mező**, alapértelmezetten beállított értékekkel |
+| **Biztonság és integritás** | Magas szintű (token, lock, recovery) | **Maradéktalanul megmarad**, semmi nem vész el |
+
+Amennyiben jóváhagyod ezt a koncepciót, a megvalósítás izolált, tiszta lépésekben azonnal elvégezhető a frontend és a kapcsolódó osztályadatok szintjén.

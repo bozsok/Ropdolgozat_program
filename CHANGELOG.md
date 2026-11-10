@@ -4,6 +4,42 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.3.0] – 2026-11-10
+
+### Egyetlen közös belépési kapu, kompakt 3 lenyíló listás diákfelület és standard osztálynévsorok
+
+A tantermi használhatóság egyszerűsítése érdekében bevezetett egységes belépési felület, a görgetésmentes 3 lenyíló listás csatlakozási folyamat és az intézményi standard osztályok integrációjának összefoglalása.
+
+#### Hozzáadva (Added)
+* **Egyetlen közös felület a tanárnak és a diáknak (Single Entry Point):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A szerver fő címe (`http://<szerver_ip>:3000/`) vált a teljes tanterem egyetlen közös kapujává; a pedagógusnak és a diákoknak többé nem kell külön alútvonalakat megjegyezniük.
+  - A közös fejléc jobb oldalára diszkrét **`🔐 Tanári belépés`** gomb és beépített jelszókérő modal ablak került.
+  - Sikeres tanári bejelentkezést követően a rendszer automatikusan átirányít az adminisztrációs vezérlőpultra ([`/admin`](file:///d:/dev/Röpdolgozat%20program/public/admin.html)).
+
+* **Kompakt, görgetésmentes 3 lenyíló listás (`<select>`) diák csatlakozási kártya:**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A korábbi, sok helyet foglaló kártyás felület helyett egyetlen áttekinthető kártyára került a három kiválasztóelem:
+    1. **Tantárgyválasztó lenyíló lista (`select-subject`):** az adatbázis tantárgyaival feltöltve, alapértelmezetten a **„Digitális kultúra”** aktív.
+    2. **Osztályválasztó lenyíló lista (`select-class`):** az iskola mind a 15 standard osztályát tartalmazza (**3.a, 3.b, 3.c, 4.a, 4.b, 4.c, 5.a, 5.b, 5.c, 6.a, 6.b, 6.c, 7.a, 7.b, 7.c**); alapértelmezetten a **„3.a”** aktív.
+    3. **Névválasztó lenyíló lista (`select-student`):** az alapértelmezett `3.a` hivatalos névsorát az oldal betöltésekor automatikusan lekéri és felkínálja, osztályváltáskor pedig azonnal frissíti a tanulók listáját.
+  - A kiválasztás után aktiválódó **`🚀 Csatlakozás a dolgozathoz`** (`btn-join-session`) gomb biztosítja a teszt elindítását, Space Race módban a csapatszín választásával együtt.
+
+* **Minta osztálynévsor a `3.a` osztályhoz:**
+  - **Fájl:** [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js)
+  - A `3.a` alapértelmezett osztályhoz 15 tanuló került rögzítésre az adatbázisban a meglévő `6.a` és `7.a` adatok érintetlenül hagyása mellett.
+
+* **Automatikus indítás rögzítése a telepítési útmutatóban:**
+  - **Fájl:** [`telepítés.md`](file:///d:/dev/Röpdolgozat%20program/telepítés.md)
+  - Részletes leírás készült a **2.6. Lépés: Automatikus indítás beállítása a szerver újraindulásakor (Közös Indítópult)** pontban a parancsikon használatának kötelező szabályáról és a gyors másolási eljárásról.
+
+#### Módosítva (Changed)
+* **Kijelentkezési átirányítás:**
+  - **Fájl:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Az adminisztrációs felületről történő kijelentkezéskor a rendszer a tanárt automatikusan visszavezeti a közös főoldalra (`window.location.href = '/'`).
+
+---
+
 ## [1.2.0] – 2026-11-07
 
 ### Korábbi dolgozatok archívuma (Reports), nyomtatható egyéni A4 PDF, hitelesítési és felületi finomhangolások

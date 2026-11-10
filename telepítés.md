@@ -128,6 +128,26 @@ Keresd meg az aktív helyi hálózati kártyát (például *Ethernet adapter*), 
 
 ---
 
+### 2.6. Lépés: Automatikus indítás beállítása a szerver újraindulásakor (Közös Indítópult)
+Annak érdekében, hogy a szervergép újraindulása vagy áramszünet után a dolgozatíró rendszer automatikusan és emberi beavatkozás nélkül elinduljon:
+
+1. Nyomd le a billentyűzeten a **Win + R** billentyűkombinációt (Futtatás ablak).
+2. Másold be és nyomj Entert:
+   ```cmd
+   shell:common startup
+   ```
+   *(Ez megnyitja a Windows közös, minden felhasználóra érvényes Indítópult mappáját: `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp`).*
+3. Hozz létre ebben a mappában egy parancsikont a `start_server.bat` fájlhoz:
+   - **1. módszer (Kézi parancsikon):**  
+     Kattints jobb gombbal az üres területre ➔ *Új* ➔ *Parancsikon* ➔ Célhely: 👉 **`C:\Ropdolgozat\start_server.bat`** ➔ Név: **„Röpdolgozat Szerver Indítása”**.
+   - **2. módszer (A leggyorsabb trükk):**  
+     A `C:\Ropdolgozat\` mappában kattints jobb gombbal a `start_server.bat` fájlra ➔ **Másolás** (`Ctrl + C`), majd az Indítópult mappában kattints jobb gombbal az üres területre ➔ **„Parancsikon beillesztése”**.
+   > [!WARNING]
+   > **Fontos szabály:** Kifejezetten TILOS magát a `start_server.bat` fájlt átmásolni az Indítópultba! Csak a parancsikont szabad idehelyezni, hogy a szerver a saját alkalmazásmappájában (`C:\Ropdolgozat\`) induljon el az adatbázissal és a modulokkal együtt.
+4. Ezzel a beállítással a Windows Server minden bekapcsolásakor vagy újraindulásakor a webszerver automatikusan elindul a háttérben, így a diákok azonnal csatlakozni tudnak.
+
+---
+
 ## 3. A Rendszer Indítása és Ellenőrzése a Szerveren
 
 1. Nyisd meg a `C:\Ropdolgozat\` mappát.

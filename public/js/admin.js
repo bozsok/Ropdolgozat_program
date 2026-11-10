@@ -173,8 +173,7 @@
     } catch {
       // ignore
     }
-    openLoginModal();
-    window.location.reload();
+    window.location.href = '/';
   });
 
   /**

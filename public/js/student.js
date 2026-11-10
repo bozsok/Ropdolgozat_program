@@ -28,17 +28,33 @@
   const timerBadge = document.getElementById('timer-badge');
   const timerText = document.getElementById('timer-text');
 
+  // Tanári bejelentkezési elemek
+  const btnOpenLogin = document.getElementById('btn-open-login');
+  const loginModal = document.getElementById('login-modal');
+  const inputPin = document.getElementById('input-pin');
+  const btnLoginSubmit = document.getElementById('btn-login-submit');
+  const btnLoginCancel = document.getElementById('btn-login-cancel');
+  const formTeacherLogin = document.getElementById('form-teacher-login');
+
+  // Belépési lenyíló listák és gombok (3 Lenyíló lista, 0 Gépelés)
   const loginContainer = document.getElementById('login-container');
-  const stepSubject = document.getElementById('step-subject');
-  const subjectList = document.getElementById('subject-list');
-  const stepClass = document.getElementById('step-class');
-  const classList = document.getElementById('class-list');
+  const selectSubject = document.getElementById('select-subject');
+  const selectClass = document.getElementById('select-class');
+  const selectStudent = document.getElementById('select-student');
   const sessionInfoBox = document.getElementById('session-info-box');
   const sessionInfoContent = document.getElementById('session-info-content');
-  const stepStudent = document.getElementById('step-student');
-  const studentList = document.getElementById('student-list');
   const stepTeam = document.getElementById('step-team');
-  const btnStartRace = document.getElementById('btn-start-race');
+  const btnJoinSession = document.getElementById('btn-join-session');
+
+  // Tanulók gyorsítótára az osztályhoz (id -> student object)
+  const studentsMap = new Map();
+  const DEFAULT_CLASSES = [
+    '3.a', '3.b', '3.c',
+    '4.a', '4.b', '4.c',
+    '5.a', '5.b', '5.c',
+    '6.a', '6.b', '6.c',
+    '7.a', '7.b', '7.c'
+  ];
 
   const quizContainer = document.getElementById('quiz-container');
   const quizTitle = document.getElementById('quiz-title');
@@ -92,9 +108,14 @@
       if (restored) return;
     }
 
-    // 5. Tantárgyak és osztályok betöltése
+    // 5. Tantárgyak, osztályok és kezdő névsor betöltése
     await loadSubjects();
     await loadClasses();
+    await checkActiveSession();
+    await loadStudentsForClass(selectedClass);
+
+    // 6. Eseménykezelők regisztrálása a közös felület elemeihez
+    setupCommonUIListeners();
   }
 
   /**
@@ -113,69 +134,181 @@
       alert('A tanár feloldotta a munkamenetedet. Az oldal újratöltődik.');
       window.location.reload();
     });
+
+    // Ha a tanár elindít egy új dolgozatot, azonnal reagál a diák felület
+    socket.on('badges:updated', () => {
+      if (!sessionToken && selectedSubjectId && selectedClass) {
+        checkActiveSession();
+      }
+    });
   }
 
   /**
-   * Tantárgyak betöltése
+   * Közös felület eseménykezelői (Tanári belépés és lenyíló listák)
+   */
+  function setupCommonUIListeners() {
+    // Tanári belépés modal kezelése
+    if (btnOpenLogin) {
+      btnOpenLogin.addEventListener('click', () => {
+        openModal('login-modal');
+        if (inputPin) {
+          inputPin.value = '';
+          setTimeout(() => inputPin.focus(), 100);
+        }
+      });
+    }
+
+    if (btnLoginCancel) {
+      btnLoginCancel.addEventListener('click', () => {
+        closeModal('login-modal');
+      });
+    }
+
+    if (formTeacherLogin) {
+      formTeacherLogin.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const pin = inputPin.value.trim();
+        if (!pin) {
+          inputPin.focus();
+          return;
+        }
+
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pin })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            window.location.href = '/admin';
+          } else {
+            alert(data.message || 'Helytelen tanári jelszó!');
+            inputPin.value = '';
+            inputPin.focus();
+          }
+        } catch (err) {
+          alert('Hálózati hiba a bejelentkezés során!');
+        }
+      });
+    }
+
+    // Tantárgyválasztó lenyíló lista
+    if (selectSubject) {
+      selectSubject.addEventListener('change', () => {
+        selectedSubjectId = parseInt(selectSubject.value, 10);
+        checkActiveSession();
+      });
+    }
+
+    // Osztályválasztó lenyíló lista
+    if (selectClass) {
+      selectClass.addEventListener('change', async () => {
+        selectedClass = selectClass.value;
+        await checkActiveSession();
+        await loadStudentsForClass(selectedClass);
+      });
+    }
+
+    // Névválasztó lenyíló lista
+    if (selectStudent) {
+      selectStudent.addEventListener('change', () => {
+        const stuId = selectStudent.value;
+        if (stuId && studentsMap.has(stuId)) {
+          selectedStudent = studentsMap.get(stuId);
+          if (activeSession) {
+            if (activeSession.mode === 'SPACE_RACE') {
+              if (stepTeam) stepTeam.style.display = 'block';
+            } else {
+              if (stepTeam) stepTeam.style.display = 'none';
+            }
+            if (btnJoinSession) btnJoinSession.disabled = false;
+          } else {
+            if (btnJoinSession) btnJoinSession.disabled = true;
+          }
+        } else {
+          selectedStudent = null;
+          if (btnJoinSession) btnJoinSession.disabled = true;
+          if (stepTeam) stepTeam.style.display = 'none';
+        }
+      });
+    }
+
+    // Csatlakozás gomb
+    if (btnJoinSession) {
+      btnJoinSession.addEventListener('click', () => {
+        joinQuiz();
+      });
+    }
+  }
+
+  /**
+   * Tantárgyak betöltése a lenyíló listába
    */
   async function loadSubjects() {
+    if (!selectSubject) return;
     try {
       const res = await fetch('/api/subjects');
       const subjects = await res.json();
-      subjectList.innerHTML = '';
+      selectSubject.innerHTML = '';
 
       subjects.forEach((subj) => {
-        const card = document.createElement('div');
-        card.className = `select-card ${subj.is_default ? 'selected' : ''}`;
-        card.textContent = subj.name;
-        card.dataset.id = subj.id;
+        const opt = document.createElement('option');
+        opt.value = subj.id;
+        opt.textContent = subj.name;
 
         if (subj.is_default) {
+          opt.selected = true;
           selectedSubjectId = subj.id;
         }
 
-        card.addEventListener('click', () => {
-          document.querySelectorAll('#subject-list .select-card').forEach(c => c.classList.remove('selected'));
-          card.classList.add('selected');
-          selectedSubjectId = subj.id;
-          if (selectedClass) {
-            checkActiveSession();
-          }
-        });
-
-        subjectList.appendChild(card);
+        selectSubject.appendChild(opt);
       });
 
-      stepClass.style.display = 'block';
+      if (!selectedSubjectId && subjects.length > 0) {
+        selectedSubjectId = subjects[0].id;
+      }
     } catch (err) {
       console.error('Hiba a tantárgyak betöltésekor:', err);
     }
   }
 
   /**
-   * Osztályok betöltése
+   * Osztályok betöltése a lenyíló listába (3.a–7.c alapértelmezetten)
    */
   async function loadClasses() {
+    if (!selectClass) return;
     try {
-      const res = await fetch('/api/classes');
-      const classes = await res.json();
-      classList.innerHTML = '';
+      let dbClasses = [];
+      try {
+        const res = await fetch('/api/classes');
+        if (res.ok) {
+          dbClasses = await res.json();
+        }
+      } catch {
+        // fallback az alapértelmezett standard osztályokra
+      }
 
-      classes.forEach((cls) => {
-        const card = document.createElement('div');
-        card.className = 'select-card';
-        card.textContent = cls;
-        card.dataset.class = cls;
+      // 15 standard osztály (3.a–7.c) + bármilyen adatbázisban felvett egyéb osztály
+      const allClasses = Array.from(new Set([...DEFAULT_CLASSES, ...(Array.isArray(dbClasses) ? dbClasses : [])]));
+      selectClass.innerHTML = '';
 
-        card.addEventListener('click', () => {
-          document.querySelectorAll('#class-list .select-card').forEach(c => c.classList.remove('selected'));
-          card.classList.add('selected');
+      allClasses.forEach((cls) => {
+        const opt = document.createElement('option');
+        opt.value = cls;
+        opt.textContent = `${cls} osztály`;
+
+        if (cls === '3.a') {
+          opt.selected = true;
           selectedClass = cls;
-          checkActiveSession();
-        });
+        }
 
-        classList.appendChild(card);
+        selectClass.appendChild(opt);
       });
+
+      if (!selectedClass && allClasses.length > 0) {
+        selectedClass = allClasses[0];
+      }
     } catch (err) {
       console.error('Hiba az osztályok betöltésekor:', err);
     }
@@ -185,9 +318,9 @@
    * Aktív dolgozat ellenőrzése az adott tantárgyra és évfolyamra
    */
   async function checkActiveSession() {
-    if (!selectedSubjectId || !selectedClass) return;
+    if (!selectedSubjectId || !selectedClass || !sessionInfoBox) return;
 
-    // Évfolyam kinyerése az osztály nevéből (pl. "6.a" -> "6", "10.b" -> "10")
+    // Évfolyam kinyerése az osztály nevéből (pl. "3.a" -> "3", "6.b" -> "6")
     const match = selectedClass.match(/^(\d+)/);
     const gradeLevel = match ? match[1] : '';
 
@@ -203,26 +336,32 @@
       if (!activeSession) {
         sessionInfoBox.style.display = 'block';
         sessionInfoContent.innerHTML = `
-          <div style="color: var(--warning); font-weight: 600; text-align: center; padding: 12px;">
+          <div style="color: var(--warning); font-weight: 600; text-align: center; padding: 12px; background: rgba(245, 158, 11, 0.1); border-radius: 6px;">
             ⚠️ Jelenleg nincs aktív dolgozat ehhez az évfolyamhoz (${gradeLevel}. évfolyam).<br>
             Kérlek, várj türelemmel, amíg a tanár elindítja!
           </div>
         `;
-        stepStudent.style.display = 'none';
-        stepTeam.style.display = 'none';
+        if (stepTeam) stepTeam.style.display = 'none';
+        if (btnJoinSession) btnJoinSession.disabled = true;
         return;
       }
 
       // Van aktív dolgozat!
       sessionInfoBox.style.display = 'block';
       sessionInfoContent.innerHTML = `
-        <div style="color: var(--success); font-weight: 600; text-align: center; padding: 10px;">
+        <div style="color: var(--success); font-weight: 600; text-align: center; padding: 10px; background: rgba(34, 197, 94, 0.1); border-radius: 6px;">
           🟢 Aktív dolgozat elérhető: <strong>${escapeHtml(activeSession.quiz_title)}</strong>
         </div>
       `;
 
-      // Névsor betöltése az osztályhoz
-      await loadStudentsForClass(selectedClass);
+      if (selectedStudent) {
+        if (activeSession.mode === 'SPACE_RACE') {
+          if (stepTeam) stepTeam.style.display = 'block';
+        } else {
+          if (stepTeam) stepTeam.style.display = 'none';
+        }
+        if (btnJoinSession) btnJoinSession.disabled = false;
+      }
 
     } catch (err) {
       console.error('Hiba az aktív dolgozat ellenőrzésekor:', err);
@@ -230,46 +369,49 @@
   }
 
   /**
-   * Osztály névsorának betöltése
+   * Osztály hivatalos névsorának betöltése a lenyíló listába
    */
   async function loadStudentsForClass(className) {
+    if (!selectStudent) return;
+    selectStudent.disabled = true;
+    selectStudent.innerHTML = '<option value="">Névsor betöltése...</option>';
+    studentsMap.clear();
+    selectedStudent = null;
+    if (btnJoinSession) btnJoinSession.disabled = true;
+
     try {
       const res = await fetch(`/api/classes/${encodeURIComponent(className)}/students`);
       const students = await res.json();
-      studentList.innerHTML = '';
+      selectStudent.innerHTML = '';
 
-      if (students.length === 0) {
-        studentList.innerHTML = '<p style="color: var(--text-muted);">Ebben az osztályban még nincs feltöltött névsor.</p>';
-        stepStudent.style.display = 'block';
+      if (!Array.isArray(students) || students.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '-- Nincs tanuló rögzítve ebben az osztályban --';
+        selectStudent.appendChild(opt);
+        selectStudent.disabled = true;
         return;
       }
 
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = '-- Válassz a névsorból --';
+      selectStudent.appendChild(defaultOpt);
+
       students.forEach((stu) => {
-        const card = document.createElement('div');
-        card.className = 'select-card';
-        card.textContent = stu.student_name;
-
-        card.addEventListener('click', () => {
-          document.querySelectorAll('#student-list .select-card').forEach(c => c.classList.remove('selected'));
-          card.classList.add('selected');
-          selectedStudent = stu;
-
-          if (activeSession.mode === 'SPACE_RACE') {
-            stepTeam.style.display = 'block';
-            stepTeam.scrollIntoView({ behavior: 'smooth' });
-          } else {
-            joinQuiz();
-          }
-        });
-
-        studentList.appendChild(card);
+        studentsMap.set(String(stu.id), stu);
+        const opt = document.createElement('option');
+        opt.value = String(stu.id);
+        opt.textContent = stu.student_name;
+        selectStudent.appendChild(opt);
       });
 
-      stepStudent.style.display = 'block';
-      stepStudent.scrollIntoView({ behavior: 'smooth' });
+      selectStudent.disabled = false;
 
     } catch (err) {
       console.error('Hiba a diákok betöltésekor:', err);
+      selectStudent.innerHTML = '<option value="">Hiba a névsor betöltésekor</option>';
+      selectStudent.disabled = true;
     }
   }
 
@@ -280,10 +422,6 @@
       card.classList.add('selected');
       selectedTeamColor = card.dataset.color;
     });
-  });
-
-  btnStartRace.addEventListener('click', () => {
-    joinQuiz();
   });
 
   /**

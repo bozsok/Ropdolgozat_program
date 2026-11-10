@@ -149,6 +149,40 @@ function initializeDatabase() {
         });
       }
     }
+
+    // 3. Minta osztálynévsor (3.a osztály - alapértelmezett osztály a főoldalon)
+    const studentCount3a = db.prepare("SELECT COUNT(*) as count FROM students WHERE class_name = '3.a'").get().count;
+    if (studentCount3a === 0) {
+      const insertStudent = db.prepare(`
+        INSERT OR IGNORE INTO students (class_name, student_name)
+        VALUES (@class_name, @student_name)
+      `);
+
+      const sampleRoster3a = [
+        'Balogh Bence',
+        'Farkas Emma',
+        'Fehér Ádám',
+        'Gulyás Lili',
+        'Kiss Zsófia',
+        'Kovács Dániel',
+        'Lakatos Hanna',
+        'Molnár Olivér',
+        'Nagy Csilla',
+        'Németh Kristóf',
+        'Papp Jázmin',
+        'Szabó Máté',
+        'Takács Fanni',
+        'Tóth Nóra',
+        'Varga Gergő'
+      ];
+
+      for (const name of sampleRoster3a) {
+        insertStudent.run({
+          class_name: '3.a',
+          student_name: name
+        });
+      }
+    }
   });
 
   seedTransaction();
