@@ -1,0 +1,4 @@
+narancs: #fe8901
+narancs sötét: #c05d0a
+szürke: #a19f9f
+fekete: #353636

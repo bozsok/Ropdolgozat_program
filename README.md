@@ -1,4 +1,4 @@
-# Röpdolgozat program (v1.3.0)
+# Okoskodó – Röpdolgozat program (v1.4.0)
 
 > **100% Offline Helyi Hálózatos Iskolai Röpdolgozat Rendszer (Socrative-klón)**  
 > Kifejezetten általános iskolai 3–8. évfolyamos oktatási környezetre (Digitális kultúra, Technika és Fejlesztő foglalkozás tantárgyakhoz) tervezve.  
@@ -8,7 +8,7 @@
 
 ## 1. Rendszeráttekintés és Célkitűzés
 
-A **Röpdolgozat program** egy helyi hálózaton (LAN) futó, internetkapcsolatot egyáltalán nem igénylő tantermi értékelő alkalmazás. Célja a felhőalapú Socrative rendszer és a papíralapú röpdolgozatok teljes körű, modern kiváltása tantermi környezetben (1 db központi Windows Server 2022 kiszolgáló, 42 db Windows 10 kliensgép és párhuzamos tanári munkaállomások).
+A **Röpdolgozat program** egy helyi hálózaton (LAN) futó, internetkapcsolatot egyáltalán nem igénylő tantermi értékelő alkalmazás. Célja a felhőalapú Socrative rendszer és a papíralapú röpdolgozatok teljes körű, modern kiváltása tantermi környezetben (1 db központi Windows Server 2016 / 2019 / 2022 kiszolgáló, 42 db Windows 10 kliensgép és párhuzamos tanári munkaállomások).
 
 ### Főbb előnyök a tanteremben
 * **100% Offline működés:** Nincs külső internetfüggőség, nincsenek külső CDN-ek, az alkalmazás teljesen izolált helyi hálózaton működik.
@@ -42,7 +42,7 @@ A tanuló minden kérdés beküldésekor azonnal látja a minősítést: helyes 
 
 | Réteg | Alkalmazott technológia és sajátosságok |
 |---|---|
-| **Kiszolgáló (Backend)** | Node.js (v20+ LTS) + Express + Socket.io + Cookie-Parser + Multer + ExcelJS + Archiver |
+| **Kiszolgáló (Backend)** | Node.js (v22+ LTS) + Express + Socket.io + Cookie-Parser + Multer + ExcelJS + Archiver |
 | **Felhasználói felület (Frontend)** | Zero-Build Vanilla HTML5, modern CSS3 (Flexbox/Grid, szigorúan `!important` nélkül), Vanilla ES6 JavaScript, beágyazott inline SVG ikonok |
 | **Adatbázis** | SQLite3 (`better-sqlite3`) szigorúan **WAL (Write-Ahead Logging)** módban és bekapcsolt idegen kulcsokkal (`foreign_keys = ON`) |
 | **Alapértelmezett port** | `3000` (`http://localhost:3000` vagy `http://szerver_ip:3000`) |
@@ -130,14 +130,14 @@ A dolgozat befejezésekor (vagy az archívumból utólag bármikor) 4 professzio
 ## 7. Projekt Könyvtárstruktúra
 
 ```text
-├── CHANGELOG.md              # Részletes verziótörténet és változási napló (v1.3.0)
+├── CHANGELOG.md              # Részletes verziótörténet és változási napló (v1.4.0)
 ├── config.js                 # Központi konfiguráció (port: 3000, PIN, elérési utak, ponthatárok)
 ├── DATABASE_SCHEMA.sql       # Teljes relációs adatbázis séma 7 táblával és 22 triggerrel
-├── package.json              # Node.js projektleíró és függőségek
+├── package.json              # Node.js projektleíró és környezeti követelmények (Node >= 22.11.0)
 ├── project-context.md        # Rendszermegállapodás és működési szabályzat
 ├── server.js                 # Express szerver és Socket.io belépési pont
-├── start_server.bat          # Windows indítószkript ellenőrzéssel és UTF-8 támogatással
-├── telepítés.md              # Részletes Windows Server 2022 üzembe helyezési útmutató
+├── start_server.bat          # Intelligens Windows indítószkript önellenőrző diagnosztikával
+├── telepítés.md              # Zero-Install Best Practice üzembe helyezési útmutató (Windows Server 2016+)
 ├── data/                     # SQLite adatbázis és feltöltött képek (gitignore védi)
 │   └── uploads/              # Feltöltött médiafájlok (.gitkeep)
 ├── public/                   # 100% Offline kliensoldali fájlok (Zero-Build)

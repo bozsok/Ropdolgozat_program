@@ -107,6 +107,28 @@ h1, h2, h3, h4, h5 {
   color: var(--primary);
 }
 
+.brand-logo-img {
+  height: 46px;
+  width: auto;
+  max-width: 240px;
+  display: block;
+  object-fit: contain;
+}
+
+.brand-divider {
+  width: 1px;
+  height: 28px;
+  background-color: var(--border-color);
+  margin: 0 4px;
+}
+
+.brand-subtitle {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
 .brand-title {
   font-size: 1.25rem;
   font-weight: 700;

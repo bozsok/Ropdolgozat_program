@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nyomtatható Értékelőlapok (A4 PDF)</title>
+  <title>Okoskodó – Nyomtatható Értékelőlapok (A4 PDF)</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/print.css">
 </head>
@@ -80,10 +81,13 @@
           page.className = 'print-page';
 
           page.innerHTML = `
-            <div class="print-header">
-              <div>
-                <div class="print-title">${escapeHtml(session.quiz_title)}</div>
-                <div class="print-meta">Tantárgy: ${escapeHtml(session.subject_name)} | Évfolyam: ${escapeHtml(session.grade_level)}. évfolyam</div>
+            <div class="print-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <img src="/img/logo.png" alt="Okoskodó" style="height: 38px; width: auto; object-fit: contain;">
+                <div>
+                  <div class="print-title">${escapeHtml(session.quiz_title)}</div>
+                  <div class="print-meta">Tantárgy: ${escapeHtml(session.subject_name)} | Évfolyam: ${escapeHtml(session.grade_level)}. évfolyam</div>
+                </div>
               </div>
               <div style="text-align: right;">
                 <div style="font-size: 14pt; font-weight: bold;">${escapeHtml(p.student_name)}</div>

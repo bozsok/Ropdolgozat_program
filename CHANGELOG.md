@@ -4,6 +4,44 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.4.0] – 2026-11-10
+
+### Vizuális arculatváltás (Okoskodó logó és figura favicon), szigorított környezeti követelmények és Zero-Install szerverüzembehelyezés (Windows Server 2016+)
+
+A tantermi és szerveroldali megbízhatóság maximalizálása érdekében bevezetett új intézményi arculat, az intelligens önellenőrző szerverindítás és a zárt hálózatos Zero-Install telepítési eljárás összefoglalása.
+
+#### Hozzáadva (Added)
+* **Új vizuális arculat és grafikai elemek integrációja:**
+  - **Fájlok:** [`public/img/logo.png`](file:///d:/dev/Röpdolgozat%20program/public/img/logo.png), [`public/img/favicon.png`](file:///d:/dev/Röpdolgozat%20program/public/img/favicon.png), [`public/favicon.ico`](file:///d:/dev/Röpdolgozat%20program/public/favicon.ico), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A `Source/Logó/02.png` arculati terv alapján a felületek fejléceiben a korábbi általános SVG könyv-ikon helyét átvette az elegáns **„Okoskodó – röpdolgozat program”** logó.
+  - A böngészőfülekhez és könyvjelzőkhöz precíz képanalízissel kivágott, önálló narancssárga diplomás izzó-figura készült (`256×256 px` PNG és szabványos gyökérszintű `.ico` formátumban), garantálva, hogy a fülön kizárólag az embléma látszódjon.
+  - Az új favicon és logó beépítésre került az összes nézetbe: [`student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`projector.html`](file:///d:/dev/Röpdolgozat%20program/public/projector.html) és [`print-report.html`](file:///d:/dev/Röpdolgozat%20program/public/print-report.html).
+
+* **Szigorú futtatókörnyezeti követelmények (`engines` blokk):**
+  - **Fájl:** [`package.json`](file:///d:/dev/Röpdolgozat%20program/package.json)
+  - Hivatalos `engines` direktíva rögzíti a követelményeket (`"node": ">=22.11.0"`, `"npm": ">=10.9.0"`), elejét véve a C++ natív modulok és régebbi vagy kísérleti Node verziók közötti ütközéseknek.
+
+* **Intelligens, önellenőrző indítószkript:**
+  - **Fájl:** [`start_server.bat`](file:///d:/dev/Röpdolgozat%20program/start_server.bat)
+  - Beépített Node.js mikroszkripttel ellenőrzi, hogy a futtatókörnyezet eléri-e a minimum v22 LTS szintet, és nem megfelelő verzió esetén azonnal magyar figyelmeztetéssel leáll.
+  - Automatikusan ellenőrzi a `node_modules` meglétét, és figyelmeztet, ha a csomagok nincsenek a mappában.
+  - Automatikusan létrehozza a hiányzó `data` és `data\uploads` mappákat.
+  - Szigorúan ellenőrzi az adatbázis-inicializálás és sémaérvényesítés hibakódját (`%errorlevel%`), és hiba esetén megállítja a futást.
+  - A webszerver váratlan leállásakor részletes magyar tájékoztatást és kilépési hibakódot jelenít meg a csendes összeomlás helyett.
+
+#### Módosítva (Changed)
+* **Zéró-telepítéses (Zero-Install Best Practice) szerverüzembehelyezés:**
+  - **Fájl:** [`telepítés.md`](file:///d:/dev/Röpdolgozat%20program/telepítés.md)
+  - Teljes átdolgozás a tényleges intézményi célkörnyezethez: **Windows Server 2016** (valamint 2019 / 2022).
+  - Elsődleges, kötelező szabvánnyá vált a kész `node_modules` mappa pendrive-os átmásolása: a szerveren **egyetlenegy `npm install` parancsot sem kell kiadni**, kizárva minden jogosultsági korlátot (`install-scripts blocked`), hálózati függőséget és C++ fordítási hibát.
+  - Törlésre került a korábbi megtévesztő v20-as hivatkozás; kizárólag a hivatalos, előre fordított binárisokat tartalmazó **Node.js v22.x LTS** telepítő használata támogatott.
+
+* **Rendszerszintű verziószámok és környezeti leírások aktualizálása:**
+  - **Fájlok:** [`package.json`](file:///d:/dev/Röpdolgozat%20program/package.json), [`project-context.md`](file:///d:/dev/Röpdolgozat%20program/project-context.md), [`README.md`](file:///d:/dev/Röpdolgozat%20program/README.md)
+  - A projektverzió egységesen `v1.4.0`-ra frissült, a működési környezet leírása pedig kiegészült a Windows Server 2016 specifikációval.
+
+---
+
 ## [1.3.0] – 2026-11-10
 
 ### Egyetlen közös belépési kapu, kompakt 3 lenyíló listás diákfelület és standard osztálynévsorok
