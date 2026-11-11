@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.6.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.7.0">
 </head>
 <body style="background-color: var(--surface);">
 
@@ -55,10 +55,39 @@
     </div>
   </div>
 
+  <!-- Dolgozat megszakítását megerősítő párbeszédpanel -->
+  <div id="modal-confirm-exit" class="calm-modal-backdrop">
+    <div class="calm-modal-card">
+      <div class="calm-modal-header">
+        <div class="calm-modal-title-wrap">
+          <div class="calm-modal-icon-badge" style="background-color: var(--secondary-fixed); color: var(--on-secondary-fixed);">
+            <span class="material-symbols-outlined">logout</span>
+          </div>
+          <h3 class="calm-modal-title">Befejezed a dolgozatot?</h3>
+        </div>
+        <button type="button" id="btn-exit-modal-close" class="calm-modal-close-btn" title="Bezárás">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <p class="calm-modal-desc">
+        Az eddig megadott válaszaid rögzítésre és kiértékelésre kerülnek. Ha most kilépsz, a teszt számodra véget ér és nem folytathatod.
+      </p>
+      <div class="calm-modal-actions">
+        <button type="button" id="btn-cancel-exit" class="calm-modal-btn-submit">
+          <span>Folytatom a dolgozatot</span>
+          <span class="material-symbols-outlined">arrow_forward</span>
+        </button>
+        <button type="button" id="btn-confirm-exit" class="calm-modal-btn-cancel">
+          Kilépés és beadás
+        </button>
+      </div>
+    </div>
+  </div>
+
   <main class="student-entry-wrapper">
     <div class="student-entry-inner">
 
-      <!-- Felső sáv (Gépszám és Tanári belépés gomb) -->
+      <!-- Felső sáv (Gépszám és Tanári belépés gomb a bejelentkezéskor) -->
       <div id="student-top-bar" class="student-top-bar">
         <div id="pc-badge" class="top-pill-badge">
           <span class="top-pill-dot"></span>
@@ -69,6 +98,32 @@
           <span>Tanári belépés</span>
         </button>
       </div>
+
+      <!-- Dolgozat dedikált fejléc (Tesztírás alatt aktív) -->
+      <header id="quiz-top-bar" class="quiz-top-bar" style="display: none;">
+        <div class="quiz-header-channel-wrap">
+          <div id="quiz-live-channel-badge" class="live-badge badge-subject-digital badge-active">
+            <span id="quiz-live-channel-dot" class="badge-subject-dot" style="background-color: #38bdf8;"></span>
+            <span id="quiz-live-channel-text" class="badge-text-compact"><strong>6. évf.</strong> · Dolgozat</span>
+          </div>
+        </div>
+        <div class="quiz-header-actions-wrap">
+          <div class="quiz-user-pill">
+            <div class="quiz-user-icon-circle">
+              <span class="material-symbols-outlined">person</span>
+            </div>
+            <span id="quiz-header-username" class="quiz-user-name">Diák</span>
+          </div>
+          <div id="timer-badge" class="quiz-timer-pill" style="display: none;">
+            <span class="material-symbols-outlined">schedule</span>
+            <span id="timer-text">--:--</span>
+          </div>
+          <button type="button" id="btn-quiz-exit" class="quiz-exit-btn" title="Kilépés a dolgozatból">
+            <span class="material-symbols-outlined">logout</span>
+            <span>Kilépés</span>
+          </button>
+        </div>
+      </header>
 
       <!-- 1. LÉPÉS: Belépés (3 Kompakt Lenyíló Lista, 0 Gépelés) -->
       <div id="login-container" class="calm-card">
@@ -220,62 +275,113 @@
         </div>
       </div>
 
-      <!-- 2. LÉPÉS: Tesztfelület -->
-      <div id="quiz-container" class="card calm-card" style="display: none; max-width: 680px; margin: 0 auto;">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-          <div>
-            <h2 id="quiz-title" class="card-title">Dolgozat címe</h2>
-            <p id="student-display-name" class="card-subtitle">Tanuló neve</p>
+      <!-- 2. LÉPÉS: Tesztfelület (Calm Learner Socrative modell) -->
+      <div id="quiz-container" class="quiz-container" style="display: none;">
+        <!-- Rejtett kompatibilitási elemek a scripthez -->
+        <span id="quiz-title" style="display: none;"></span>
+        <span id="student-display-name" style="display: none;"></span>
+
+        <!-- 2.1 Felső állapot és haladási kártya -->
+        <div class="quiz-progress-card">
+          <div class="quiz-progress-header">
+            <!-- Bal oldal: Kérdésszám és kérdéstípus jelvény -->
+            <div class="quiz-progress-title-wrap">
+              <span id="question-progress" class="quiz-progress-count">1 / 5. kérdés</span>
+              <span id="question-type-badge" class="quiz-type-badge">Feleletválasztó</span>
+            </div>
+            <!-- Jobb oldal: Élő eredmény és becsült érdemjegy -->
+            <div class="quiz-metrics-wrap">
+              <div class="quiz-metric-chip quiz-metric-score">
+                <span class="material-symbols-outlined">verified</span>
+                <span id="quiz-metric-score-val">–</span>
+              </div>
+              <div class="quiz-metric-chip quiz-metric-grade">
+                <span class="quiz-metric-grade-label">Érdemjegy:</span>
+                <span id="quiz-metric-grade-val">–</span>
+              </div>
+            </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 16px;">
-            <div id="timer-badge" class="top-pill-badge" style="display: none;">
-              ⏱️ <span id="timer-text">--:--</span>
-            </div>
-            <div style="font-weight: 800; font-size: 1.15rem; color: var(--primary);">
-              <span id="question-progress">1 / 5</span>
-            </div>
+
+          <!-- Finom folyamatjelző sáv -->
+          <div class="quiz-progress-track">
+            <div id="quiz-progress-bar-fill" class="quiz-progress-bar-fill" style="width: 0%;"></div>
+          </div>
+
+          <!-- 3 részes lágy állapotjelző sáv a csík alatt -->
+          <div class="quiz-progress-status-row">
+            <span id="progress-text-done" class="quiz-status-muted">Kezdés</span>
+            <span id="progress-text-current" class="quiz-status-active">1. folyamatban</span>
+            <span id="progress-text-remaining" class="quiz-status-muted">kérdések betöltése...</span>
           </div>
         </div>
 
-        <div class="question-container">
-          <!-- Kérdés szövege kódkiemeléssel -->
-          <div id="question-text" class="question-text">Kérdés betöltése...</div>
-
-          <!-- Opcionális kérdés-kép -->
-          <div id="question-image-box" style="display: none; text-align: center; margin: 16px 0;">
-            <img id="question-image" class="question-image" src="" alt="Kérdéshez kapcsolódó ábra">
+        <!-- 2.2 Fő Kérdéskártya -->
+        <div class="quiz-main-card">
+          <!-- Kérdés fejléce -->
+          <div class="quiz-question-header">
+            <div class="quiz-qnum-badge">
+              <span id="quiz-qnum-text">1</span>
+            </div>
+            <div class="quiz-question-title-wrap">
+              <h1 id="question-text" class="quiz-question-text">Kérdés betöltése...</h1>
+              <p id="question-hint-text" class="quiz-question-hint">Válaszd ki az egyetlen helyes megoldást!</p>
+            </div>
           </div>
 
-          <!-- Válaszlehetőségek (ABCD, TF, SHORT) -->
-          <div id="options-container" class="options-list">
-            <!-- Dinamikus tartalom -->
+          <!-- Opcionális kérdés-kép / ábra -->
+          <div id="question-image-box" class="quiz-image-box" style="display: none;">
+            <img id="question-image" class="quiz-image" src="" alt="Kérdéshez kapcsolódó ábra">
+          </div>
+
+          <!-- Válaszlehetőségek csoportja (ABCD és TF) -->
+          <div id="options-container" class="quiz-options-group">
+            <!-- Dinamikus tartalom (student.js rendereli) -->
           </div>
 
           <!-- SHORT válasz szövegmező -->
-          <div id="short-answer-container" style="display: none; margin-top: 16px;">
-            <input type="text" id="short-answer-input" class="password-input" placeholder="Írd be a választ..." autocomplete="off">
+          <div id="short-answer-container" class="quiz-short-wrap" style="display: none;">
+            <div class="quiz-short-input-box">
+              <span class="material-symbols-outlined quiz-short-icon">edit_note</span>
+              <input type="text" id="short-answer-input" class="quiz-short-input" placeholder="Írd be ide a választ..." autocomplete="off">
+            </div>
+          </div>
+
+          <!-- Alsó műveleti és visszajelző sáv (Kompakt 1 soros, nulla scrollozás) -->
+          <div class="quiz-footer-zone">
+            <!-- Műveleti sáv: balra mikro-súgó, jobbra Ellenőrzés gomb -->
+            <div id="action-buttons-box" class="quiz-action-bar">
+              <div class="quiz-action-tip">
+                <span class="material-symbols-outlined">info</span>
+                <span>A válasz az Ellenőrzés gombig módosítható.</span>
+              </div>
+              <button id="btn-submit-answer" class="quiz-btn-submit" type="button" disabled>
+                <span>Ellenőrzés</span>
+                <span class="material-symbols-outlined">check_circle</span>
+              </button>
+            </div>
+
+            <!-- Kompakt azonnali Socrative visszajelző sáv (1 soros Zöld / Piros) -->
+            <div id="feedback-card" class="quiz-feedback-strip" style="display: none;">
+              <div class="quiz-feedback-strip-info">
+                <span id="feedback-icon" class="material-symbols-outlined quiz-feedback-strip-icon">task_alt</span>
+                <span id="feedback-title" class="quiz-feedback-strip-title">Helyes válasz!</span>
+                <span id="feedback-body" class="quiz-feedback-strip-body"></span>
+              </div>
+              <button id="btn-next-question" class="quiz-btn-next-compact" type="button">
+                <span>Következő</span>
+                <span class="material-symbols-outlined">arrow_forward</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Műveleti gombok -->
-        <div id="action-buttons-box" style="margin-top: 24px;">
-          <button id="btn-submit-answer" class="calm-btn-primary" disabled>
-            <span>Válasz beküldése és ellenőrzése</span>
-            <span class="material-symbols-outlined">send</span>
-          </button>
-        </div>
-
-        <!-- Azonnali Socrative kiértékelés (Zöld / Piros) -->
-        <div id="feedback-card" class="feedback-box">
-          <div id="feedback-title" class="feedback-title"></div>
-          <div id="feedback-body" class="feedback-detail"></div>
-          <div style="margin-top: 16px; text-align: right;">
-            <button id="btn-next-question" class="calm-btn-primary" style="display: inline-flex; width: auto; padding: 0 24px; margin-left: auto;">
-              <span>Következő kérdés</span>
-              <span class="material-symbols-outlined">arrow_forward</span>
-            </button>
-          </div>
-        </div>
+        <!-- 2.3 Megnyugtató alsó tipp (Kompakt 1 soros lágy sáv) -->
+        <aside class="quiz-calm-tip-compact">
+          <span class="material-symbols-outlined quiz-calm-tip-icon-sm">sentiment_satisfied</span>
+          <span class="quiz-calm-tip-text-sm">
+            <strong>Nem kell sietned!</strong> Gondold át nyugodtan, még van időd az órából.
+          </span>
+        </aside>
       </div>
 
       <!-- 3. LÉPÉS: Dolgozat végi értékelőlap -->
@@ -308,7 +414,7 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.6.0"></script>
-  <script src="/js/student.js?v=1.6.0"></script>
+  <script src="/js/utils.js?v=1.7.0"></script>
+  <script src="/js/student.js?v=1.7.0"></script>
 </body>
 </html>

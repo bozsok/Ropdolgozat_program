@@ -4,28 +4,84 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
-## [1.6.0] – 2026-11-11
+## [1.7.0] – 2026-11-11
 
-### Space Race Tantermi Közös Rajt (RAJT gomb és lebegő űrhajós Lobby), kompakt tantárgyszínes Live Badges és FOUT-mentes gyorsítótárazás
+### Calm Learner diák-tesztfelület (választós és igaz-hamis kérdések), élő csatornajelvény, görgetésmentes kompakt visszajelzés és megerősített kilépés
 
-A tantermi versenyek szinkronizálását biztosító Tantermi Közös Rajt (Lobby + RAJT gomb) bevezetése, az adminisztrátori élő státuszfülek helytakarékos, tantárgyszínes átalakítása (zöld és piros színek mellőzésével), valamint a betűtípus-villogást (FOUT) és script-beragadást megszüntető gyorsítótár-architektúra.
+A diák tesztfelületének teljes körű korszerűsítése a Calm Learner arculati tervek alapján: a felesleges felső elemek (Okoskodó-logó és statikus „Tantárgy” kapszula) helyett az adminisztrátori felülettel azonos, tantárgyspecifikus élő csatornajelvény (`live-badge`), a 75 képpontos felső üres térköz felszámolása, a függőleges görgetést megszüntető, egysoros azonnali Socrative visszajelző sáv és rögzített kártyamagasság, a diák által kezdeményezhető megerősítő kérdéses dolgozat-befejezés (kilépés) üzembiztos eseménykezelése, valamint az MTA 12. kiadása szerinti kisbetűs KRÉTA érdemjegy-minősítések.
 
 #### Hozzáadva (Added)
-* **Space Race Tantermi Közös Rajt mechanizmus (Lobby és RAJT gomb):**
+* **Élő csatornajelvény a diák fejlécében (Live Badge):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Dolgozatírás közben a korábbi felesleges logó és a semmitmondó, statikus pöttyös „Tantárgy” kapszula helyett a tanári adminisztrátori felület **Csatornák** sávjával teljesen megegyező, dinamikusan színezett élő csatornajelvény (`#quiz-live-channel-badge`) jelenik meg:
+    - 🔵 **Digitális kultúra:** világoskék pont (`#38bdf8`) és csatornaszín.
+    - 🟡 **Technika:** borostyánsárga pont (`#fbbf24`) és csatornaszín.
+    - 🟣 **Fejlesztő foglalkozás:** lila pont (`#c084fc`) és csatornaszín.
+  - A jelvény egyértelműen azonosítja a dolgozatot és évfolyamot: **`6. évf.` · `Kvíz címe`**.
+  - A fejléc jobb oldalán a tanuló neve (gépszámmal), az időkorlát visszaszámlálója és a kilépés gomb kapott helyet.
+
+* **Kompakt, egysoros azonnali Socrative visszajelző sáv (`.quiz-feedback-strip`):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A korábbi 270 képpont magas, oldalgörgetést okozó visszajelző doboz helyett a kérdéskártya alján egyetlen kompakt zóna (`.quiz-footer-zone`) jött létre.
+  - Az „Ellenőrzés” gombra kattintás után a műveleti gomb helyét egyetlen, mindössze 42 px magas sáv veszi át: zöld pipa vagy piros iksz ikonnal, a helyes megoldás kiírásával, az egysoros magyarázattal és a kompakt **[ Következő ➔ ]** / **[ Befejezés 🏁 ]** gombbal.
+  - Zéró függőleges görgetés: még az alacsonyabb felbontású iskolai monitorokon is 100%-ban görgetésmentesen jelenik meg a teljes dolgozat.
+
+* **Dolgozat megszakítása megerősítő kérdéssel (kilépési modálablak):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/js/utils.js`](file:///d:/dev/Röpdolgozat%20program/public/js/utils.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A fejlécben elhelyezett **[ 🚪 Kilépés ]** gombra kattintva védelmi párbeszédpanel ugrik fel (*„Befejezed a dolgozatot? Az eddig megadott válaszaid rögzítésre és kiértékelésre kerülnek. Ha most kilépsz, a teszt számodra véget ér és nem folytathatod.”*).
+  - A tanuló a **„Folytatom a dolgozatot”** (vagy az ablakon kívülre kattintva) visszatérhet a kérdéshez, míg a **„Kilépés és beadás”** gombbal véglegesítheti az addigi válaszait és átléphet a lezárt értékelőlapra.
+
+#### Javítva (Fixed)
+* **Kliensoldali eseménykezelők regisztrációjának sorrendje (a kilépés gomb némultsága):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `setupCommonUIListeners()` korábban a munkamenet-helyreállítás (`tryRestoreSession()`) után futott le, emiatt visszatöltéskor (`Session Recovery`) a kód azonnal kilépett (`if (restored) return;`), és a gombok eseménykezelői nem regisztrálódtak. Az eseménykezelők regisztrálása átkerült az `init()` legelső fázisába, garantálva a működést frissítés után is.
+
+* **Felső 75 pixeles üres térköz megszüntetése dolgozatírás közben:**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A kezdőlap vertikálisan középre zárt elrendezése (`justify-content: center`) dolgozatírás közben felső igazításra vált (`.student-entry-wrapper.quiz-active { justify-content: flex-start; padding: 8px 16px; }`), így a teszt közvetlenül a böngésző tetején kezdődik.
+
+* **Kérdéskártya méretstabilitása és vizuális ugrálásának megszüntetése:**
+  - **Fájl:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A `.quiz-main-card` stabil magasságkeretet kapott (`min-height: 380px`), és az opciók (ABCD és igaz-hamis) térközei kompakttá váltak, így a kártya alján lévő gombok a kérdések és kiértékelések váltakozása közben nem ugrálnak el a tanuló egere alól.
+
+* **Folyamatjelző csík és élő KRÉTA érdemjegy inicializálási anomáliája:**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A folyamatjelző csík mostantól pontosan a válasz kiértékelésekor lép előre ahelyett, hogy a kérdés megválaszolása előtt már előrébb járna.
+  - A HTML-ben korábban beégetett hibás `100%` és `5 (Jeles)` feliratok helyett az első kérdés megválaszolásáig kötőjel (`–`) jelenik meg.
+  - A szöveges KRÉTA érdemjegyek az MTA 12. kiadásának és a magyar helyesírás szabályainak megfelelően kis kezdőbetűvel szerepelnek (`jeles`, `jó`, `közepes`, `elégséges`, `elégtelen`).
+
+* **Munkamenet-adatok teljessége a diák API-ban:**
+  - **Fájl:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - A `/api/student/session-data` végpont válasza kiegészült a `session` objektummal (`subject_name`, `grade_level`, `class_name`, `quiz_title`, `mode`, `grade_thresholds_json`), biztosítva a kliensoldali fejléc- és jegyszámítás függetlenségét.
+
+* **Rendszerszintű verziószámok és dokumentáció aktualizálása:**
+  - **Fájlok:** [`package.json`](file:///d:/dev/Röpdolgozat%20program/package.json), [`project-context.md`](file:///d:/dev/Röpdolgozat%20program/project-context.md), [`README.md`](file:///d:/dev/Röpdolgozat%20program/README.md), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/projector.html`](file:///d:/dev/Röpdolgozat%20program/public/projector.html)
+  - A projektverzió egységesen `v1.7.0`-ra frissült cache-busting paraméterekkel (`?v=1.7.0`).
+
+---
+
+## [1.6.0] – 2026-11-11
+
+### Space Race tantermi közös rajt (RAJT gomb és lebegő űrhajós lobby), kompakt, tantárgyszínes élő státuszfülek és FOUT-mentes gyorsítótárazás
+
+A tantermi versenyek szinkronizálását biztosító tantermi közös rajt (lobby + RAJT gomb) bevezetése, az adminisztrátori élő státuszfülek helytakarékos, tantárgyszínes átalakítása (zöld és piros színek mellőzésével), valamint a betűtípus-villogást (FOUT) és script-beragadást megszüntető gyorsítótár-architektúra.
+
+#### Hozzáadva (Added)
+* **Space Race tantermi közös rajt mechanizmus (lobby és RAJT gomb):**
   - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/projector.html`](file:///d:/dev/Röpdolgozat%20program/public/projector.html), [`public/js/projector.js`](file:///d:/dev/Röpdolgozat%20program/public/js/projector.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
-  - **Diák Rajtállás (Lobby):** Űrhajós verseny módban a diák belépése és színválasztása után nem nyílik meg azonnal a teszt, hanem egy barátságos, lebegő űrhajós várakozó képernyő fogadja a tanuló által választott csapatszínben (`.lobby-rocket-floating`).
-  - **Tanári RAJT gomb:** A kivetítő képernyőn és az admin felületen is megjelent a feltűnő narancssárga **[ 🚀 RAJT! Verseny indítása ]** gomb, amely valós időben (Socket.io `race:started`) egyszerre indítja el a versenyt az összes diáknál.
+  - **Diák-rajtállás (lobby):** Űrhajós verseny módban a diák belépése és színválasztása után nem nyílik meg azonnal a teszt, hanem egy barátságos, lebegő űrhajós várakozó képernyő fogadja a tanuló által választott csapatszínben (`.lobby-rocket-floating`).
+  - **Tanári RAJT gomb:** A kivetítő képernyőn és az adminisztrátori felületen is megjelent a feltűnő narancssárga **[ 🚀 RAJT! Verseny indítása ]** gomb, amely valós időben (Socket.io `race:started`) egyszerre indítja el a versenyt az összes diáknál.
   - **Új végpont:** `POST /api/admin/sessions/:id/start-race` szigorú tanári hitelesítéssel.
   - **Késve érkező diákok intelligens kezelése:** Ha egy tanuló a rajt után csatlakozik, a rendszer azonnal az 1. kérdéshez irányítja a várakoztatás helyett.
 
 #### Módosítva (Changed)
-* **Admin fejléc: Kompakt, tantárgyszínes élő státuszfülek (Live Badges):**
+* **Adminfejléc: kompakt, tantárgyszínes élő státuszfülek (Live Badges):**
   - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
   - A zöld (helyes/élő) és piros (hibás/lezárt) színek teljes mellőzésével külön tantárgyi színkódok kerültek bevezetésre:
-    - 🔵 **Digitális kultúra:** Világoskék pont (`#38bdf8`), királykék kártya (`#0369a1`).
-    - 🟠 **Technika:** Borostyánsárga pont (`#fbbf24`), meleg bronz kártya (`#b45309`).
-    - 🟣 **Fejlesztő foglalkozás:** Lila pont (`#c084fc`), mélylila kártya (`#6b21a8`).
-    - 🔘 **Egyéb:** Türkiz pont (`#2dd4bf`), sötéttürkiz kártya (`#0f766e`).
+    - 🔵 **Digitális kultúra:** világoskék pont (`#38bdf8`), királykék kártya (`#0369a1`).
+    - 🟠 **Technika:** borostyánsárga pont (`#fbbf24`), meleg bronz kártya (`#b45309`).
+    - 🟣 **Fejlesztő foglalkozás:** lila pont (`#c084fc`), mélylila kártya (`#6b21a8`).
+    - 🔘 **Egyéb:** türkiz pont (`#2dd4bf`), sötéttürkiz kártya (`#0f766e`).
   - A feliratok kompakttá váltak (pl. `6. évf. · Hálózatok (21)`), a teljes név egérráhúzásra jelenik meg, így akár 6–8 futó dolgozat is kényelmesen elfér görgetősáv nélkül.
 
 * **Betűtípus-villogás (FOUT) és kliensoldali gyorsítótárazás optimalizálása:**
@@ -35,7 +91,7 @@ A tantermi versenyek szinkronizálását biztosító Tantermi Közös Rajt (Lobb
 
 * **Space Race kártyák elrendezése:**
   - **Fájl:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html)
-  - Mind a négy csapatszín kártya (Kék, Piros, Zöld, Sárga) megkapta a `calm-color-card` osztályt, így mindegyik konzisztensen két sorba törve (felül ikon, alul név) jelenik meg.
+  - Mind a négy csapatszín kártya (kék, piros, zöld, sárga) megkapta a `calm-color-card` osztályt, így mindegyik konzisztensen két sorba törve (felül ikon, alul név) jelenik meg.
 
 * **Rendszerszintű verziószámok és dokumentáció aktualizálása:**
   - **Fájlok:** [`package.json`](file:///d:/dev/Röpdolgozat%20program/package.json), [`project-context.md`](file:///d:/dev/Röpdolgozat%20program/project-context.md), [`README.md`](file:///d:/dev/Röpdolgozat%20program/README.md)
@@ -45,27 +101,27 @@ A tantermi versenyek szinkronizálását biztosító Tantermi Közös Rajt (Lobb
 
 ## [1.5.0] – 2026-11-11
 
-### Főoldali „Calm Learner” arculat, 100% offline helyi betűkészletek (Nunito Sans & Material Symbols), tantermi gépszám-kijelzés és Best Practice font-renderelés
+### Főoldali „Calm Learner” arculat, 100%-ban offline helyi betűkészletek (Nunito Sans & Material Symbols), tantermi gépszám-kijelzés és Best Practice font-renderelés
 
 A diákok vizsgadrukkját csökkentő, meleg és letisztult intézményi dizájn („Calm Learner”) megvalósítása külső keretrendszerek (Tailwind) nélkül, a 100% offline működést garantáló helyi betűkészlet-architektúra kialakítása, valamint a tantermi azonosítást segítő gépszámozási rendszer bevezetése.
 
 #### Hozzáadva (Added)
-* **100% Offline helyi betűkészletek és ikonkészlet integrációja:**
+* **100%-ban offline helyi betűkészletek és ikonkészlet integrációja:**
   - **Fájlok:** [`public/fonts/nunito-sans-latin.woff2`](file:///d:/dev/Röpdolgozat%20program/public/fonts/nunito-sans-latin.woff2), [`public/fonts/nunito-sans-latin-ext.woff2`](file:///d:/dev/Röpdolgozat%20program/public/fonts/nunito-sans-latin-ext.woff2), [`public/fonts/nunito-sans.ttf`](file:///d:/dev/Röpdolgozat%20program/public/fonts/nunito-sans.ttf), [`public/fonts/material-symbols-outlined.woff2`](file:///d:/dev/Röpdolgozat%20program/public/fonts/material-symbols-outlined.woff2), [`public/fonts/material-symbols-outlined.ttf`](file:///d:/dev/Röpdolgozat%20program/public/fonts/material-symbols-outlined.ttf)
   - A szigorúan zárt iskolai helyi hálózat (LAN) elvárásainak megfelelően a modern, kerekded Google Nunito Sans betűcsalád és a Google Material Symbols Outlined ikongyűjtemény a helyi kiszolgáló `public/fonts/` könyvtárába került letöltésre és beépítésre.
   - A rendszer egyetlen külső CDN-t, Google Fonts hivatkozást sem vesz igénybe; az összes kliensgép teljesen offline módban, azonnal betölti az arculati elemeket.
 
-* **„Calm Learner” diák főoldal és felhasználói élmény:**
+* **„Calm Learner” diák-főoldal és felhasználói élmény:**
   - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
   - A `Source/Terv/Főoldal` alapján átültetett arculat: meleg narancssárga márkahangsúly (`#ea580c`), nyugodt háttérszínek (`#fbf8fc`, `#f5f3f6`), 20 px lekerekítésű kártyák és finom kártyaárnyékok.
   - Szigorúan CSS-keretrendszerek (Tailwind) nélkül, tiszta Vanilla CSS3 és HTML5 technológiával, az `!important` szabály teljes mellőzésével.
-  - **3 lépéses vizuális folyamatjelző (Stepper):** Látványos, számozott körjelvényekkel jelölt lépések (1. Tantárgy → 2. Osztály → 3. Diák neve), amelyek azonnali vizuális visszajelzést adnak a kitöltöttségről.
+  - **3 lépéses vizuális folyamatjelző (léptető):** Látványos, számozott körjelvényekkel jelölt lépések (1. tantárgy → 2. osztály → 3. diák neve), amelyek azonnali vizuális visszajelzést adnak a kitöltöttségről.
   - **Megnyugtató indítási sáv:** Diszkrét ikonnal kísért biztató üzenet a feszültségmentes dolgozatkezdéshez.
   - **Modernizált tanári belépési modál:** Kártya alapú felugró ablak jelszóelrejtő/felfedő szem-ikonnal, ESC és Enter billentyűk kezelésével.
-  - **Calm Learner stílusú Space Race csapatválasztó:** 4 oszlopos színes kártyák (Kék, Piros, Zöld, Sárga) mikroanimációkkal és kiemeléssel.
+  - **Calm Learner stílusú Space Race csapatválasztó:** 4 oszlopos színes kártyák (kék, piros, zöld, sárga) mikroanimációkkal és kiemeléssel.
 
 #### Módosítva (Changed)
-* **Fejléc optimalizálása – Tantermi gépszám a tanév helyett:**
+* **Fejléc optimalizálása – tantermi gépszám a tanév helyett:**
   - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
   - A felhasználói kérésnek megfelelően a felső információs sávban az aktuális tanév helyett a tanuló gépszámának kijelzése jelenik meg (pl. `💻 12. számú gép`).
   - A kliens a gépszámot az URL paraméterből (`?pc=12`) vagy a helyi tárolóból olvassa be, így a tantermi 42 kliensgépen a parancsikonból vagy automatizmusból indított böngésző azonnal a helyes gépazonosítót mutatja.
@@ -121,9 +177,9 @@ A tantermi és szerveroldali megbízhatóság maximalizálása érdekében bevez
 
 ## [1.3.0] – 2026-11-10
 
-### Egyetlen közös belépési kapu, kompakt 3 lenyíló listás diákfelület és standard osztálynévsorok
+### Egyetlen közös belépési kapu, kompakt, három lenyíló listás diákfelület és standard osztálynévsorok
 
-A tantermi használhatóság egyszerűsítése érdekében bevezetett egységes belépési felület, a görgetésmentes 3 lenyíló listás csatlakozási folyamat és az intézményi standard osztályok integrációjának összefoglalása.
+A tantermi használhatóság egyszerűsítése érdekében bevezetett egységes belépési felület, a görgetésmentes, három lenyíló listás csatlakozási folyamat és az intézményi standard osztályok integrációjának összefoglalása.
 
 #### Hozzáadva (Added)
 * **Egyetlen közös felület a tanárnak és a diáknak (Single Entry Point):**
@@ -132,7 +188,7 @@ A tantermi használhatóság egyszerűsítése érdekében bevezetett egységes 
   - A közös fejléc jobb oldalára diszkrét **`🔐 Tanári belépés`** gomb és beépített jelszókérő modal ablak került.
   - Sikeres tanári bejelentkezést követően a rendszer automatikusan átirányít az adminisztrációs vezérlőpultra ([`/admin`](file:///d:/dev/Röpdolgozat%20program/public/admin.html)).
 
-* **Kompakt, görgetésmentes 3 lenyíló listás (`<select>`) diák csatlakozási kártya:**
+* **Kompakt, görgetésmentes, három lenyíló listás (`<select>`) diák-csatlakozási kártya:**
   - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
   - A korábbi, sok helyet foglaló kártyás felület helyett egyetlen áttekinthető kártyára került a három kiválasztóelem:
     1. **Tantárgyválasztó lenyíló lista (`select-subject`):** az adatbázis tantárgyaival feltöltve, alapértelmezetten a **„Digitális kultúra”** aktív.
@@ -162,27 +218,27 @@ A tantermi használhatóság egyszerűsítése érdekében bevezetett egységes 
 A tanári munkaállomás és a vizsgafelület éles tantermi használatra való felkészítése során elvégzett strukturális bővítések, hitelesítési javítások és vizuális egyértelműsítések összefoglalása.
 
 #### Hozzáadva (Added)
-* **Korábbi dolgozatok és eredmények archívuma (Reports felület és API):**
+* **Korábbi dolgozatok és eredmények archívuma (Reports-felület és API):**
   - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
   - A tanári vezérlőpulton új **📑 Eredmények (Reports)** fül (`tab-reports`) került kialakításra, ahol a pedagógus időrendben áttekintheti az összes korábbi és folyamatban lévő dolgozatot.
   - Szerveroldali adatbázis-lekérdezés (`getAllSessions()`) és védett REST API végpont (`GET /api/admin/sessions`), amely visszaadja a dolgozatok alapadatait (dátum, tantárgy, évfolyam, dolgozat címe, osztály, létszám, lezárt vagy aktív állapot).
   - Kliensoldalon dinamikus keresőmező az azonnali szűréshez (dolgozat címe, tantárgy, osztály vagy évfolyam szerint), valamint közvetlen exportgombok a táblázat minden sorában: **👁️ Mátrix**, **📊 Excel**, **🌐 HTML**, **📦 ZIP** és **🖨️ PDF**.
 
-* **Lezárt dolgozatok egyértelmű vizuális jelölése (Lezárt Archívum Mátrix nézet):**
+* **Lezárt dolgozatok egyértelmű vizuális jelölése (lezárt archívumi mátrixnézet):**
   - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
   - Amikor a tanár az Eredmények (Reports) fülről megnyitja egy lezárt dolgozat táblázatát (`switchSession`), a felület egyértelművé teszi az archív állapotot, megszüntetve a megtévesztő jelzéseket:
     - A fejléckapszula a zöld pulzáló `🟢 ÉLŐ` helyett diszkrét szürke hátterű **`⏹️ LEZÁRT ARCHÍVUM`** (`.live-badge.badge-finished`) jelvényre vált.
-    - Az adminisztrációs navigációs fül felirata dinamikusan **`📊 Lezárt Dolgozat (Mátrix)`** szövegre módosul.
+    - Az adminisztrációs navigációs fül felirata dinamikusan **`📊 Lezárt dolgozat (Mátrix)`** szövegre módosul.
     - A dolgozat címe kiegészül a `[LEZÁRT ARCHÍVUM]` megjelöléssel, az adatsávban pedig megjelenik a lezárás pontos ideje (`Befejezve: YYYY-MM-DD HH:MM`).
     - A piros `⏹️ Dolgozat befejezése (Finish)` gomb elrejtődik, helyette a **`⏹️ Dolgozat lezárva`** állapotjelző látható.
-    - Egy élő csatornára kattintva vagy új dolgozat indításakor a felület maradéktalanul visszatér a zöld `🟢 ÉLŐ` és `📊 Élő Dolgozat (Mátrix)` üzemmódba.
+    - Egy élő csatornára kattintva vagy új dolgozat indításakor a felület maradéktalanul visszatér a zöld `🟢 ÉLŐ` és `📊 Élő dolgozat (Mátrix)` üzemmódba.
 
-* **Részletes Windows Server 2022 üzembe helyezési és telepítési dokumentáció:**
+* **Részletes Windows Server 2022 üzembehelyezési és telepítési dokumentáció:**
   - **Fájl:** [`telepítés.md`](file:///d:/dev/Röpdolgozat%20program/telepítés.md)
   - Lépésről lépésre követhető, teljes körű rendszergazdai útmutató készült az éles tantermi környezet kialakításához: pendrive-os fájlmásolás, Node.js LTS környezet beállítása, Windows Defender tűzfalszabály létrehozása a 3000-es porthoz, automatikus indítás konfigurálása a rendszerindítási mappába (`shell:common startup`), valamint a tanulói munkaállomások asztali parancsikonjainak előkészítése.
 
 #### Javítva (Fixed)
-* **Nyomtatható A4 PDF nézet dinamikus munkamenet-hozzárendelése (Print Report Fallback):**
+* **Nyomtatható A4 PDF-nézet dinamikus munkamenet-hozzárendelése (Print Report Fallback):**
   - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/print-report.html`](file:///d:/dev/Röpdolgozat%20program/public/print-report.html)
   - **Hiba:** A nyomtatási gomb (`btnExportPrint`) statikusan a paraméter nélküli `/print` címre mutatott, így lezárt dolgozat megtekintésekor az új böngészőlapon a „Nincs diák ebben a dolgozatban.” figyelmeztetés fogadta a tanárt.
   - **Javítás:** A gomb hivatkozása a kiválasztott dolgozathoz dinamikusan hozzárendeli a munkamenet-azonosítót (`/print?sessionId=${sessionId}`), továbbá a `print-report.html` intelligens visszaesési (fallback) logikát kapott a megadott archív dolgozat diákjainak és eredményeinek megbízható betöltésére.

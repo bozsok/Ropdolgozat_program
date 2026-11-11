@@ -23,10 +23,26 @@
   let timerInterval = null;
 
   // DOM elemek gyors elérése
+  const studentEntryWrapper = document.querySelector('.student-entry-wrapper');
+  const studentEntryInner = document.querySelector('.student-entry-inner');
   const pcBadge = document.getElementById('pc-badge');
   const pcNumberText = document.getElementById('pc-number-text');
   const timerBadge = document.getElementById('timer-badge');
   const timerText = document.getElementById('timer-text');
+
+  // Dolgozat fejléc elemek (Admin Live Badge stílusú csatorna-jelvénnyel)
+  const quizTopBar = document.getElementById('quiz-top-bar');
+  const quizLiveChannelBadge = document.getElementById('quiz-live-channel-badge');
+  const quizLiveChannelDot = document.getElementById('quiz-live-channel-dot');
+  const quizLiveChannelText = document.getElementById('quiz-live-channel-text');
+  const quizHeaderUsername = document.getElementById('quiz-header-username');
+  const btnQuizExit = document.getElementById('btn-quiz-exit');
+
+  // Kilépés megerősítő párbeszédpanel elemei
+  const modalConfirmExit = document.getElementById('modal-confirm-exit');
+  const btnCancelExit = document.getElementById('btn-cancel-exit');
+  const btnConfirmExit = document.getElementById('btn-confirm-exit');
+  const btnExitModalClose = document.getElementById('btn-exit-modal-close');
 
   // Tanári bejelentkezési elemek
   const btnOpenLogin = document.getElementById('btn-open-login');
@@ -68,8 +84,21 @@
   const lobbyTeamName = document.getElementById('lobby-team-name');
   const quizTitle = document.getElementById('quiz-title');
   const studentDisplayName = document.getElementById('student-display-name');
+
+  // Új Calm Learner állapot és haladás elemek
   const questionProgress = document.getElementById('question-progress');
+  const questionTypeBadge = document.getElementById('question-type-badge');
+  const quizMetricScoreVal = document.getElementById('quiz-metric-score-val');
+  const quizMetricGradeVal = document.getElementById('quiz-metric-grade-val');
+  const quizProgressBarFill = document.getElementById('quiz-progress-bar-fill');
+  const progressTextDone = document.getElementById('progress-text-done');
+  const progressTextCurrent = document.getElementById('progress-text-current');
+  const progressTextRemaining = document.getElementById('progress-text-remaining');
+
+  // Kérdés kártya elemei
+  const quizQnumText = document.getElementById('quiz-qnum-text');
   const questionText = document.getElementById('question-text');
+  const questionHintText = document.getElementById('question-hint-text');
   const questionImageBox = document.getElementById('question-image-box');
   const questionImage = document.getElementById('question-image');
   const optionsContainer = document.getElementById('options-container');
@@ -77,8 +106,13 @@
   const shortAnswerInput = document.getElementById('short-answer-input');
   const actionButtonsBox = document.getElementById('action-buttons-box');
   const btnSubmitAnswer = document.getElementById('btn-submit-answer');
+
+  // Socrative visszajelzés kártya elemei
   const feedbackCard = document.getElementById('feedback-card');
+  const feedbackIconWrap = document.getElementById('feedback-icon-wrap');
+  const feedbackIcon = document.getElementById('feedback-icon');
   const feedbackTitle = document.getElementById('feedback-title');
+  const feedbackPoints = document.getElementById('feedback-points');
   const feedbackBody = document.getElementById('feedback-body');
   const btnNextQuestion = document.getElementById('btn-next-question');
 
@@ -86,6 +120,10 @@
   const finalScore = document.getElementById('final-score');
   const finalGrade = document.getElementById('final-grade');
   const btnRestartStudent = document.getElementById('btn-restart-student');
+
+  // Dinamikus eredmény- és jegyszámítási állapot
+  let earnedPoints = 0;
+  let sessionThresholds = { 2: 30, 3: 55, 4: 75, 5: 90 };
 
   /**
    * Alkalmazás inicializálása
@@ -100,30 +138,30 @@
       }
     }
 
-    // 2. Socket.io kapcsolat
+    // 2. Felületi eseménykezelők azonnali regisztrálása (Modalok, Kilépés gomb, stb.)
+    setupCommonUIListeners();
+
+    // 3. Socket.io kapcsolat
     if (typeof io !== 'undefined') {
       socket = io();
       setupSocketListeners();
     }
 
-    // 3. Fókuszvesztés figyelő regisztrálása
+    // 4. Fókuszvesztés figyelő regisztrálása
     setupFocusListener();
 
-    // 4. Mentett munkamenet ellenőrzése (Session Recovery újranyitás esetén)
+    // 5. Mentett munkamenet ellenőrzése (Session Recovery újranyitás esetén)
     const savedToken = sessionStorage.getItem('ropdolgozat_token');
     if (savedToken) {
       const restored = await tryRestoreSession(savedToken);
       if (restored) return;
     }
 
-    // 5. Tantárgyak, osztályok és kezdő névsor betöltése
+    // 6. Tantárgyak, osztályok és kezdő névsor betöltése
     await loadSubjects();
     await loadClasses();
     await checkActiveSession();
     await loadStudentsForClass(selectedClass);
-
-    // 6. Eseménykezelők regisztrálása a közös felület elemeihez
-    setupCommonUIListeners();
   }
 
   /**
@@ -147,6 +185,8 @@
     socket.on('race:started', (data) => {
       if (activeSession && (!data || !data.sessionId || String(data.sessionId) === String(activeSession.id))) {
         if (lobbyContainer) lobbyContainer.style.display = 'none';
+        if (studentEntryInner) studentEntryInner.classList.add('quiz-active');
+        if (quizTopBar) quizTopBar.style.display = 'flex';
         if (quizContainer) quizContainer.style.display = 'block';
         showToast('🚀 A verseny elindult! Sok sikert!', 'success');
         if (currentQuestions && currentQuestions.length > 0) {
@@ -298,6 +338,100 @@
         joinQuiz();
       });
     }
+
+    // Dolgozat megszakítása és kilépési modal eseménykezelői
+    if (btnQuizExit) {
+      btnQuizExit.addEventListener('click', () => {
+        openModal('modal-confirm-exit');
+      });
+    }
+
+    if (btnCancelExit) {
+      btnCancelExit.addEventListener('click', () => {
+        closeModal('modal-confirm-exit');
+      });
+    }
+
+    if (btnExitModalClose) {
+      btnExitModalClose.addEventListener('click', () => {
+        closeModal('modal-confirm-exit');
+      });
+    }
+
+    if (btnConfirmExit) {
+      btnConfirmExit.addEventListener('click', () => {
+        closeModal('modal-confirm-exit');
+        finishQuiz();
+      });
+    }
+  }
+
+  /**
+   * Élő mérőszámok (Eredmény % és Érdemjegy) frissítése a felső kártyán
+   */
+  function updateLiveMetrics() {
+    const answeredCount = answeredQuestionIds.size;
+    if (answeredCount === 0) {
+      if (quizMetricScoreVal) quizMetricScoreVal.textContent = '–';
+      if (quizMetricGradeVal) quizMetricGradeVal.textContent = '–';
+      return;
+    }
+
+    const percentage = Math.round((earnedPoints / answeredCount) * 100);
+    const grade = calculateKRÉTAGrade(percentage, sessionThresholds);
+    const gradeText = getKRÉTAGradeText(grade);
+
+    if (quizMetricScoreVal) quizMetricScoreVal.textContent = `${percentage}%`;
+    if (quizMetricGradeVal) quizMetricGradeVal.textContent = `${grade} (${gradeText})`;
+  }
+
+  /**
+   * Hivatalos KRÉTA érdemjegy számítása a százalékból
+   */
+  function calculateKRÉTAGrade(percentage, thresholds) {
+    const pct = Math.round(Number(percentage) || 0);
+    const t = thresholds || { 2: 30, 3: 55, 4: 75, 5: 90 };
+    const t5 = Number(t[5] ?? t['5'] ?? 90);
+    const t4 = Number(t[4] ?? t['4'] ?? 75);
+    const t3 = Number(t[3] ?? t['3'] ?? 55);
+    const t2 = Number(t[2] ?? t['2'] ?? 30);
+
+    if (pct >= t5) return 5;
+    if (pct >= t4) return 4;
+    if (pct >= t3) return 3;
+    if (pct >= t2) return 2;
+    return 1;
+  }
+
+  /**
+   * Szöveges KRÉTA érdemjegy minősítés (MTA 12. kiadása szerint kis kezdőbetűvel)
+   */
+  function getKRÉTAGradeText(grade) {
+    switch (Number(grade)) {
+      case 5: return 'jeles';
+      case 4: return 'jó';
+      case 3: return 'közepes';
+      case 2: return 'elégséges';
+      case 1: return 'elégtelen';
+      default: return '–';
+    }
+  }
+
+  /**
+   * Tantárgyszínek és témák a Csatorna jelvényhez (Admin Live Badge-dzsel egyező)
+   */
+  function getSubjectTheme(subjName) {
+    const norm = String(subjName || '').toLowerCase();
+    if (norm.includes('digit') || norm.includes('info') || norm.includes('számít')) {
+      return { cssClass: 'badge-subject-digital', color: '#38bdf8' };
+    }
+    if (norm.includes('tech')) {
+      return { cssClass: 'badge-subject-tech', color: '#fbbf24' };
+    }
+    if (norm.includes('fejl') || norm.includes('fogl')) {
+      return { cssClass: 'badge-subject-dev', color: '#c084fc' };
+    }
+    return { cssClass: 'badge-subject-other', color: '#2dd4bf' };
   }
 
   /**
@@ -622,10 +756,53 @@
 
     // Normál dolgozat vagy már elrajtolt verseny
     if (lobbyContainer) lobbyContainer.style.display = 'none';
+    if (studentEntryWrapper) studentEntryWrapper.classList.add('quiz-active');
+    if (studentEntryInner) studentEntryInner.classList.add('quiz-active');
+    if (quizTopBar) quizTopBar.style.display = 'flex';
     quizContainer.style.display = 'block';
+
+    // Fejléc csatorna jelvény frissítése (Admin Live Badge-dzsel egyező)
+    const subjName = (data.session && data.session.subject_name) || (selectedSubjectId && selectSubject.options[selectSubject.selectedIndex]?.text) || 'Digitális kultúra';
+    const gradeVal = (data.session && data.session.grade_level) || (selectedClass ? selectedClass.split('.')[0] : '6');
+    const quizTitleText = (data.session && data.session.quiz_title) || (currentQuiz && currentQuiz.title) || 'Dolgozat';
+
+    const theme = getSubjectTheme(subjName);
+    if (quizLiveChannelBadge) {
+      quizLiveChannelBadge.className = `live-badge ${theme.cssClass} badge-active`;
+    }
+    if (quizLiveChannelDot) {
+      quizLiveChannelDot.style.backgroundColor = theme.color;
+    }
+    if (quizLiveChannelText) {
+      quizLiveChannelText.innerHTML = `<strong>${escapeHtml(gradeVal)}. évf.</strong> · ${escapeHtml(quizTitleText)}`;
+    }
+
+    if (quizHeaderUsername) {
+      quizHeaderUsername.textContent = `${data.participant.student_name}${data.participant.pc_number ? ' (' + data.participant.pc_number + '. gép)' : ''}`;
+    }
 
     quizTitle.textContent = currentQuiz.title;
     studentDisplayName.textContent = `${data.participant.student_name} (${data.participant.pc_number ? data.participant.pc_number + '. gép' : 'Diák'})`;
+
+    // Ponthatárok és elért pontok inicializálása
+    if (data.session && data.session.grade_thresholds_json) {
+      try {
+        sessionThresholds = typeof data.session.grade_thresholds_json === 'string'
+          ? JSON.parse(data.session.grade_thresholds_json)
+          : data.session.grade_thresholds_json;
+      } catch {
+        sessionThresholds = { 2: 30, 3: 55, 4: 75, 5: 90 };
+      }
+    }
+
+    earnedPoints = 0;
+    if (data.answers && Array.isArray(data.answers)) {
+      data.answers.forEach(a => {
+        answeredQuestionIds.add(a.question_id);
+        earnedPoints += Number(a.points_earned) || 0;
+      });
+    }
+    updateLiveMetrics();
 
     // Időzítő inicializálása
     if (data.participant.deadline_at) {
@@ -645,7 +822,7 @@
   }
 
   /**
-   * Kérdés megjelenítése a képernyőn
+   * Kérdés megjelenítése a képernyőn (Calm Learner stílusban)
    */
   function renderQuestion(index) {
     if (index >= currentQuestions.length) {
@@ -657,10 +834,37 @@
     const q = currentQuestions[index];
     questionStartTime = Date.now();
 
-    questionProgress.textContent = `${index + 1} / ${currentQuestions.length}`;
+    // 1. Kérdésszám és sorszámok
+    questionProgress.textContent = `${index + 1} / ${currentQuestions.length}. kérdés`;
+    if (quizQnumText) quizQnumText.textContent = String(index + 1);
+
+    const typeBadgeMap = {
+      'ABCD': 'Feleletválasztó',
+      'TF': 'Igaz / Hamis',
+      'SHORT': 'Rövid válasz'
+    };
+    if (questionTypeBadge) questionTypeBadge.textContent = typeBadgeMap[q.question_type] || 'Kérdés';
+
+    const hintMap = {
+      'ABCD': 'Válaszd ki az egyetlen helyes megoldást!',
+      'TF': 'Döntsd el, hogy az állítás Igaz vagy Hamis!',
+      'SHORT': 'Írd be a helyes választ a szövegmezőbe!'
+    };
+    if (questionHintText) questionHintText.textContent = hintMap[q.question_type] || 'Válaszolj a kérdésre!';
+
+    // 2. Haladási sáv és 3 részes szöveges állapot (a már befejezett válaszok szerint)
+    const answeredCount = answeredQuestionIds.size;
+    const progressPct = Math.round((answeredCount / currentQuestions.length) * 100);
+    if (quizProgressBarFill) quizProgressBarFill.style.width = `${progressPct}%`;
+
+    const remainingCount = currentQuestions.length - answeredCount;
+    if (progressTextDone) progressTextDone.textContent = answeredCount === 0 ? 'Kezdés' : `${answeredCount}. befejezve`;
+    if (progressTextCurrent) progressTextCurrent.textContent = (index + 1 === currentQuestions.length) ? `${index + 1}. Utolsó kérdés!` : `${index + 1}. folyamatban`;
+    if (progressTextRemaining) progressTextRemaining.textContent = remainingCount === 0 ? 'Már nincs több hátra' : `${remainingCount} kérdés van hátra`;
+
+    // 3. Kérdésszöveg és opcionális ábra
     questionText.innerHTML = formatCode(q.question_text);
 
-    // Kép megjelenítése
     if (q.image_path) {
       questionImage.src = q.image_path;
       questionImageBox.style.display = 'block';
@@ -668,58 +872,90 @@
       questionImageBox.style.display = 'none';
     }
 
-    // Reset korábbi állapotokból
-    feedbackCard.className = 'feedback-box';
+    // 4. Reset korábbi állapotokból
     feedbackCard.style.display = 'none';
     btnSubmitAnswer.disabled = true;
-    btnSubmitAnswer.style.display = 'block';
-    actionButtonsBox.style.display = 'block';
+    btnSubmitAnswer.style.display = 'inline-flex';
+    actionButtonsBox.style.display = 'flex';
 
     optionsContainer.innerHTML = '';
     shortAnswerContainer.style.display = 'none';
     shortAnswerInput.value = '';
     shortAnswerInput.disabled = false;
 
-    // Kérdéstípus szerinti megjelenítés
+    // 5. Kérdéstípus szerinti megjelenítés
     if (q.question_type === 'ABCD') {
+      optionsContainer.className = 'quiz-options-group';
       const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
       const opts = (Array.isArray(q.options) && q.options.length > 0) ? q.options : ['A', 'B', 'C', 'D'];
       opts.forEach((optText, optIdx) => {
-        const btn = document.createElement('div');
-        btn.className = 'option-btn';
-        btn.dataset.value = optText;
+        const tile = document.createElement('div');
+        tile.className = 'quiz-option-tile';
+        tile.dataset.value = optText;
 
         const letter = letters[optIdx] || String(optIdx + 1);
-        btn.innerHTML = `<span class="option-letter">${letter}</span> <span>${formatCode(optText)}</span>`;
+        tile.innerHTML = `
+          <div class="quiz-option-left">
+            <span class="quiz-option-badge">${letter}</span>
+            <span class="quiz-option-text">${formatCode(optText)}</span>
+          </div>
+          <div class="quiz-option-radio">
+            <span class="material-symbols-outlined quiz-option-check">check</span>
+          </div>
+        `;
 
-        btn.addEventListener('click', () => {
-          document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
-          btn.classList.add('selected');
+        tile.addEventListener('click', () => {
+          document.querySelectorAll('.quiz-option-tile').forEach(b => b.classList.remove('selected'));
+          tile.classList.add('selected');
           btnSubmitAnswer.disabled = false;
         });
 
-        optionsContainer.appendChild(btn);
+        optionsContainer.appendChild(tile);
       });
+
     } else if (q.question_type === 'TF') {
-      const tfOptions = ['Igaz', 'Hamis'];
-      tfOptions.forEach(optText => {
-        const btn = document.createElement('div');
-        btn.className = 'option-btn';
-        btn.dataset.value = optText;
-        btn.innerHTML = `<span>${optText === 'Igaz' ? '✅' : '❌'}</span> <span><strong>${optText}</strong></span>`;
+      optionsContainer.className = 'quiz-tf-grid';
+      const tfData = [
+        { value: 'Igaz', letter: 'A', title: 'IGAZ', icon: 'thumb_up', desc: 'Az állítás igaz' },
+        { value: 'Hamis', letter: 'B', title: 'HAMIS', icon: 'thumb_down', desc: 'Az állítás hamis' }
+      ];
 
-        btn.addEventListener('click', () => {
-          document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
-          btn.classList.add('selected');
+      tfData.forEach(item => {
+        const tile = document.createElement('div');
+        tile.className = 'quiz-tf-tile';
+        tile.dataset.value = item.value;
+        tile.innerHTML = `
+          <div class="quiz-tf-top">
+            <div class="quiz-tf-badge">${item.letter}</div>
+            <div class="quiz-tf-radio">
+              <span class="material-symbols-outlined">check</span>
+            </div>
+          </div>
+          <div class="quiz-tf-title-wrap">
+            <span class="quiz-tf-label">Válaszlehetőség</span>
+            <div class="quiz-tf-name">${item.title}</div>
+          </div>
+          <div class="quiz-tf-desc">
+            <span class="material-symbols-outlined">${item.icon}</span>
+            <span>${item.desc}</span>
+          </div>
+        `;
+
+        tile.addEventListener('click', () => {
+          document.querySelectorAll('.quiz-tf-tile').forEach(b => b.classList.remove('selected'));
+          tile.classList.add('selected');
           btnSubmitAnswer.disabled = false;
         });
 
-        optionsContainer.appendChild(btn);
+        optionsContainer.appendChild(tile);
       });
+
     } else if (q.question_type === 'SHORT') {
+      optionsContainer.className = 'quiz-options-group';
       shortAnswerContainer.style.display = 'block';
       shortAnswerInput.disabled = false;
       setTimeout(() => shortAnswerInput.focus(), 50);
+
       shortAnswerInput.oninput = () => {
         btnSubmitAnswer.disabled = shortAnswerInput.value.trim().length === 0;
       };
@@ -738,8 +974,12 @@
     const q = currentQuestions[currentQuestionIndex];
     let submittedValue = '';
 
-    if (q.question_type === 'ABCD' || q.question_type === 'TF') {
-      const selected = document.querySelector('.option-btn.selected');
+    if (q.question_type === 'ABCD') {
+      const selected = document.querySelector('.quiz-option-tile.selected');
+      if (!selected) return;
+      submittedValue = selected.dataset.value;
+    } else if (q.question_type === 'TF') {
+      const selected = document.querySelector('.quiz-tf-tile.selected');
       if (!selected) return;
       submittedValue = selected.dataset.value;
     } else if (q.question_type === 'SHORT') {
@@ -771,13 +1011,17 @@
       }
 
       answeredQuestionIds.add(q.id);
+      if (result.is_correct === 1) {
+        earnedPoints += Number(result.points_earned) || 1;
+      }
+      updateLiveMetrics();
 
-      // Válaszgombok inaktiválása
-      document.querySelectorAll('.option-btn').forEach(b => {
+      // Válaszgombok zárolása
+      document.querySelectorAll('.quiz-option-tile, .quiz-tf-tile').forEach(b => {
         b.style.pointerEvents = 'none';
       });
       shortAnswerInput.disabled = true;
-      btnSubmitAnswer.style.display = 'none';
+      actionButtonsBox.style.display = 'none';
 
       // Azonnali Socrative kiértékelés megjelenítése
       showFeedback(result);
@@ -790,33 +1034,46 @@
   }
 
   /**
-   * Azonnali Socrative Visszajelzés Kártya
+   * Azonnali Socrative Visszajelzés (Kompakt 1 soros sáv, nulla görgetés)
    */
   function showFeedback(result) {
-    feedbackCard.style.display = 'block';
+    feedbackCard.style.display = 'flex';
 
     if (result.is_correct === 1) {
-      feedbackCard.className = 'feedback-box feedback-correct show';
-      feedbackTitle.innerHTML = '🎉 Helyes válasz!';
-      feedbackBody.innerHTML = `Kapott pont: <strong>${result.points_earned} pont</strong>`;
+      feedbackCard.className = 'quiz-feedback-strip quiz-feedback-strip-correct';
+      if (feedbackIcon) feedbackIcon.textContent = 'task_alt';
+      feedbackTitle.innerHTML = `🎉 Helyes válasz! (+${result.points_earned} pont)`;
+      if (result.explanation) {
+        feedbackBody.innerHTML = ` · <em>Magyarázat: ${formatCode(result.explanation)}</em>`;
+      } else {
+        feedbackBody.innerHTML = '';
+      }
     } else {
-      feedbackCard.className = 'feedback-box feedback-wrong show';
-      feedbackTitle.innerHTML = '❌ Helytelen válasz!';
-      feedbackBody.innerHTML = `
-        <div>A helyes megoldás: <strong>${formatCode(result.correctAnswer)}</strong></div>
-      `;
-    }
-
-    if (result.explanation) {
-      feedbackBody.innerHTML += `
-        <div style="margin-top: 8px; font-style: italic;">
-          Magyarázat: ${formatCode(result.explanation)}
-        </div>
-      `;
+      feedbackCard.className = 'quiz-feedback-strip quiz-feedback-strip-wrong';
+      if (feedbackIcon) feedbackIcon.textContent = 'cancel';
+      feedbackTitle.innerHTML = `❌ Helyes megoldás: <strong>${formatCode(result.correctAnswer)}</strong>`;
+      if (result.explanation) {
+        feedbackBody.innerHTML = ` · <em>${formatCode(result.explanation)}</em>`;
+      } else {
+        feedbackBody.innerHTML = '';
+      }
     }
 
     const isLast = (currentQuestionIndex + 1 >= currentQuestions.length) || result.isFinished;
-    btnNextQuestion.textContent = isLast ? 'Dolgozat befejezése 🏁' : 'Következő kérdés ➔';
+
+    // A kiértékelés pillanatában lép előre a folyamatjelző csík
+    const answeredCount = answeredQuestionIds.size;
+    const progressPct = Math.round((answeredCount / currentQuestions.length) * 100);
+    if (quizProgressBarFill) quizProgressBarFill.style.width = `${progressPct}%`;
+
+    const remainingCount = currentQuestions.length - answeredCount;
+    if (progressTextDone) progressTextDone.textContent = `${answeredCount}. befejezve`;
+    if (progressTextCurrent) progressTextCurrent.textContent = isLast ? 'Utolsó kérdés kiértékelve!' : `${currentQuestionIndex + 1}. kiértékelve`;
+    if (progressTextRemaining) progressTextRemaining.textContent = remainingCount === 0 ? 'Már nincs több hátra' : `${remainingCount} kérdés van hátra`;
+
+    btnNextQuestion.innerHTML = isLast
+      ? '<span>Befejezés</span> <span class="material-symbols-outlined">flag</span>'
+      : '<span>Következő</span> <span class="material-symbols-outlined">arrow_forward</span>';
 
     btnNextQuestion.onclick = () => {
       if (isLast) {
@@ -867,6 +1124,11 @@
   function showSummary(data) {
     loginContainer.style.display = 'none';
     if (studentTopBar) studentTopBar.style.display = 'none';
+    if (quizTopBar) quizTopBar.style.display = 'none';
+    if (studentEntryWrapper) studentEntryWrapper.classList.remove('quiz-active');
+    if (studentEntryInner) studentEntryInner.classList.remove('quiz-active');
+    quizContainer.style.display = 'none';
+    summaryContainer.style.display = 'block';
     quizContainer.style.display = 'none';
     summaryContainer.style.display = 'block';
 
@@ -874,10 +1136,11 @@
       if (data.totalPoints !== undefined && data.maxPoints !== undefined) {
         finalScore.textContent = `${data.totalPoints} / ${data.maxPoints} pont (${data.percentage || 0}%)`;
       }
-      if (data.gradeText) {
-        finalGrade.textContent = `Érdemjegy: ${data.gradeText}`;
-      } else if (data.grade) {
-        finalGrade.textContent = `Érdemjegy: ${data.grade}`;
+      if (data.grade) {
+        const gradeText = getKRÉTAGradeText(data.grade);
+        finalGrade.textContent = `Érdemjegy: ${data.grade} (${gradeText})`;
+      } else if (data.gradeText) {
+        finalGrade.textContent = `Érdemjegy: ${data.gradeText.toLowerCase()}`;
       }
     }
 

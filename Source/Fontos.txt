@@ -5,3 +5,25 @@ Jó lenne, ha az admin felületen a fejlécben nem foglalna olyan széles terül
 Űrhajós verseny esetén nem mindegyik csapatszínnél van törve két sorba az űrhajó ikon és a szín megnevezése. Ez így nem konzisztens. Legyen mindegyik kettő sorba törve. Valamint mit gondolsz, a csapatszín kiválasztása után azonnal induljon-e a teszt? Van, aki lassabban választ osztályt és nevet, így ő később kezdi a tesztet. Vagy ez számítson?
 ----
 Hogyan lehet az kiküszöbölni, hogy a kliens gépeken lévő parancsikonhoz ne fix IP címet írjunk be? Tudom, hogy egyik alapvető szabály az, hogy a szervernek fix IP címe kell legyen, de még ne ellenőriztem le azt, hogy ez így van-e. Ha nincs fiy IP címe, az abj, hiszen akkor az összes kliens gépen át kellene írni a parancsikonokban az IP címet. Milyen megoldások léteznek erre?
+
+4. Hogyan küszöbölhető ki a fix IP cím kézi beírása a 42 kliensgépen?
+
+Ez egy kulcsfontosságú iskolai üzemeltetési kérdés. Ha a szervernek nincs fix IP címe és újrainduláskor új DHCP címet kap, az valóban megbénítaná a fix IP-re mutató parancsikonokat.
+
+Erre 4 bevált, professzionális módszer létezik egy iskolai Windows hálózatban:
+
+Gépnév használata IP-cím helyett (Zéró konfiguráció, azonnal működik!):
+A Windows Server 2016-nak van egy hálózati számítógépneve (Computer Name), például: SZERVER vagy TANARI-SZERVER.
+A Windows hálózatok (NetBIOS / LLMNR / mDNS) automatikusan feloldják egymás nevét a helyi hálózaton.
+A klienseken lévő parancsikonban nem az IP-t kell megadni, hanem:
+http://SZERVER:3000 (vagy a pontos szervernévvel, pl. http://szerver.local:3000).
+Ha a szerver új IP címet is kap, a Windows kliensek a gépnév alapján továbbra is azonnal elérik!
+DHCP foglalás (DHCP Reservation a routeren / központi szerveren):
+A legegyszerűbb rendszergazdai megoldás: a hálózati routerben/szerveren a Windows Server hálózati kártyájának MAC címéhez (fizikai címéhez) hozzárendelnek egy állandó belső IP-t (pl. 192.168.1.100).
+Így a szerver marad DHCP beállításon, sosem lesz IP-ütközés, mégis mindig pontosan ugyanazt a címet kapja meg minden újraindításkor.
+Belső DNS A-rekord (ha a szerver futtatja az iskolai Active Directory-t / DNS-t):
+A Windows Server DNS kezelőjében felveszünk egy rekordot: ropdolgozat -> a szerver IP-címére. Ekkor a parancsikon: http://ropdolgozat:3000.
+Intelligens parancsikon automatikus gépszám-átadással:
+A diákok Asztalára kirakott parancsikon céljába beírható a Windows környezeti változója:
+chrome.exe http://SZERVER:3000/?pc=%COMPUTERNAME%
+Így nemcsak a szerver nevét találja meg dinamikusan, hanem a böngésző azonnal átadja a tanulói gép sorszámát is (pl. a PC-12 névből a 12-t), így a diáknak és a tanárnak még a gépszámot sem kell kézzel kiválasztania vagy beállítania!

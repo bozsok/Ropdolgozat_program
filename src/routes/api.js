@@ -458,6 +458,15 @@ router.get('/student/session-data', (req, res) => {
     const gradeText = grader.getGradeText(grade);
 
     res.json({
+      session: {
+        id: participant.session_id,
+        subject_name: participant.subject_name,
+        grade_level: participant.grade_level,
+        class_name: participant.session_class_name,
+        quiz_title: participant.quiz_title,
+        mode: participant.mode,
+        grade_thresholds_json: participant.grade_thresholds_json
+      },
       participant: {
         id: participant.id,
         session_id: participant.session_id,

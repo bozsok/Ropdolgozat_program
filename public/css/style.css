@@ -1482,4 +1482,894 @@ h1, h2, h3, h4, h5 {
   color: var(--text-main);
 }
 
+/* ==========================================================================
+   CALM LEARNER DIÁK TESZTFELÜLET (Választós és Igaz-Hamis kérdések)
+   SZABÁLY: Tilos az !important használata (Rule 2)
+   ========================================================================== */
+
+/* Szélesebb munkaterület és felső igazítás dolgozatírás közben (75px hézag megszüntetése) */
+.student-entry-wrapper.quiz-active {
+  justify-content: flex-start;
+  padding: 8px 16px 16px 16px;
+}
+
+.student-entry-inner.quiz-active {
+  max-width: 760px;
+  width: 100%;
+  margin-top: 0;
+  transition: max-width 0.25s ease;
+}
+
+/* Dolgozat dedikált felső fejléce (Admin Live Badge-dzsel egyező) */
+.quiz-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  width: 100%;
+  gap: 10px;
+}
+
+.quiz-header-channel-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.quiz-header-actions-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quiz-user-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 5px;
+  border-radius: 9999px;
+  background-color: var(--surface-low);
+  border: 1px solid var(--border-color);
+}
+
+.quiz-user-icon-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.quiz-user-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.quiz-timer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background-color: var(--primary-light);
+  color: var(--on-primary-fixed);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.quiz-exit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.quiz-exit-btn:hover {
+  background-color: var(--surface-high);
+  color: var(--text-main);
+  border-color: var(--border-color);
+}
+
+/* Felső állapot és haladási kártya (Kompakt) */
+.quiz-progress-card {
+  background-color: var(--surface-lowest);
+  border-radius: 12px;
+  box-shadow: 0 1px 6px rgba(27, 27, 30, 0.04);
+  border: 1.5px solid var(--border-color);
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.quiz-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.quiz-progress-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quiz-progress-count {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+.quiz-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background-color: var(--surface-low);
+  border: 1px solid var(--border-color);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.quiz-metrics-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quiz-metric-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.quiz-metric-score {
+  background-color: var(--secondary-fixed);
+  color: var(--on-secondary-fixed);
+}
+
+.quiz-metric-grade {
+  background-color: var(--surface-low);
+  color: var(--primary);
+  border: 1px solid var(--border-color);
+}
+
+.quiz-metric-grade-label {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.78rem;
+}
+
+.quiz-progress-track {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  background-color: var(--surface-high);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.quiz-progress-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background-color: var(--primary);
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.quiz-progress-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  padding: 0 2px;
+}
+
+.quiz-status-muted {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.quiz-status-active {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+/* Fő Kérdéskártya (Kompakt méret, nulla felesleges scrollozás) */
+.quiz-main-card {
+  background-color: var(--surface-lowest);
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(27, 27, 30, 0.05);
+  border: 1.5px solid var(--border-color);
+  padding: 14px 18px;
+  margin-bottom: 6px;
+  width: 100%;
+  min-height: 380px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+.quiz-question-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.quiz-qnum-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 800;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(234, 88, 12, 0.25);
+}
+
+.quiz-question-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.quiz-question-text {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.35;
+  margin-bottom: 2px;
+}
+
+.quiz-question-hint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.quiz-image-box {
+  margin: 8px 0 12px 0;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background-color: var(--surface-low);
+  text-align: center;
+  border: 1px solid var(--border-color);
+}
+
+.quiz-image {
+  max-width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+/* Választós kérdés (ABCD) kártyák */
+.quiz-options-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.quiz-option-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background-color: var(--surface-lowest);
+  border: 1.5px solid var(--border-color);
+  box-shadow: 0 1px 4px rgba(27, 27, 30, 0.04);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.quiz-option-tile:hover {
+  background-color: var(--surface-low);
+  border-color: #dcd9dd;
+}
+
+.quiz-option-tile.selected {
+  background-color: #fff7ed;
+  border-color: var(--primary);
+  box-shadow: 0 2px 10px rgba(163, 57, 0, 0.12);
+}
+
+.quiz-option-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.quiz-option-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--surface-high);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.quiz-option-tile.selected .quiz-option-badge {
+  background-color: var(--primary);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(234, 88, 12, 0.35);
+}
+
+.quiz-option-text {
+  font-size: 1.05rem;
+  color: var(--text-main);
+  font-weight: 500;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.quiz-option-tile.selected .quiz-option-text {
+  font-weight: 700;
+}
+
+.quiz-option-radio {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--surface-high);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.quiz-option-check {
+  font-size: 16px;
+  font-weight: 800;
+  color: transparent;
+}
+
+.quiz-option-tile.selected .quiz-option-radio {
+  background-color: var(--primary);
+}
+
+.quiz-option-tile.selected .quiz-option-check {
+  color: #ffffff;
+}
+
+/* Igaz / Hamis (TF) kártyák 2 oszlopos rácsa */
+.quiz-tf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 640px) {
+  .quiz-tf-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.quiz-tf-tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-low);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 100px;
+  text-align: left;
+  user-select: none;
+}
+
+.quiz-tf-tile:hover {
+  background-color: var(--surface-high);
+}
+
+.quiz-tf-tile.selected {
+  background-color: #fff7ed;
+  border-color: var(--primary);
+  box-shadow: 0 4px 14px rgba(163, 57, 0, 0.12);
+}
+
+.quiz-tf-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.quiz-tf-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background-color: var(--surface-high);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.quiz-tf-tile.selected .quiz-tf-badge {
+  background-color: var(--primary);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.35);
+}
+
+.quiz-tf-title-wrap {
+  margin-top: 4px;
+}
+
+.quiz-tf-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+.quiz-tf-tile.selected .quiz-tf-label {
+  color: var(--primary);
+}
+
+.quiz-tf-name {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-top: 2px;
+}
+
+.quiz-tf-radio {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: var(--surface-high);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quiz-tf-radio .material-symbols-outlined {
+  font-size: 16px;
+  color: transparent;
+}
+
+.quiz-tf-tile.selected .quiz-tf-radio {
+  background-color: var(--primary);
+}
+
+.quiz-tf-tile.selected .quiz-tf-radio .material-symbols-outlined {
+  color: #ffffff;
+}
+
+.quiz-tf-desc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.quiz-tf-tile.selected .quiz-tf-desc {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+/* SHORT kérdés mező */
+.quiz-short-wrap {
+  margin-bottom: 12px;
+}
+
+.quiz-short-input-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.quiz-short-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--text-muted);
+  font-size: 20px;
+}
+
+.quiz-short-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px 0 44px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-family: inherit;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border-color);
+  background-color: #ffffff;
+  color: var(--text-main);
+  transition: all 0.15s ease;
+}
+
+.quiz-short-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
+}
+
+/* Alsó rögzített lábléc zóna (stabil magasság, nincs ugrálás) */
+.quiz-footer-zone {
+  width: 100%;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.quiz-footer-zone .quiz-action-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.quiz-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+  width: 100%;
+}
+
+.quiz-action-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  flex: 1;
+  min-width: 160px;
+}
+
+.quiz-action-tip .material-symbols-outlined {
+  font-size: 16px;
+  color: var(--secondary);
+}
+
+.quiz-btn-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 150px;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 8px;
+  border: none;
+  background-color: var(--primary);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.2);
+  transition: all 0.15s ease;
+}
+
+.quiz-btn-submit:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3);
+  transform: translateY(-1px);
+}
+
+.quiz-btn-submit:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.quiz-btn-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Kompakt 1 soros azonnali Socrative visszajelző sáv (nulla vertikális scrollozás) */
+.quiz-feedback-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  min-height: 42px;
+  box-sizing: border-box;
+}
+
+.quiz-feedback-strip-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
+.quiz-feedback-strip-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.quiz-feedback-strip-title {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.quiz-feedback-strip-body {
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quiz-feedback-strip-correct {
+  background-color: var(--success-bg);
+  border: 1px solid var(--success-border);
+  color: #14532d;
+}
+
+.quiz-feedback-strip-correct .quiz-feedback-strip-icon {
+  color: var(--success);
+}
+
+.quiz-feedback-strip-wrong {
+  background-color: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: #7f1d1d;
+}
+
+.quiz-feedback-strip-wrong .quiz-feedback-strip-icon {
+  color: var(--danger);
+}
+
+.quiz-btn-next-compact {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: none;
+  background-color: var(--primary);
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(234, 88, 12, 0.2);
+  transition: all 0.15s ease;
+}
+
+.quiz-btn-next-compact:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+/* Kompakt megnyugtató alsó tipp sáv (1 soros) */
+.quiz-calm-tip-compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 6px;
+  width: 100%;
+}
+
+.quiz-calm-tip-icon-sm {
+  font-size: 16px;
+  color: var(--secondary);
+  flex-shrink: 0;
+}
+
+.quiz-calm-tip-text-sm {
+  line-height: 1.3;
+}
+
+/* Kompatibilitási visszajelző kártya stílusok */
+.quiz-feedback-card {
+  margin-top: auto;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  transition: all 0.2s ease;
+}
+
+.quiz-feedback-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.quiz-feedback-icon-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.quiz-feedback-icon-circle .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.quiz-feedback-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.quiz-feedback-points {
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.quiz-feedback-body {
+  font-size: 0.92rem;
+  line-height: 1.4;
+  margin: 8px 0 10px 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+.quiz-feedback-action-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.quiz-btn-next {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 160px;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 8px;
+  border: none;
+  background-color: var(--primary);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.2);
+  transition: all 0.15s ease;
+}
+
+.quiz-btn-next:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.quiz-feedback-correct {
+  background-color: var(--success-bg);
+  border: 1.5px solid var(--success-border);
+  color: #14532d;
+}
+
+.quiz-feedback-correct .quiz-feedback-icon-circle {
+  background-color: var(--success);
+  color: #ffffff;
+}
+
+.quiz-feedback-wrong {
+  background-color: var(--danger-bg);
+  border: 1.5px solid var(--danger-border);
+  color: #7f1d1d;
+}
+
+.quiz-feedback-wrong .quiz-feedback-icon-circle {
+  background-color: var(--danger);
+  color: #ffffff;
+}
+
+.quiz-calm-tip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-lowest);
+  border: 1px solid var(--border-color);
+  margin-top: 6px;
+  width: 100%;
+}
+
+.quiz-calm-tip-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--secondary-fixed);
+  color: var(--on-secondary-fixed);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.quiz-calm-tip-icon .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.quiz-calm-tip-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.quiz-calm-tip-text {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
 

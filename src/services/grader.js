@@ -143,15 +143,15 @@ function calculateGrade(percentage, thresholds = { 2: 30, 3: 55, 4: 75, 5: 90 })
 }
 
 /**
- * Szöveges érdemjegy megnevezés (MTA helyesírás szerint)
+ * Szöveges érdemjegy megnevezés (MTA 12. kiadása szerinti kisbetűs magyar helyesírással)
  */
 function getGradeText(grade) {
   switch (Number(grade)) {
-    case 5: return 'Jeles (5)';
-    case 4: return 'Jó (4)';
-    case 3: return 'Közepes (3)';
-    case 2: return 'Elégséges (2)';
-    case 1: return 'Elégtelen (1)';
+    case 5: return '5 (jeles)';
+    case 4: return '4 (jó)';
+    case 3: return '3 (közepes)';
+    case 2: return '2 (elégséges)';
+    case 1: return '1 (elégtelen)';
     default: return '–';
   }
 }
