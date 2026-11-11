@@ -34,6 +34,12 @@
   const inputPin = document.getElementById('input-pin');
   const btnLoginSubmit = document.getElementById('btn-login-submit');
   const btnLoginCancel = document.getElementById('btn-login-cancel');
+  const btnLoginClose = document.getElementById('btn-login-close');
+  const btnTogglePinVisibility = document.getElementById('btn-toggle-pin-visibility');
+  const eyeIcon = document.getElementById('eye-icon');
+  const teacherLoginError = document.getElementById('teacher-login-error');
+  const teacherLoginErrorText = document.getElementById('teacher-login-error-text');
+  const studentTopBar = document.getElementById('student-top-bar');
   const formTeacherLogin = document.getElementById('form-teacher-login');
 
   // Belépési lenyíló listák és gombok (3 Lenyíló lista, 0 Gépelés)
@@ -87,8 +93,7 @@
     if (gepParam) {
       pcNumber = parseInt(gepParam, 10);
       if (!isNaN(pcNumber) && pcNumber >= 1 && pcNumber <= 42) {
-        pcBadge.style.display = 'block';
-        pcNumberText.textContent = `${pcNumber}. gép`;
+        if (pcNumberText) pcNumberText.textContent = `${pcNumber}. gép`;
       }
     }
 
@@ -151,10 +156,27 @@
     if (btnOpenLogin) {
       btnOpenLogin.addEventListener('click', () => {
         openModal('login-modal');
+        if (teacherLoginError) teacherLoginError.style.display = 'none';
         if (inputPin) {
           inputPin.value = '';
+          inputPin.type = 'password';
+          if (eyeIcon) eyeIcon.textContent = 'visibility';
           setTimeout(() => inputPin.focus(), 100);
         }
+      });
+    }
+
+    if (btnLoginClose) {
+      btnLoginClose.addEventListener('click', () => {
+        closeModal('login-modal');
+      });
+    }
+
+    if (btnTogglePinVisibility && inputPin && eyeIcon) {
+      btnTogglePinVisibility.addEventListener('click', () => {
+        const isPassword = inputPin.type === 'password';
+        inputPin.type = isPassword ? 'text' : 'password';
+        eyeIcon.textContent = isPassword ? 'visibility_off' : 'visibility';
       });
     }
 
@@ -183,12 +205,26 @@
           if (res.ok && data.success) {
             window.location.href = '/admin';
           } else {
-            alert(data.message || 'Helytelen tanári jelszó!');
+            if (teacherLoginError) {
+              teacherLoginError.style.display = 'flex';
+              if (teacherLoginErrorText) {
+                teacherLoginErrorText.textContent = data.message || 'Helytelen tanári jelszó! Próbáld újra.';
+              }
+            } else {
+              alert(data.message || 'Helytelen tanári jelszó!');
+            }
             inputPin.value = '';
             inputPin.focus();
           }
         } catch (err) {
-          alert('Hálózati hiba a bejelentkezés során!');
+          if (teacherLoginError) {
+            teacherLoginError.style.display = 'flex';
+            if (teacherLoginErrorText) {
+              teacherLoginErrorText.textContent = 'Hálózati hiba a bejelentkezés során!';
+            }
+          } else {
+            alert('Hálózati hiba a bejelentkezés során!');
+          }
         }
       });
     }
@@ -532,6 +568,7 @@
 
     // Felület váltás
     loginContainer.style.display = 'none';
+    if (studentTopBar) studentTopBar.style.display = 'none';
     quizContainer.style.display = 'block';
 
     quizTitle.textContent = currentQuiz.title;
@@ -776,6 +813,7 @@
 
   function showSummary(data) {
     loginContainer.style.display = 'none';
+    if (studentTopBar) studentTopBar.style.display = 'none';
     quizContainer.style.display = 'none';
     summaryContainer.style.display = 'block';
 

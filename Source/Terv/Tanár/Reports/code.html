@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+
+<html lang="hu"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="web_standard" name="shell-type"/>
+<title>Okoskodó - Korábbi dolgozatok</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,200..1000;1,6..12,200..1000&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+    @layer base {
+      html, body { margin: 0; padding: 0; }
+      body { overscroll-behavior: none; }
+    }
+  </style>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#ea580c",
+            "primary-container": "#c2410c",
+            "primary-fixed": "#ffdbce",
+            "on-primary": "#ffffff",
+            surface: "#fbf8fc",
+            "surface-low": "#f5f3f6",
+            "surface-card": "#ffffff",
+            "surface-container": "#f0edf1",
+            "surface-container-low": "#f5f3f6",
+            "surface-container-high": "#eae7eb",
+            "surface-container-lowest": "#ffffff",
+            "on-surface": "#1b1b1e",
+            "on-surface-variant": "#635853",
+            outline: "#8e7166",
+            "outline-variant": "#e5dfdc",
+            danger: "#ba1a1a",
+            "danger-soft": "#fef2f2"
+          },
+          fontFamily: {
+            sans: ["Nunito Sans", "sans-serif"]
+          },
+          borderRadius: {
+            xl: "0.75rem",
+            "2xl": "1rem"
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="bg-surface font-sans text-on-surface antialiased min-h-screen flex flex-col selection:bg-primary-fixed selection:text-primary">
+<!-- Header: Aligned with student portal style (Clean, White, Official Logo) -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-surface-container/80 shadow-[0_1px_6px_rgba(0,0,0,0.03)]">
+<div class="max-w-[1440px] mx-auto px-5 lg:px-8">
+<!-- Top Row -->
+<div class="h-16 flex items-center justify-between gap-4">
+<!-- Logo + Class context badge -->
+<div class="flex items-center gap-4">
+<a class="flex items-center gap-3" href="#">
+<img alt="Okoskodó" class="h-9 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAse2SOgfu_bsnSdcDuPfDJNgWBUKlFtrODvh2kuHsx7t4WXVgtR-0EZt01PV9UlzlKxDJir8xnVAzphflgfoubFnXmCfA04Y8bqCODAZA8rKv8dcT-w6j7ayeOwP9rJBDrpWNUMBZr1TpEhVbchn0m0oF5yKnNhR3jbijv09HbdUaQ0YbCIktm-vHKtGwFYiIOXYIbvLUq6hgMmTWJfxNoqBp2pULqpDjcVuDwSLGnk0opGLr3Sh5K"/>
+</a>
+<div class="hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-low border border-outline-variant/50 text-xs font-semibold text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span>Digitális kultúra • 5.a</span>
+</div>
+</div>
+<!-- Right Side: Teacher Profile & Logout -->
+<div class="flex items-center gap-3">
+<div class="inline-flex items-center gap-2.5 pl-2 pr-3 py-1 rounded-full bg-surface-low border border-outline-variant/60">
+<div class="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shadow-sm">
+              NÁ
+            </div>
+<div class="flex flex-col text-left">
+<span class="text-xs font-bold leading-tight text-on-surface">Nagy Ádám</span>
+<span class="text-[11px] leading-tight text-on-surface-variant">szaktanár</span>
+</div>
+</div>
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-on-surface-variant hover:text-danger hover:bg-danger-soft transition-colors" data-path="kijelentkezes" title="Kilépés" type="button">
+<span class="material-symbols-outlined text-[18px]">logout</span>
+<span class="hidden md:inline">Kilépés</span>
+</button>
+</div>
+</div>
+<!-- Navigation Tabs (Calm rounded line pills) -->
+<nav class="flex items-center gap-2 overflow-x-auto no-scrollbar -mb-px pt-1 pb-2">
+<a class="px-4 py-1.5 rounded-lg text-xs md:text-sm font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-low transition-colors flex items-center gap-1.5" data-path="elo-felugyelet-matrix" href="#">
+<span class="material-symbols-outlined text-[17px]">grid_view</span>
+          Élő felügyelet (Mátrix)
+        </a>
+<a class="px-4 py-1.5 rounded-lg text-xs md:text-sm font-bold bg-primary text-white shadow-sm flex items-center gap-1.5" data-path="reports-korabbi-dolgozatok" href="#">
+<span class="material-symbols-outlined text-[17px]">history_edu</span>
+          Reports / Korábbi dolgozatok
+        </a>
+<a class="px-4 py-1.5 rounded-lg text-xs md:text-sm font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-low transition-colors flex items-center gap-1.5" data-path="export" href="#">
+<span class="material-symbols-outlined text-[17px]">file_download</span>
+          Export (.xlsx, .pdf, .html)
+        </a>
+<a class="px-4 py-1.5 rounded-lg text-xs md:text-sm font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-low transition-colors flex items-center gap-1.5" data-path="beallitasok-es-biztonsagi-mentes" href="#">
+<span class="material-symbols-outlined text-[17px]">tune</span>
+          Beállítások és mentés
+        </a>
+</nav>
+</div>
+</header>
+<!-- Main Body Content -->
+<main class="w-full flex-1 pt-28 pb-16">
+<div class="max-w-5xl mx-auto px-5 lg:px-8 flex flex-col gap-6">
+<!-- Breadcrumb Bar -->
+<div class="flex flex-wrap items-center justify-between gap-3 text-on-surface-variant text-xs bg-surface-container-low px-4 py-2.5 rounded-xl border border-outline-variant/40">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-primary">school</span>
+<span>Digitális kultúra</span>
+<span class="text-outline-variant">•</span>
+<span>Tanári Portál</span>
+<span class="text-outline-variant">•</span>
+<span class="font-bold text-on-surface">Korábbi dolgozatok</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant font-semibold">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span>5. évfolyam</span>
+</div>
+</div>
+<!-- Title & Description Header -->
+<div class="flex flex-col gap-1 pt-1">
+<h1 class="text-2xl md:text-3xl font-extrabold text-on-surface tracking-tight">Korábbi dolgozatok</h1>
+<p class="text-sm md:text-base text-on-surface-variant">A lezárt dolgozatok áttekintése időrendben.</p>
+</div>
+<!-- Single Row Search & Filter Bar -->
+<div class="bg-white border border-[#e5dfdc] rounded-2xl p-3 shadow-sm flex flex-col sm:flex-row items-center gap-3">
+<div class="relative flex-1 w-full">
+<span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[20px] text-on-surface-variant/70">search</span>
+<input class="w-full pl-10 pr-4 py-2 text-sm bg-surface-container-low/60 rounded-xl border border-outline-variant/50 focus:bg-white focus:outline-none focus:border-primary text-on-surface placeholder:text-on-surface-variant/60 transition-colors" placeholder="Keresés dolgozat címe szerint..." type="text"/>
+</div>
+<div class="w-full sm:w-56">
+<select class="w-full px-3.5 py-2 text-sm bg-surface-container-low/60 rounded-xl border border-outline-variant/50 focus:bg-white focus:outline-none focus:border-primary text-on-surface font-semibold transition-colors cursor-pointer">
+<option value="all">Összes osztály</option>
+<option value="5a">5.a osztály</option>
+<option value="5b">5.b osztály</option>
+</select>
+</div>
+</div>
+<!-- Chronological List of Past Tests -->
+<div class="flex flex-col gap-3.5 pt-1">
+<!-- Card 1: Hardver és perifériák -->
+<div class="bg-white border border-[#e5dfdc] rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-xl bg-[#ffdbce] text-[#ea580c] flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+<span class="material-symbols-outlined text-[24px]">devices</span>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="flex flex-wrap items-center gap-2">
+<h3 class="text-base md:text-lg font-bold text-on-surface leading-tight">Hardver és perifériák röpdolgozat</h3>
+</div>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-on-surface-variant">
+<span class="px-2.5 py-0.5 rounded-full bg-surface-low border border-outline-variant/50 font-bold text-on-surface">5.a osztály</span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant/80">calendar_today</span>
+                  2025. május 12. • 10:15 - 10:35
+                </span>
+<span class="text-outline-variant">•</span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant/80">group</span>
+                  24 / 24 diák kitöltötte
+                </span>
+<span class="text-outline-variant">•</span>
+<span class="font-bold text-primary">Átlag: 4.2 (84%)</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2.5 self-start md:self-center flex-shrink-0 pt-2 md:pt-0">
+<button class="px-4 py-2 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs md:text-sm shadow-sm transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">grid_view</span>
+<span>Mátrix megtekintése</span>
+</button>
+<button class="px-3.5 py-2 rounded-xl bg-white hover:bg-surface-low text-on-surface font-semibold text-xs md:text-sm border border-[#e5dfdc] transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span>Exportálás</span>
+</button>
+</div>
+</div>
+<!-- Card 2: Számítógépes hálózatok -->
+<div class="bg-white border border-[#e5dfdc] rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-xl bg-[#ffdbce] text-[#ea580c] flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+<span class="material-symbols-outlined text-[24px]">lan</span>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="flex flex-wrap items-center gap-2">
+<h3 class="text-base md:text-lg font-bold text-on-surface leading-tight">Számítógépes hálózatok és internet alapjai</h3>
+</div>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-on-surface-variant">
+<span class="px-2.5 py-0.5 rounded-full bg-surface-low border border-outline-variant/50 font-bold text-on-surface">5.a osztály</span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant/80">calendar_today</span>
+                  2025. április 28. • 08:50 - 09:10
+                </span>
+<span class="text-outline-variant">•</span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant/80">group</span>
+                  25 / 25 diák kitöltötte
+                </span>
+<span class="text-outline-variant">•</span>
+<span class="font-bold text-primary">Átlag: 4.5 (90%)</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2.5 self-start md:self-center flex-shrink-0 pt-2 md:pt-0">
+<button class="px-4 py-2 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs md:text-sm shadow-sm transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">grid_view</span>
+<span>Mátrix megtekintése</span>
+</button>
+<button class="px-3.5 py-2 rounded-xl bg-white hover:bg-surface-low text-on-surface font-semibold text-xs md:text-sm border border-[#e5dfdc] transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span>Exportálás</span>
+</button>
+</div>
+</div>
+<!-- Card 3: Ergonomikus munkakörnyezet -->
+<div class="bg-white border border-[#e5dfdc] rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-xl bg-[#ffdbce] text-[#ea580c] flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+<span class="material-symbols-outlined text-[24px]">chair</span>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="flex flex-wrap items-center gap-2">
+<h3 class="text-base md:text-lg font-bold text-on-surface leading-tight">Ergonomikus munkakörnyezet és billentyűzetkezelés</h3>
+</div>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-on-surface-variant">
+<span class="px-2.5 py-0.5 rounded-full bg-surface-low border border-outline-variant/50 font-bold text-on-surface">5.b osztály</span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant/80">calendar_today</span>
+                  2025. április 14. • 11:45 - 12:05
+                </span>
+<span class="text-outline-variant">•</span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant/80">group</span>
+                  23 / 24 diák kitöltötte
+                </span>
+<span class="text-outline-variant">•</span>
+<span class="font-bold text-primary">Átlag: 3.9 (78%)</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2.5 self-start md:self-center flex-shrink-0 pt-2 md:pt-0">
+<button class="px-4 py-2 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs md:text-sm shadow-sm transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">grid_view</span>
+<span>Mátrix megtekintése</span>
+</button>
+<button class="px-3.5 py-2 rounded-xl bg-white hover:bg-surface-low text-on-surface font-semibold text-xs md:text-sm border border-[#e5dfdc] transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span>Exportálás</span>
+</button>
+</div>
+</div>
+<!-- Card 4: Fájlkezelés és mappa-struktúrák -->
+<div class="bg-white border border-[#e5dfdc] rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-xl bg-[#ffdbce] text-[#ea580c] flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+<span class="material-symbols-outlined text-[24px]">folder_open</span>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="flex flex-wrap items-center gap-2">
+<h3 class="text-base md:text-lg font-bold text-on-surface leading-tight">Fájlkezelés és mappa-struktúrák</h3>
+</div>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-on-surface-variant">
+<span class="px-2.5 py-0.5 rounded-full bg-surface-low border border-outline-variant/50 font-bold text-on-surface">5.a osztály</span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant/80">calendar_today</span>
+                  2025. március 24. • 10:15 - 10:35
+                </span>
+<span class="text-outline-variant">•</span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant/80">group</span>
+                  24 / 24 diák kitöltötte
+                </span>
+<span class="text-outline-variant">•</span>
+<span class="font-bold text-primary">Átlag: 4.6 (92%)</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2.5 self-start md:self-center flex-shrink-0 pt-2 md:pt-0">
+<button class="px-4 py-2 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs md:text-sm shadow-sm transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">grid_view</span>
+<span>Mátrix megtekintése</span>
+</button>
+<button class="px-3.5 py-2 rounded-xl bg-white hover:bg-surface-low text-on-surface font-semibold text-xs md:text-sm border border-[#e5dfdc] transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span>Exportálás</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Pagination -->
+<div class="flex items-center justify-between pt-4 pb-2 px-1 text-on-surface-variant text-xs md:text-sm">
+<span>Megjelenítve: 1 - 4 dolgozat (összesen: 4 db)</span>
+<div class="flex items-center gap-2">
+<span class="font-semibold text-xs text-on-surface mr-1">1 / 2 oldal</span>
+<button class="w-8 h-8 rounded-lg bg-surface-container-low text-outline-variant flex items-center justify-center cursor-not-allowed border border-outline-variant/40" disabled="" type="button">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-[#ea580c] text-white font-bold text-xs flex items-center justify-center shadow-sm" type="button">
+            1
+          </button>
+<button class="w-8 h-8 rounded-lg bg-white text-on-surface hover:bg-surface-low font-semibold text-xs flex items-center justify-center border border-outline-variant/60 transition-colors" type="button">
+            2
+          </button>
+<button class="w-8 h-8 rounded-lg bg-white text-on-surface hover:bg-surface-low flex items-center justify-center border border-outline-variant/60 transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Clean Minimalist Footer -->
+<footer class="w-full bg-white border-t border-outline-variant/60 py-4 mt-auto">
+<div class="max-w-[1440px] mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-on-surface-variant text-xs">
+<div>Okoskodó Tanári Portál • Nyugodt és modern felmérő rendszer 3–6. osztályosoknak</div>
+<div class="flex items-center gap-5">
+<span>Oktatói Forródrót: +36 1 455 2020</span>
+<a class="hover:text-primary transition-colors font-semibold" data-path="segitseg" href="#">Pedagógus Súgóközpont</a>
+</div>
+</div>
+</footer>
+</body></html>

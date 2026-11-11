@@ -4,6 +4,44 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.5.0] – 2026-11-11
+
+### Főoldali „Calm Learner” arculat, 100% offline helyi betűkészletek (Nunito Sans & Material Symbols), tantermi gépszám-kijelzés és Best Practice font-renderelés
+
+A diákok vizsgadrukkját csökkentő, meleg és letisztult intézményi dizájn („Calm Learner”) megvalósítása külső keretrendszerek (Tailwind) nélkül, a 100% offline működést garantáló helyi betűkészlet-architektúra kialakítása, valamint a tantermi azonosítást segítő gépszámozási rendszer bevezetése.
+
+#### Hozzáadva (Added)
+* **100% Offline helyi betűkészletek és ikonkészlet integrációja:**
+  - **Fájlok:** [`public/fonts/nunito-sans-latin.woff2`](file:///d:/dev/Röpdolgozat%20program/public/fonts/nunito-sans-latin.woff2), [`public/fonts/nunito-sans-latin-ext.woff2`](file:///d:/dev/Röpdolgozat%20program/public/fonts/nunito-sans-latin-ext.woff2), [`public/fonts/nunito-sans.ttf`](file:///d:/dev/Röpdolgozat%20program/public/fonts/nunito-sans.ttf), [`public/fonts/material-symbols-outlined.woff2`](file:///d:/dev/Röpdolgozat%20program/public/fonts/material-symbols-outlined.woff2), [`public/fonts/material-symbols-outlined.ttf`](file:///d:/dev/Röpdolgozat%20program/public/fonts/material-symbols-outlined.ttf)
+  - A szigorúan zárt iskolai helyi hálózat (LAN) elvárásainak megfelelően a modern, kerekded Google Nunito Sans betűcsalád és a Google Material Symbols Outlined ikongyűjtemény a helyi kiszolgáló `public/fonts/` könyvtárába került letöltésre és beépítésre.
+  - A rendszer egyetlen külső CDN-t, Google Fonts hivatkozást sem vesz igénybe; az összes kliensgép teljesen offline módban, azonnal betölti az arculati elemeket.
+
+* **„Calm Learner” diák főoldal és felhasználói élmény:**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `Source/Terv/Főoldal` alapján átültetett arculat: meleg narancssárga márkahangsúly (`#ea580c`), nyugodt háttérszínek (`#fbf8fc`, `#f5f3f6`), 20 px lekerekítésű kártyák és finom kártyaárnyékok.
+  - Szigorúan CSS-keretrendszerek (Tailwind) nélkül, tiszta Vanilla CSS3 és HTML5 technológiával, az `!important` szabály teljes mellőzésével.
+  - **3 lépéses vizuális folyamatjelző (Stepper):** Látványos, számozott körjelvényekkel jelölt lépések (1. Tantárgy → 2. Osztály → 3. Diák neve), amelyek azonnali vizuális visszajelzést adnak a kitöltöttségről.
+  - **Megnyugtató indítási sáv:** Diszkrét ikonnal kísért biztató üzenet a feszültségmentes dolgozatkezdéshez.
+  - **Modernizált tanári belépési modál:** Kártya alapú felugró ablak jelszóelrejtő/felfedő szem-ikonnal, ESC és Enter billentyűk kezelésével.
+  - **Calm Learner stílusú Space Race csapatválasztó:** 4 oszlopos színes kártyák (Kék, Piros, Zöld, Sárga) mikroanimációkkal és kiemeléssel.
+
+#### Módosítva (Changed)
+* **Fejléc optimalizálása – Tantermi gépszám a tanév helyett:**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A felhasználói kérésnek megfelelően a felső információs sávban az aktuális tanév helyett a tanuló gépszámának kijelzése jelenik meg (pl. `💻 12. számú gép`).
+  - A kliens a gépszámot az URL paraméterből (`?pc=12`) vagy a helyi tárolóból olvassa be, így a tantermi 42 kliensgépen a parancsikonból vagy automatizmusból indított böngésző azonnal a helyes gépazonosítót mutatja.
+
+* **Best Practice WOFF2 font-renderelés és öröklődés javítása:**
+  - **Fájl:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Megszüntetésre került a WOFF2 subsetting csapda: a korábbi egyetlen `@font-face` blokk szétválasztásra került szabványos `latin` és `latin-ext` definíciókra pontos `unicode-range` tartományokkal. Ezzel elhárult a böngészők csendes visszaesése a Segoe UI rendszerbetűtípusra, és a felület minden szöveges eleme (kiemelten a `.calm-subtitle`) a Nunito Sans betűtípussal jelenik meg.
+  - Beágyazásra került a teljes TTF formátum biztonsági tartalékként, valamint a globális `button, input, select, textarea { font-family: inherit; }` szabály, szavatolva az űrlapmezők egységes tipográfiáját.
+
+* **Rendszerszintű verziószámok és dokumentáció aktualizálása:**
+  - **Fájlok:** [`package.json`](file:///d:/dev/Röpdolgozat%20program/package.json), [`project-context.md`](file:///d:/dev/Röpdolgozat%20program/project-context.md), [`README.md`](file:///d:/dev/Röpdolgozat%20program/README.md)
+  - A projektverzió egységesen `v1.5.0`-ra frissült, a könyvtárstruktúra pedig kibővült a `public/fonts/` helyi betűkészlet-tárral.
+
+---
+
 ## [1.4.0] – 2026-11-10
 
 ### Vizuális arculatváltás (Okoskodó logó és figura favicon), szigorított környezeti követelmények és Zero-Install szerverüzembehelyezés (Windows Server 2016+)

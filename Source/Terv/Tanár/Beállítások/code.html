@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+
+<html lang="hu"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="web_standard" name="shell-type"/>
+<title>Okoskodó Tanári Portál - Beállítások és mentés</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&amp;family=Nunito+Sans:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<style>
+    @layer base {
+      html, body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Nunito', 'Nunito Sans', system-ui, -apple-system, sans-serif;
+      }
+      body { overscroll-behavior: none; }
+    }
+</style>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fff7ed',
+              100: '#ffedd5',
+              200: '#fed7aa',
+              500: '#f97316',
+              600: '#ea580c',
+              700: '#c2410c',
+            }
+          },
+          fontFamily: {
+            sans: ['Nunito', 'Nunito Sans', 'sans-serif'],
+          }
+        }
+      }
+    };
+</script>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 font-sans antialiased min-h-screen flex flex-col selection:bg-orange-100 selection:text-orange-900">
+<!-- Header: Teacher Portal navigation -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200">
+<div class="max-w-[1240px] mx-auto px-4 sm:px-6">
+<!-- Top Bar: Logo, Subject/Class Indicator, Teacher Profile & Logout -->
+<div class="h-16 flex items-center justify-between gap-4">
+<!-- Left: Logo & Class context pill -->
+<div class="flex items-center gap-3">
+<a class="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-orange-500 rounded-lg py-1" data-path="elo-felugyelet-matrix" href="#">
+<img alt="Okoskodó - röpdolgozat program" class="h-9 sm:h-10 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCEMNykkHvHiYntUB6p9xGedqKXvFVF2oc0QyhbuPT_Z2KUp6An8X1plsSYH5M8DnaAxRARon29BzObbhhrZCHFRFgqJgxoh7yp7gvoIa_4EmOroJBDqggsiGvdwx-TCwB7feFslns-mQDIx8c1Z1y5nF1TFrLwOdEa03tGt4IpZbMnQ7S0pH8HF8Xl0vKiamaE-_tdoBE2wgH914AtxKyQfwBUGk5INQuyx7khIBv9ZEXYJ8OQkEgn"/>
+</a>
+<div class="hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700">
+<span class="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse"></span>
+<span>Digitális kultúra • 5.a</span>
+</div>
+</div>
+<!-- Right: Teacher Profile Badge & Kilépés -->
+<div class="flex items-center gap-3">
+<div class="inline-flex items-center gap-2.5 pl-1.5 pr-3 py-1 rounded-full bg-slate-50 border border-slate-200">
+<div class="w-8 h-8 rounded-full bg-orange-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+            NÁ
+          </div>
+<div class="flex flex-col text-left">
+<span class="font-bold text-xs text-slate-900 leading-tight">Nagy Ádám</span>
+<span class="text-[11px] font-medium text-slate-500 leading-tight">szaktanár</span>
+</div>
+</div>
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-300" data-path="kijelentkezes" title="Kilépés" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+<polyline points="16 17 21 12 16 7"></polyline>
+<line x1="21" x2="9" y1="12" y2="12"></line>
+</svg>
+<span class="hidden md:inline">Kilépés</span>
+</button>
+</div>
+</div>
+<!-- Navigation Tabs: Set to active on Beállítások és mentés -->
+<nav class="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1 pb-2 border-t border-slate-100">
+<a class="px-3.5 py-1.5 rounded-lg text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors whitespace-nowrap" data-path="elo-felugyelet-matrix" href="#">
+        Élő felügyelet (Mátrix)
+      </a>
+<a class="px-3.5 py-1.5 rounded-lg text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors whitespace-nowrap" data-path="reports-korabbi-dolgozatok" href="#">
+        Reports / Korábbi dolgozatok
+      </a>
+<a class="px-3.5 py-1.5 rounded-lg text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors whitespace-nowrap" data-path="export" href="#">
+        Export (.xlsx, .pdf, .html)
+      </a>
+<a class="px-3.5 py-1.5 rounded-lg text-sm font-bold bg-[#ea580c] text-white shadow-sm whitespace-nowrap" data-path="beallitasok-es-mentes" href="#">
+        Beállítások és mentés
+      </a>
+</nav>
+</div>
+</header>
+<!-- Main Slot -->
+<main class="w-full flex-1 pt-32 pb-16">
+<div class="max-w-[1080px] w-full mx-auto px-4 sm:px-6 space-y-6">
+<!-- Breadcrumb & Contextual Indicator -->
+<div class="flex flex-wrap items-center justify-between gap-3 text-slate-500 text-xs font-semibold">
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-700">
+<span class="w-2 h-2 rounded-full bg-orange-600"></span>
+          Digitális kultúra
+        </span>
+<svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewbox="0 0 24 24"><path d="M9 18l6-6-6-6"></path></svg>
+<span>Tanári Portál</span>
+<svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewbox="0 0 24 24"><path d="M9 18l6-6-6-6"></path></svg>
+<span class="text-slate-800 font-bold">Beállítások és biztonsági mentés</span>
+</div>
+<div class="inline-flex items-center gap-1.5 text-slate-700 font-semibold text-xs bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+<svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path>
+</svg>
+<svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<path d="M20 6 9 17l-5-5"></path>
+</svg>
+<span>Adatbázis állapota: Ép és védett</span>
+</div>
+</div>
+<!-- Page Header -->
+<div class="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-sm flex items-center justify-between gap-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+<svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<line x1="4" x2="20" y1="21" y2="21"></line>
+<line x1="4" x2="20" y1="14" y2="14"></line>
+<line x1="4" x2="20" y1="7" y2="7"></line>
+<circle cx="8" cy="7" r="2"></circle>
+<circle cx="16" cy="14" r="2"></circle>
+<circle cx="10" cy="21" r="2"></circle>
+</svg>
+</div>
+<div>
+<h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            Beállítások és biztonsági mentés
+          </h1>
+<p class="text-sm sm:text-base text-slate-500 font-medium mt-0.5">
+            Rendszerbeállítások, automatikus adatmentés és tantermi felügyeleti opciók kezelése.
+          </p>
+</div>
+</div>
+</div>
+<!-- SECTION 1: Biztonsági mentés és adatkezelés -->
+<section class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-5">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+</svg>
+</div>
+<div>
+<h2 class="text-lg font-bold text-slate-900">
+              Biztonsági mentés és adatkezelés
+            </h2>
+<p class="text-xs sm:text-sm text-slate-500 font-normal">
+              Tantermi adatok megőrzése, offline exportálás és helyi géphelyreállítás.
+            </p>
+</div>
+</div>
+<div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 text-xs font-semibold self-start sm:self-auto">
+<svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<circle cx="12" cy="12" r="10"></circle>
+<polyline points="12 6 12 12 16 14"></polyline>
+</svg>
+<span>Legutóbbi automatikus mentés: <strong class="text-slate-900 font-bold">ma, 10:15</strong></span>
+</div>
+</div>
+<!-- Backup Action Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+<!-- Export / Download Card -->
+<div class="bg-slate-50/80 rounded-xl p-5 border border-slate-200/80 flex flex-col justify-between gap-4">
+<div class="space-y-1.5">
+<div class="flex items-center gap-2.5 text-slate-900 font-bold text-base">
+<div class="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+<polyline points="7 10 12 15 17 10"></polyline>
+<line x1="12" x2="12" y1="15" y2="3"></line>
+</svg>
+</div>
+<h3>Teljes biztonsági mentés letöltése</h3>
+</div>
+<p class="text-xs sm:text-sm text-slate-600 leading-relaxed font-normal">
+              Minden diák eredményének, kérdésbankjának és beállításának titkosított mentése helyi tárolóra vagy pendrive-ra. Bármikor visszaállítható internetkapcsolat nélkül is.
+            </p>
+</div>
+<div class="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+<button class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] text-white text-sm font-bold shadow-sm transition-all transform active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-orange-400" id="download-backup-btn" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<rect height="5" rx="1" width="20" x="2" y="3"></rect>
+<path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path>
+<path d="M10 12h4"></path>
+</svg>
+<span>Biztonsági mentés készítése (.okoskodobackup)</span>
+</button>
+<span class="text-slate-500 text-xs font-semibold text-center sm:text-left">Méret: ~1.4 MB</span>
+</div>
+</div>
+<!-- Restore / Upload Card -->
+<div class="bg-slate-50/80 rounded-xl p-5 border border-slate-200/80 flex flex-col justify-between gap-4">
+<div class="space-y-1.5">
+<div class="flex items-center gap-2.5 text-slate-900 font-bold text-base">
+<div class="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+<path d="M3 3v5h5"></path>
+</svg>
+</div>
+<h3>Biztonsági mentés visszaállítása</h3>
+</div>
+<p class="text-xs sm:text-sm text-slate-600 leading-relaxed font-normal">
+              Helyreállítás tantermi gépcsere, újratelepítés vagy párhuzamos tanári laptop beüzemelése esetén. A betöltött adatok felülírják a helyi gyorsítótárat.
+            </p>
+</div>
+<div>
+<label class="group flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-xl bg-white hover:bg-orange-50/50 border border-slate-200 hover:border-orange-200 text-slate-700 font-bold text-sm cursor-pointer shadow-sm transition-all text-center">
+<svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+<polyline points="17 8 12 3 7 8"></polyline>
+<line x1="12" x2="12" y1="3" y2="15"></line>
+</svg>
+<span class="group-hover:text-orange-600 transition-colors">Mentésfájl kiválasztása vagy behúzása</span>
+<input accept=".json,.okoskodobackup" class="hidden" id="backup-file-input" type="file"/>
+</label>
+<div class="text-center mt-2">
+<span class="text-slate-400 text-xs">Támogatott kiterjesztés: .okoskodobackup, .json</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Sync Toggle Row -->
+<div class="bg-orange-50/40 border border-orange-100 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+<div class="flex items-start gap-3">
+<div class="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 mt-0.5">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+</svg>
+</div>
+<div class="space-y-0.5">
+<div class="text-sm font-bold text-slate-900">Automatikus felhő- és helyi szinkronizáció</div>
+<div class="text-xs text-slate-600">Minden dolgozat lezárásakor automatikus mentés készítése a helyi gyorsítótárba és a tanári fiókba.</div>
+</div>
+</div>
+<!-- Toggle Switch -->
+<label class="relative inline-flex items-center cursor-pointer shrink-0">
+<input checked="" class="sr-only peer" id="auto-sync-toggle" type="checkbox"/>
+<div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+<span class="ml-3 text-xs font-bold text-slate-800" id="auto-sync-status">Aktív</span>
+</label>
+</div>
+</section>
+<!-- SECTION 2: Értékelési és dolgozat beállítások (Grade Thresholds) -->
+<section class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-5">
+<div class="flex items-center gap-3 pb-3 border-b border-slate-100">
+<div class="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+</svg>
+</div>
+<div>
+<h2 class="text-lg font-bold text-slate-900">
+            Értékelési határok (5-fokozatú skála)
+          </h2>
+<p class="text-xs sm:text-sm text-slate-500 font-normal">
+            A rendszer ezen százalékos sávok alapján számolja ki automatikusan az érdemjegyeket a mátrixban és az export fájlokban.
+          </p>
+</div>
+</div>
+<!-- Threshold percentage tiles -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
+<!-- Grade 5 -->
+<div class="bg-orange-50/50 border border-orange-200 rounded-xl p-3.5 flex flex-col justify-between gap-2.5 transition-all">
+<div class="flex items-center justify-between">
+<span class="w-7 h-7 rounded-full bg-[#ea580c] text-white text-base font-extrabold flex items-center justify-center shadow-sm">5</span>
+<span class="text-xs font-bold text-orange-700">Jeles</span>
+</div>
+<div class="space-y-1">
+<div class="text-slate-500 text-[11px] font-semibold">Alsó ponthatár</div>
+<div class="flex items-center gap-1.5">
+<input class="w-16 bg-white border border-slate-300 rounded-lg py-1 px-2 text-base font-extrabold text-slate-900 text-center focus:outline-none focus:ring-2 focus:ring-orange-500" max="100" min="0" type="number" value="85"/>
+<span class="text-xs font-bold text-slate-600">% – 100%</span>
+</div>
+</div>
+<div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+<div class="bg-orange-600 h-full rounded-full" style="width: 100%;"></div>
+</div>
+</div>
+<!-- Grade 4 -->
+<div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between gap-2.5 transition-all">
+<div class="flex items-center justify-between">
+<span class="w-7 h-7 rounded-full bg-amber-500 text-white text-base font-extrabold flex items-center justify-center shadow-sm">4</span>
+<span class="text-xs font-bold text-amber-700">Jó</span>
+</div>
+<div class="space-y-1">
+<div class="text-slate-500 text-[11px] font-semibold">Alsó ponthatár</div>
+<div class="flex items-center gap-1.5">
+<input class="w-16 bg-white border border-slate-300 rounded-lg py-1 px-2 text-base font-extrabold text-slate-900 text-center focus:outline-none focus:ring-2 focus:ring-orange-500" max="100" min="0" type="number" value="70"/>
+<span class="text-xs font-bold text-slate-600">% – 84%</span>
+</div>
+</div>
+<div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+<div class="bg-amber-500 h-full rounded-full" style="width: 84%;"></div>
+</div>
+</div>
+<!-- Grade 3 -->
+<div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between gap-2.5 transition-all">
+<div class="flex items-center justify-between">
+<span class="w-7 h-7 rounded-full bg-slate-500 text-white text-base font-extrabold flex items-center justify-center shadow-sm">3</span>
+<span class="text-xs font-bold text-slate-700">Közepes</span>
+</div>
+<div class="space-y-1">
+<div class="text-slate-500 text-[11px] font-semibold">Alsó ponthatár</div>
+<div class="flex items-center gap-1.5">
+<input class="w-16 bg-white border border-slate-300 rounded-lg py-1 px-2 text-base font-extrabold text-slate-900 text-center focus:outline-none focus:ring-2 focus:ring-orange-500" max="100" min="0" type="number" value="55"/>
+<span class="text-xs font-bold text-slate-600">% – 69%</span>
+</div>
+</div>
+<div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+<div class="bg-slate-500 h-full rounded-full" style="width: 69%;"></div>
+</div>
+</div>
+<!-- Grade 2 -->
+<div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between gap-2.5 transition-all">
+<div class="flex items-center justify-between">
+<span class="w-7 h-7 rounded-full bg-slate-400 text-white text-base font-extrabold flex items-center justify-center shadow-sm">2</span>
+<span class="text-xs font-bold text-slate-700">Elégséges</span>
+</div>
+<div class="space-y-1">
+<div class="text-slate-500 text-[11px] font-semibold">Alsó ponthatár</div>
+<div class="flex items-center gap-1.5">
+<input class="w-16 bg-white border border-slate-300 rounded-lg py-1 px-2 text-base font-extrabold text-slate-900 text-center focus:outline-none focus:ring-2 focus:ring-orange-500" max="100" min="0" type="number" value="40"/>
+<span class="text-xs font-bold text-slate-600">% – 54%</span>
+</div>
+</div>
+<div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+<div class="bg-slate-400 h-full rounded-full" style="width: 54%;"></div>
+</div>
+</div>
+<!-- Grade 1 -->
+<div class="bg-red-50/60 border border-red-200 rounded-xl p-3.5 flex flex-col justify-between gap-2.5 transition-all">
+<div class="flex items-center justify-between">
+<span class="w-7 h-7 rounded-full bg-red-600 text-white text-base font-extrabold flex items-center justify-center shadow-sm">1</span>
+<span class="text-xs font-bold text-red-700">Elégtelen</span>
+</div>
+<div class="space-y-1">
+<div class="text-slate-500 text-[11px] font-semibold">Alsó ponthatár</div>
+<div class="flex items-center gap-1.5">
+<span class="w-16 bg-slate-100 border border-slate-200 rounded-lg py-1 px-2 text-base font-extrabold text-slate-600 text-center inline-block">0</span>
+<span class="text-xs font-bold text-slate-600">% – 39%</span>
+</div>
+</div>
+<div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+<div class="bg-red-600 h-full rounded-full" style="width: 39%;"></div>
+</div>
+</div>
+</div>
+<div class="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-2.5 text-slate-600 text-xs font-medium">
+<svg class="w-4 h-4 text-orange-600 shrink-0" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<circle cx="12" cy="12" r="10"></circle>
+<line x1="12" x2="12" y1="16" y2="12"></line>
+<line x1="12" x2="12.01" y1="8" y2="8"></line>
+</svg>
+<span>A ponthatárok módosítása nem befolyásolja a már lezárt és exportált korábbi féléves jegyzőkönyveket.</span>
+</div>
+</section>
+<!-- SECTION 3: Tantermi és felügyeleti beállítások -->
+<section class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+<div class="flex items-center gap-3 pb-3 border-b border-slate-100">
+<div class="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<rect height="14" rx="2" width="20" x="2" y="3"></rect>
+<line x1="8" x2="16" y1="21" y2="21"></line>
+<line x1="12" x2="12" y1="17" y2="21"></line>
+</svg>
+</div>
+<div>
+<h2 class="text-lg font-bold text-slate-900">
+            Tantermi és felügyeleti beállítások
+          </h2>
+<p class="text-xs sm:text-sm text-slate-500 font-normal">
+            Kivetítési és vizsgabiztonsági opciók a tantermi nyugodt légkör megőrzésére.
+          </p>
+</div>
+</div>
+<!-- Feature Rows -->
+<div class="space-y-2.5">
+<!-- Row 1: Projektor mód -->
+<label class="group flex items-start sm:items-center justify-between gap-4 p-3.5 rounded-xl bg-slate-50 hover:bg-orange-50/40 border border-slate-200/80 transition-colors cursor-pointer">
+<div class="flex items-start gap-3">
+<div class="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0 mt-0.5 text-slate-700">
+<svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<rect height="14" rx="2" width="20" x="2" y="3"></rect>
+<line x1="12" x2="12" y1="17" y2="21"></line>
+<line x1="8" x2="16" y1="21" y2="21"></line>
+</svg>
+</div>
+<div>
+<div class="text-sm font-bold text-slate-900">Projektor mód alapértelmezett bekapcsolása</div>
+<div class="text-xs text-slate-500 font-normal mt-0.5">Tanulói nevek automatikus anonimizálása és elrejtése a táblára való kivetítéskor a szorongás csökkentése érdekében.</div>
+</div>
+</div>
+<input checked="" class="w-5 h-5 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer mt-1 sm:mt-0 shrink-0" type="checkbox"/>
+</label>
+<!-- Row 2: Véletlenszerű kérdéssorrend -->
+<label class="group flex items-start sm:items-center justify-between gap-4 p-3.5 rounded-xl bg-slate-50 hover:bg-orange-50/40 border border-slate-200/80 transition-colors cursor-pointer">
+<div class="flex items-start gap-3">
+<div class="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0 mt-0.5 text-slate-700">
+<svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<polyline points="16 3 21 3 21 8"></polyline>
+<line x1="4" x2="21" y1="20" y2="3"></line>
+<polyline points="21 16 21 21 16 21"></polyline>
+<line x1="15" x2="21" y1="15" y2="21"></line>
+<line x1="4" x2="9" y1="4" y2="9"></line>
+</svg>
+</div>
+<div>
+<div class="text-sm font-bold text-slate-900">Véletlenszerű kérdéssorrend diákokként</div>
+<div class="text-xs text-slate-500 font-normal mt-0.5">Megelőzi a szomszédos számítógépeknél ülő 3-6. osztályos tanulók egymásról való olvasását vagy összenézését.</div>
+</div>
+</div>
+<input checked="" class="w-5 h-5 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer mt-1 sm:mt-0 shrink-0" type="checkbox"/>
+</label>
+<!-- Row 3: Diák visszajelzés tiltása dolgozat alatt -->
+<label class="group flex items-start sm:items-center justify-between gap-4 p-3.5 rounded-xl bg-slate-50 hover:bg-orange-50/40 border border-slate-200/80 transition-colors cursor-pointer">
+<div class="flex items-start gap-3">
+<div class="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0 mt-0.5 text-slate-700">
+<svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+<line x1="1" x2="23" y1="1" y2="23"></line>
+</svg>
+</div>
+<div>
+<div class="text-sm font-bold text-slate-900">Azonnali diák-visszajelzés tiltása a dolgozat végéig</div>
+<div class="text-xs text-slate-500 font-normal mt-0.5">A diák csak a teszt végleges beadása után kap információt a helyes válaszokról és az elért pontszámról.</div>
+</div>
+</div>
+<input checked="" class="w-5 h-5 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer mt-1 sm:mt-0 shrink-0" type="checkbox"/>
+</label>
+<!-- Row 4: Csendes vizsgamód -->
+<label class="group flex items-start sm:items-center justify-between gap-4 p-3.5 rounded-xl bg-slate-50 hover:bg-orange-50/40 border border-slate-200/80 transition-colors cursor-pointer">
+<div class="flex items-start gap-3">
+<div class="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0 mt-0.5 text-slate-700">
+<svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+<line x1="23" x2="17" y1="9" y2="15"></line>
+<line x1="17" x2="23" y1="9" y2="15"></line>
+</svg>
+</div>
+<div>
+<div class="text-sm font-bold text-slate-900">Csendes vizsgamód (riasztó hangjelzések letiltása)</div>
+<div class="text-xs text-slate-500 font-normal mt-0.5">A visszaszámláló nem ad ki éles hangjelzést az utolsó percekben, kizárólag finom vizuális jelzést mutat a diák képernyőjén.</div>
+</div>
+</div>
+<input checked="" class="w-5 h-5 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer mt-1 sm:mt-0 shrink-0" type="checkbox"/>
+</label>
+</div>
+</section>
+<!-- SECTION 4: Teacher Notification Toast -->
+<div class="hidden transition-all duration-300 bg-white border border-emerald-300 rounded-xl p-4 shadow-lg flex items-center justify-between gap-3" id="save-notification">
+<div class="flex items-center gap-2.5 text-emerald-600">
+<svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+<polyline points="22 4 12 14.01 9 11.01"></polyline>
+</svg>
+<span class="text-sm font-bold text-slate-800">A beállítások sikeresen elmentve a helyi gép profiljában!</span>
+</div>
+<button class="text-slate-400 hover:text-slate-700" onclick="document.getElementById('save-notification').classList.add('hidden')" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<line x1="18" x2="6" y1="6" y2="18"></line>
+<line x1="6" x2="18" y1="6" y2="18"></line>
+</svg>
+</button>
+</div>
+<!-- ACTION BAR AT BOTTOM -->
+<div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-5 flex flex-col-reverse sm:flex-row items-center justify-between gap-3">
+<button class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-colors focus:outline-none" id="reset-defaults-btn" type="button">
+<svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<polyline points="1 4 1 10 7 10"></polyline>
+<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+</svg>
+<span>Alapértelmezések visszaállítása</span>
+</button>
+<div class="w-full sm:w-auto flex items-center justify-end">
+<button class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] text-white font-extrabold text-sm sm:text-base shadow-sm hover:shadow transition-all transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-orange-400" id="save-settings-btn" type="button">
+<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24">
+<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+<polyline points="17 21 17 13 7 13 7 21"></polyline>
+<polyline points="7 3 7 8 15 8"></polyline>
+</svg>
+<span>Beállítások mentése</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Clean Minimalist Footer -->
+<footer class="w-full bg-white border-t border-slate-200 py-4 mt-auto">
+<div class="max-w-[1240px] mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-slate-500 text-xs font-medium">
+<div>Okoskodó Tanári Portál • Nyugodt és modern felmérő rendszer 3–6. osztályosoknak</div>
+<div class="flex items-center gap-4">
+<span>Oktatói Forródrót: +36 1 455 2020</span>
+<a class="text-orange-600 hover:text-orange-700 font-semibold transition-colors" data-path="segitseg" href="#">Pedagógus Súgóközpont</a>
+</div>
+</div>
+</footer>
+<script>
+  // Simple micro-interactions for settings page
+  const saveBtn = document.getElementById('save-settings-btn');
+  const notification = document.getElementById('save-notification');
+  const autoSyncToggle = document.getElementById('auto-sync-toggle');
+  const autoSyncStatus = document.getElementById('auto-sync-status');
+  const downloadBackupBtn = document.getElementById('download-backup-btn');
+  const backupFileInput = document.getElementById('backup-file-input');
+  const resetBtn = document.getElementById('reset-defaults-btn');
+
+  if (saveBtn && notification) {
+    saveBtn.addEventListener('click', () => {
+      notification.classList.remove('hidden');
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      setTimeout(() => {
+        notification.classList.add('hidden');
+      }, 5000);
+    });
+  }
+
+  if (autoSyncToggle && autoSyncStatus) {
+    autoSyncToggle.addEventListener('change', (e) => {
+      autoSyncStatus.textContent = e.target.checked ? 'Aktív' : 'Inaktív';
+      autoSyncStatus.className = e.target.checked 
+        ? 'ml-3 text-xs font-bold text-slate-800' 
+        : 'ml-3 text-xs font-bold text-slate-400';
+    });
+  }
+
+  if (downloadBackupBtn) {
+    downloadBackupBtn.addEventListener('click', () => {
+      const origText = downloadBackupBtn.innerHTML;
+      downloadBackupBtn.innerHTML = `
+        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+        <span>Biztonsági mentés készítése...</span>`;
+      setTimeout(() => {
+        downloadBackupBtn.innerHTML = `
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <span>Mentés letöltve!</span>`;
+        setTimeout(() => {
+          downloadBackupBtn.innerHTML = origText;
+        }, 2500);
+      }, 900);
+    });
+  }
+
+  if (backupFileInput) {
+    backupFileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        alert('Fájl sikeresen kiválasztva: ' + e.target.files[0].name + '\nA visszaállítás érvényesítéséhez kattintson a Mentés gombra.');
+      }
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (confirm('Biztosan visszaállítja az összes tantermi beállítást az eredeti gyári értékekre?')) {
+        location.reload();
+      }
+    });
+  }
+</script>
+</body></html>

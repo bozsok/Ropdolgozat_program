@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+
+<html lang="hu"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="web_standard" name="shell-type"/>
+<title>Okoskodó - Tanári Felügyeleti Mátrix</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,200..1000;1,6..12,200..1000&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+    @layer base {
+      html, body { margin: 0; padding: 0; }
+      body { overscroll-behavior: none; }
+    }
+    /* Clean custom horizontal scrollbar for wide matrix */
+    .custom-scrollbar::-webkit-scrollbar {
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f0f3;
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #d4cfd7;
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #ea580c;
+    }
+  </style>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#ea580c",
+            "primary-container": "#c2410c",
+            "primary-fixed": "#ffdbce",
+            "on-primary": "#ffffff",
+            surface: "#fbf8fc",
+            "surface-low": "#f5f3f6",
+            "surface-card": "#ffffff",
+            "surface-container": "#f0edf1",
+            "surface-dim": "#e8e5e9",
+            "on-surface": "#1b1b1e",
+            "on-surface-variant": "#635853",
+            outline: "#8e7166",
+            "outline-variant": "#e5dfdc",
+            success: "#15803d",
+            "success-soft": "#f0fdf4",
+            "success-border": "#bbf7d0",
+            danger: "#b91c1c",
+            "danger-soft": "#fef2f2",
+            "danger-border": "#fecaca",
+            warning: "#c2410c",
+            "warning-soft": "#fff7ed",
+            "warning-border": "#fed7aa"
+          },
+          fontFamily: {
+            sans: ["Nunito Sans", "sans-serif"]
+          },
+          borderRadius: {
+            xl: "0.75rem",
+            "2xl": "1rem"
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="bg-surface font-sans text-on-surface antialiased min-h-screen flex flex-col selection:bg-primary-fixed selection:text-primary">
+<!-- Header: Aligned with student portal style (Clean, White, Official Logo) -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-surface-container/80 shadow-[0_1px_6px_rgba(0,0,0,0.03)]">
+<div class="max-w-[1440px] mx-auto px-5 lg:px-8">
+<!-- Top Row -->
+<div class="h-16 flex items-center justify-between gap-4">
+<!-- Logo + Class context badge -->
+<div class="flex items-center gap-4">
+<a class="flex items-center gap-3" href="#">
+<img alt="Okoskodó" class="h-9 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAOcXG9OKt2_G3JEcVkgoBH2cb8Dz7Rb9xNx1IAFDU_vT3m231obwwcK2DsfiSC0qGk0mMOE0FtQjfCLynRKxidkcQEWgcNerblL9mikaWSNVkc8efoqcV7PPuqAunUUPJzE08EKyPQfQzI6dAdxW73TipmB1b3qRPbjN2Acj9UJd-UenkuRGIquU0n3Xgb9uOYvm6iAW1zFUPdPxCeBLwHvbqywdhNfyHEXWIfrUNyvCXLdOOCntEq"/>
+</a>
+<div class="hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-low border border-outline-variant/50 text-xs font-semibold text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span>Digitális kultúra • 5.a</span>
+</div>
+</div>
+<!-- Right Side: Teacher Profile & Logout -->
+<div class="flex items-center gap-3">
+<div class="inline-flex items-center gap-2.5 pl-2 pr-3 py-1 rounded-full bg-surface-low border border-outline-variant/60">
+<div class="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shadow-sm">
+              NÁ
+            </div>
+<div class="flex flex-col text-left">
+<span class="text-xs font-bold leading-tight text-on-surface">Nagy Ádám</span>
+<span class="text-[11px] leading-tight text-on-surface-variant">szaktanár</span>
+</div>
+</div>
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-on-surface-variant hover:text-danger hover:bg-danger-soft transition-colors" data-path="kijelentkezes" title="Kilépés" type="button">
+<span class="material-symbols-outlined text-[18px]">logout</span>
+<span class="hidden md:inline">Kilépés</span>
+</button>
+</div>
+</div>
+<!-- Navigation Tabs (Calm rounded line pills) -->
+<nav class="flex items-center gap-2 overflow-x-auto no-scrollbar -mb-px pt-1 pb-2">
+<a class="px-4 py-1.5 rounded-lg text-xs md:text-sm font-bold bg-primary text-white shadow-sm flex items-center gap-1.5" data-path="elo-felugyelet-matrix" href="#">
+<span class="material-symbols-outlined text-[17px]">grid_view</span>
+          Élő felügyelet (Mátrix)
+        </a>
+<a class="px-4 py-1.5 rounded-lg text-xs md:text-sm font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-low transition-colors flex items-center gap-1.5" data-path="reports-korabbi-dolgozatok" href="#">
+<span class="material-symbols-outlined text-[17px]">history_edu</span>
+          Reports / Korábbi dolgozatok
+        </a>
+<a class="px-4 py-1.5 rounded-lg text-xs md:text-sm font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-low transition-colors flex items-center gap-1.5" data-path="export" href="#">
+<span class="material-symbols-outlined text-[17px]">file_download</span>
+          Export (.xlsx, .pdf, .html)
+        </a>
+<a class="px-4 py-1.5 rounded-lg text-xs md:text-sm font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-low transition-colors flex items-center gap-1.5" data-path="beallitasok-es-biztonsagi-mentes" href="#">
+<span class="material-symbols-outlined text-[17px]">tune</span>
+          Beállítások és mentés
+        </a>
+</nav>
+</div>
+</header>
+<!-- Main Body Content -->
+<main class="w-full flex-1 pt-28 pb-12">
+<div class="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-6">
+<!-- Test Control & Status Bar (Clean White Card) -->
+<div class="bg-white rounded-2xl border border-outline-variant/60 p-5 md:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+<!-- Left: Test Meta Info -->
+<div class="flex flex-col gap-1.5">
+<div class="flex flex-wrap items-center gap-2.5">
+<h1 class="text-xl md:text-2xl font-extrabold text-on-surface tracking-tight">
+              Élő röpdolgozat felügyelet
+            </h1>
+<span class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-success-soft text-success border border-success-border text-xs font-bold">
+<span class="w-2 h-2 rounded-full bg-success animate-ping"></span>
+              Kitöltés folyamatban
+            </span>
+</div>
+<div class="flex flex-wrap items-center gap-2 text-sm text-on-surface-variant">
+<span class="font-bold text-primary">5.a osztály</span>
+<span>•</span>
+<span>Digitális kultúra (6 kérdéses röpdolgozat)</span>
+<span>•</span>
+<span class="inline-flex items-center gap-1 font-semibold text-on-surface bg-surface-low px-2 py-0.5 rounded-md">
+<span class="material-symbols-outlined text-[16px] text-primary">groups</span>
+              24/26 diák bent
+            </span>
+<span>•</span>
+<span class="inline-flex items-center gap-1 font-semibold text-on-surface bg-surface-low px-2 py-0.5 rounded-md">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">timer</span>
+              Hátralévő idő: <strong class="text-primary font-bold">08:42</strong>
+</span>
+</div>
+</div>
+<!-- Right: Action Buttons (Projektor mód & Dolgozat leállítása) -->
+<div class="flex flex-wrap items-center gap-3">
+<button class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-outline-variant bg-white text-on-surface hover:bg-surface-low font-semibold text-xs md:text-sm transition-all shadow-sm" id="projectorToggleBtn" type="button">
+<span class="material-symbols-outlined text-[19px] text-on-surface-variant">visibility_off</span>
+<span id="projectorBtnText">Projektor mód (nevek elrejtése)</span>
+</button>
+<button class="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-outline-variant bg-white text-on-surface hover:bg-surface-low font-semibold text-xs md:text-sm transition-all shadow-sm" onclick="triggerRefreshNotice()" title="Frissítés most" type="button">
+<span class="material-symbols-outlined text-[19px] text-on-surface-variant">sync</span>
+<span class="hidden sm:inline">Frissítés</span>
+</button>
+<button class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-danger text-white hover:bg-danger/90 font-bold text-xs md:text-sm shadow-sm transition-all" onclick="confirmQuizStop()" type="button">
+<span class="material-symbols-outlined text-[19px]">stop_circle</span>
+<span>Dolgozat leállítása</span>
+</button>
+</div>
+</div>
+<!-- 4 Compact KPI Summary Cards (Minimalist Calm Learner White Style) -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+<!-- Card 1: Osztályátlag -->
+<div class="bg-white rounded-2xl border border-outline-variant/60 p-4 shadow-[0_1px_4px_rgba(0,0,0,0.02)] flex items-center gap-3.5">
+<div class="w-11 h-11 rounded-xl bg-primary-fixed/50 text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[24px]">grade</span>
+</div>
+<div class="min-w-0">
+<span class="text-xs font-semibold text-on-surface-variant block">Osztályátlag</span>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-black text-on-surface">4.2</span>
+<span class="text-xs font-bold text-success bg-success-soft px-1.5 py-0.5 rounded">84%</span>
+</div>
+<span class="text-[11px] text-on-surface-variant truncate block">Stabil jó felkészültség</span>
+</div>
+</div>
+<!-- Card 2: Leadott dolgozatok -->
+<div class="bg-white rounded-2xl border border-outline-variant/60 p-4 shadow-[0_1px_4px_rgba(0,0,0,0.02)] flex items-center gap-3.5">
+<div class="w-11 h-11 rounded-xl bg-surface-low text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[24px]">assignment_turned_in</span>
+</div>
+<div class="min-w-0">
+<span class="text-xs font-semibold text-on-surface-variant block">Leadott dolgozatok</span>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-black text-on-surface">4 / 5</span>
+<span class="text-xs font-bold text-primary">80%</span>
+</div>
+<span class="text-[11px] text-on-surface-variant truncate block">1 tanuló még válaszol</span>
+</div>
+</div>
+<!-- Card 3: Legnehezebb feladat -->
+<div class="bg-white rounded-2xl border border-outline-variant/60 p-4 shadow-[0_1px_4px_rgba(0,0,0,0.02)] flex items-center gap-3.5">
+<div class="w-11 h-11 rounded-xl bg-danger-soft text-danger flex items-center justify-center shrink-0 border border-danger-border/40">
+<span class="material-symbols-outlined text-[24px]">trending_down</span>
+</div>
+<div class="min-w-0">
+<span class="text-xs font-semibold text-on-surface-variant block">Legnehezebb feladat</span>
+<span class="text-base font-bold text-on-surface truncate block">4. Monitor</span>
+<span class="text-[11px] text-on-surface-variant">Sikerességi ráta: <strong class="text-danger font-bold">40%</strong></span>
+</div>
+</div>
+<!-- Card 4: Legjobb feladat -->
+<div class="bg-white rounded-2xl border border-outline-variant/60 p-4 shadow-[0_1px_4px_rgba(0,0,0,0.02)] flex items-center gap-3.5">
+<div class="w-11 h-11 rounded-xl bg-success-soft text-success flex items-center justify-center shrink-0 border border-success-border/40">
+<span class="material-symbols-outlined text-[24px]">verified</span>
+</div>
+<div class="min-w-0">
+<span class="text-xs font-semibold text-on-surface-variant block">Legjobb feladat</span>
+<span class="text-base font-bold text-on-surface truncate block">1. Hardver</span>
+<span class="text-[11px] text-on-surface-variant">Sikerességi ráta: <strong class="text-success font-bold">100%</strong></span>
+</div>
+</div>
+</div>
+<!-- Main Live Student Response Matrix Table Card -->
+<div class="bg-white rounded-2xl border border-outline-variant/60 shadow-[0_2px_12px_rgba(0,0,0,0.03)] overflow-hidden flex flex-col">
+<!-- Table Title Header -->
+<div class="px-6 py-4 border-b border-outline-variant/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-low/50">
+<div class="flex items-center gap-2.5">
+<span class="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></span>
+<h2 class="text-base md:text-lg font-bold text-on-surface">Tanulói válaszmátrix &amp; pontszámok</h2>
+<span class="text-xs text-on-surface-variant hidden md:inline">• Valós idejű szinkronizáció aktív</span>
+</div>
+<div class="text-xs font-medium text-on-surface-variant flex items-center gap-2">
+<span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-success"></span> Helyes</span>
+<span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-danger"></span> Hibás</span>
+<span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-primary"></span> Folyamatban</span>
+</div>
+</div>
+<!-- Table Container with Horizontal Scroll & Generous Columns -->
+<div class="overflow-x-auto custom-scrollbar w-full">
+<table class="w-full text-left border-collapse min-w-[1240px]">
+<thead>
+<tr class="bg-surface-low border-b border-outline-variant/60 text-on-surface-variant text-[11px] uppercase tracking-wider font-bold">
+<th class="py-3 px-3 text-center w-10" scope="col">#</th>
+<th class="py-3 px-4 min-w-[210px]" scope="col">Tanuló neve &amp; Státusz</th>
+<th class="py-3 px-2 text-center min-w-[110px]" scope="col">1. Hardver</th>
+<th class="py-3 px-2 text-center min-w-[110px]" scope="col">2. Görgő (I/H)</th>
+<th class="py-3 px-2 text-center min-w-[110px]" scope="col">3. Oktató</th>
+<th class="py-3 px-2 text-center min-w-[110px]" scope="col">4. Monitor</th>
+<th class="py-3 px-2 text-center min-w-[110px]" scope="col">5. Enter bill.</th>
+<th class="py-3 px-2 text-center min-w-[110px]" scope="col">6. Ctrl+S</th>
+<th class="py-3 px-2.5 text-center min-w-[70px]" scope="col">Összpont</th>
+<th class="py-3 px-2.5 text-center min-w-[70px]" scope="col">Százalék</th>
+<th class="py-3 px-3 text-center min-w-[100px]" scope="col">Érdemjegy</th>
+<th class="py-3 px-4 text-center min-w-[220px]" scope="col">Műveletek</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/40 text-xs font-medium text-on-surface">
+<!-- Diák 1: Balogh Zsófia (100% - Jeles 5) -->
+<tr class="hover:bg-surface-low/60 transition-colors" data-student-row="1">
+<td class="py-3 px-3 text-center text-on-surface-variant font-bold">1</td>
+<td class="py-3 px-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed/60 text-primary font-bold flex items-center justify-center text-xs shrink-0 student-avatar">
+                      BZ
+                    </div>
+<div class="flex flex-col min-w-0">
+<span class="font-bold text-sm text-on-surface student-name">Balogh Zsófia</span>
+<span class="text-[11px] text-success font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">check_circle</span> Kész (04:12 alatt)
+                      </span>
+</div>
+</div>
+</td>
+<!-- Q1 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">B (Helyes)</span>
+</div>
+</td>
+<!-- Q2 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">Igaz</span>
+</div>
+</td>
+<!-- Q3 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">A (Helyes)</span>
+</div>
+</td>
+<!-- Q4 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">C (Kiviteli)</span>
+</div>
+</td>
+<!-- Q5 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">D (Helyes)</span>
+</div>
+</td>
+<!-- Q6 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">B (Mentés)</span>
+</div>
+</td>
+<!-- Eredmény mezők -->
+<td class="py-3 px-2.5 text-center font-extrabold text-sm text-on-surface">6/6</td>
+<td class="py-3 px-2.5 text-center font-bold text-success text-xs">100%</td>
+<td class="py-3 px-3 text-center">
+<span class="inline-block px-2.5 py-1 rounded-md bg-success-soft border border-success-border text-success font-bold text-xs whitespace-nowrap">
+                    5 (Jeles)
+                  </span>
+</td>
+<!-- Actions -->
+<td class="py-3 px-4 text-center">
+<div class="flex items-center justify-center gap-2">
+<button class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-outline-variant bg-white text-on-surface hover:bg-surface-low hover:border-outline text-xs font-semibold transition-colors" onclick="switchMachine('Balogh Zsófia', 'PC-04')" title="Gép átvitele fagyás esetén" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">swap_horiz</span>
+<span>Gép váltása</span>
+</button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-danger-border/70 text-danger hover:bg-danger-soft text-xs font-semibold transition-colors" onclick="deleteStudentRow(this, 'Balogh Zsófia')" title="Tanuló törlése a listából" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+<span>Név törlése</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Diák 2: Horváth Bence (5/6 - 83% - Jó 4) -->
+<tr class="hover:bg-surface-low/60 transition-colors" data-student-row="2">
+<td class="py-3 px-3 text-center text-on-surface-variant font-bold">2</td>
+<td class="py-3 px-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container text-on-surface font-bold flex items-center justify-center text-xs shrink-0 student-avatar">
+                      HB
+                    </div>
+<div class="flex flex-col min-w-0">
+<span class="font-bold text-sm text-on-surface student-name">Horváth Bence</span>
+<span class="text-[11px] text-success font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">check_circle</span> Kész (05:40 alatt)
+                      </span>
+</div>
+</div>
+</td>
+<!-- Q1 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">B (Helyes)</span>
+</div>
+</td>
+<!-- Q2 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">Igaz</span>
+</div>
+</td>
+<!-- Q3 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">A (Helyes)</span>
+</div>
+</td>
+<!-- Q4 (Hibás!) -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-danger-soft/80 border border-danger-border text-danger">
+<span class="material-symbols-outlined text-[16px]">close</span>
+<span class="font-bold text-xs">A (Bemeneti)</span>
+</div>
+</td>
+<!-- Q5 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">D (Helyes)</span>
+</div>
+</td>
+<!-- Q6 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">B (Mentés)</span>
+</div>
+</td>
+<!-- Eredmény mezők -->
+<td class="py-3 px-2.5 text-center font-extrabold text-sm text-on-surface">5/6</td>
+<td class="py-3 px-2.5 text-center font-bold text-primary text-xs">83%</td>
+<td class="py-3 px-3 text-center">
+<span class="inline-block px-2.5 py-1 rounded-md bg-surface-low border border-outline-variant text-on-surface font-bold text-xs whitespace-nowrap">
+                    4 (Jó)
+                  </span>
+</td>
+<!-- Actions -->
+<td class="py-3 px-4 text-center">
+<div class="flex items-center justify-center gap-2">
+<button class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-outline-variant bg-white text-on-surface hover:bg-surface-low hover:border-outline text-xs font-semibold transition-colors" onclick="switchMachine('Horváth Bence', 'PC-09')" title="Gép átvitele fagyás esetén" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">swap_horiz</span>
+<span>Gép váltása</span>
+</button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-danger-border/70 text-danger hover:bg-danger-soft text-xs font-semibold transition-colors" onclick="deleteStudentRow(this, 'Horváth Bence')" title="Tanuló törlése a listából" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+<span>Név törlése</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Diák 3: Kovács Dániel (6/6 - 100% - Jeles 5) -->
+<tr class="hover:bg-surface-low/60 transition-colors" data-student-row="3">
+<td class="py-3 px-3 text-center text-on-surface-variant font-bold">3</td>
+<td class="py-3 px-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed/60 text-primary font-bold flex items-center justify-center text-xs shrink-0 student-avatar">
+                      KD
+                    </div>
+<div class="flex flex-col min-w-0">
+<span class="font-bold text-sm text-on-surface student-name">Kovács Dániel</span>
+<span class="text-[11px] text-success font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">check_circle</span> Kész (03:52 alatt)
+                      </span>
+</div>
+</div>
+</td>
+<!-- Q1 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">B (Helyes)</span>
+</div>
+</td>
+<!-- Q2 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">Igaz</span>
+</div>
+</td>
+<!-- Q3 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">A (Helyes)</span>
+</div>
+</td>
+<!-- Q4 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">C (Kiviteli)</span>
+</div>
+</td>
+<!-- Q5 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">D (Helyes)</span>
+</div>
+</td>
+<!-- Q6 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">B (Mentés)</span>
+</div>
+</td>
+<!-- Eredmény mezők -->
+<td class="py-3 px-2.5 text-center font-extrabold text-sm text-on-surface">6/6</td>
+<td class="py-3 px-2.5 text-center font-bold text-success text-xs">100%</td>
+<td class="py-3 px-3 text-center">
+<span class="inline-block px-2.5 py-1 rounded-md bg-success-soft border border-success-border text-success font-bold text-xs whitespace-nowrap">
+                    5 (Jeles)
+                  </span>
+</td>
+<!-- Actions -->
+<td class="py-3 px-4 text-center">
+<div class="flex items-center justify-center gap-2">
+<button class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-outline-variant bg-white text-on-surface hover:bg-surface-low hover:border-outline text-xs font-semibold transition-colors" onclick="switchMachine('Kovács Dániel', 'PC-02')" title="Gép átvitele fagyás esetén" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">swap_horiz</span>
+<span>Gép váltása</span>
+</button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-danger-border/70 text-danger hover:bg-danger-soft text-xs font-semibold transition-colors" onclick="deleteStudentRow(this, 'Kovács Dániel')" title="Tanuló törlése a listából" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+<span>Név törlése</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Diák 4: Molnár Lili (Folyamatban - 4. kérdésnél tart) -->
+<tr class="bg-warning-soft/40 hover:bg-warning-soft/70 transition-colors" data-student-row="4">
+<td class="py-3 px-3 text-center text-on-surface-variant font-bold">4</td>
+<td class="py-3 px-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-warning-border/60 text-warning font-bold flex items-center justify-center text-xs shrink-0 student-avatar">
+                      ML
+                    </div>
+<div class="flex flex-col min-w-0">
+<span class="font-bold text-sm text-on-surface student-name">Molnár Lili</span>
+<span class="text-[11px] text-primary font-bold flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+                        Kitöltés alatt (4. kérdésnél jár)
+                      </span>
+</div>
+</div>
+</td>
+<!-- Q1 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">B (Helyes)</span>
+</div>
+</td>
+<!-- Q2 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">Igaz</span>
+</div>
+</td>
+<!-- Q3 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">A (Helyes)</span>
+</div>
+</td>
+<!-- Q4 (Aktív szerkesztés) -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-white border-2 border-primary text-primary font-bold shadow-xs">
+<span class="material-symbols-outlined text-[16px] animate-pulse">edit_note</span>
+<span class="text-xs">Írja éppen...</span>
+</div>
+</td>
+<!-- Q5 (Még nem nyitotta meg) -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-surface-low border border-outline-variant/60 text-on-surface-variant/60">
+<span class="text-xs">—</span>
+</div>
+</td>
+<!-- Q6 (Még nem nyitotta meg) -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-surface-low border border-outline-variant/60 text-on-surface-variant/60">
+<span class="text-xs">—</span>
+</div>
+</td>
+<!-- Eredmény mezők -->
+<td class="py-3 px-2.5 text-center font-extrabold text-sm text-on-surface">3/6</td>
+<td class="py-3 px-2.5 text-center font-bold text-on-surface-variant text-xs">50%</td>
+<td class="py-3 px-3 text-center">
+<span class="inline-block px-2.5 py-1 rounded-md bg-warning-soft border border-warning-border text-primary font-bold text-xs whitespace-nowrap">
+                    Folyamatban
+                  </span>
+</td>
+<!-- Actions -->
+<td class="py-3 px-4 text-center">
+<div class="flex items-center justify-center gap-2">
+<button class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-outline-variant bg-white text-on-surface hover:bg-surface-low hover:border-outline text-xs font-semibold transition-colors" onclick="switchMachine('Molnár Lili', 'PC-11')" title="Gép átvitele fagyás esetén" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">swap_horiz</span>
+<span>Gép váltása</span>
+</button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-danger-border/70 text-danger hover:bg-danger-soft text-xs font-semibold transition-colors" onclick="deleteStudentRow(this, 'Molnár Lili')" title="Tanuló törlése a listából" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+<span>Név törlése</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Diák 5: Varga Máté (4/6 - 67% - Közepes 3) -->
+<tr class="hover:bg-surface-low/60 transition-colors" data-student-row="5">
+<td class="py-3 px-3 text-center text-on-surface-variant font-bold">5</td>
+<td class="py-3 px-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container text-on-surface font-bold flex items-center justify-center text-xs shrink-0 student-avatar">
+                      VM
+                    </div>
+<div class="flex flex-col min-w-0">
+<span class="font-bold text-sm text-on-surface student-name">Varga Máté</span>
+<span class="text-[11px] text-success font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">check_circle</span> Kész (06:15 alatt)
+                      </span>
+</div>
+</div>
+</td>
+<!-- Q1 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">B (Helyes)</span>
+</div>
+</td>
+<!-- Q2 (Hibás) -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-danger-soft/80 border border-danger-border text-danger">
+<span class="material-symbols-outlined text-[16px]">close</span>
+<span class="font-bold text-xs">Hamis</span>
+</div>
+</td>
+<!-- Q3 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">A (Helyes)</span>
+</div>
+</td>
+<!-- Q4 (Hibás) -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-danger-soft/80 border border-danger-border text-danger">
+<span class="material-symbols-outlined text-[16px]">close</span>
+<span class="font-bold text-xs">B (Háttértár)</span>
+</div>
+</td>
+<!-- Q5 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">D (Helyes)</span>
+</div>
+</td>
+<!-- Q6 -->
+<td class="py-2.5 px-2 text-center">
+<div class="inline-flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-lg bg-success-soft/70 border border-success-border text-success">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span class="font-bold text-xs">B (Mentés)</span>
+</div>
+</td>
+<!-- Eredmény mezők -->
+<td class="py-3 px-2.5 text-center font-extrabold text-sm text-on-surface">4/6</td>
+<td class="py-3 px-2.5 text-center font-bold text-on-surface-variant text-xs">67%</td>
+<td class="py-3 px-3 text-center">
+<span class="inline-block px-2.5 py-1 rounded-md bg-surface-low border border-outline-variant text-on-surface font-bold text-xs whitespace-nowrap">
+                    3 (Közepes)
+                  </span>
+</td>
+<!-- Actions -->
+<td class="py-3 px-4 text-center">
+<div class="flex items-center justify-center gap-2">
+<button class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-outline-variant bg-white text-on-surface hover:bg-surface-low hover:border-outline text-xs font-semibold transition-colors" onclick="switchMachine('Varga Máté', 'PC-14')" title="Gép átvitele fagyás esetén" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">swap_horiz</span>
+<span>Gép váltása</span>
+</button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-danger-border/70 text-danger hover:bg-danger-soft text-xs font-semibold transition-colors" onclick="deleteStudentRow(this, 'Varga Máté')" title="Tanuló törlése a listából" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+<span>Név törlése</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Bottom Status Bar: Minimal & Informative -->
+<div class="px-6 py-3.5 bg-surface-low/70 border-t border-outline-variant/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-on-surface-variant">
+<div class="flex items-center gap-3">
+<span>Megjelenítve: <strong class="text-on-surface font-bold">5 / 5 tanuló</strong> mintanézet</span>
+<span>•</span>
+<span>Rendszeridő: <strong class="text-on-surface font-bold">10:28:14</strong></span>
+</div>
+<div class="flex items-center gap-4">
+<span class="inline-flex items-center gap-1.5 font-semibold text-success">
+<span class="w-2 h-2 rounded-full bg-success"></span> 20 helyes válasz
+            </span>
+<span class="inline-flex items-center gap-1.5 font-semibold text-danger">
+<span class="w-2 h-2 rounded-full bg-danger"></span> 3 hibás válasz
+            </span>
+<span class="inline-flex items-center gap-1.5 font-semibold text-primary">
+<span class="w-2 h-2 rounded-full bg-primary"></span> 1 folyamatban
+            </span>
+</div>
+</div>
+</div>
+<!-- Lower Panels: Legend & Notifications (Calm White Cards) -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Jelmagyarázat Kártya -->
+<div class="lg:col-span-2 bg-white rounded-2xl border border-outline-variant/60 p-5 md:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col gap-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[22px]">palette</span>
+<h3 class="text-base md:text-lg font-bold text-on-surface">Jelmagyarázat &amp; Értékelési küszöbök</h3>
+</div>
+<p class="text-xs md:text-sm text-on-surface-variant leading-relaxed">
+            A cellák színe valós időben frissül a tanulói válaszadás során. A rendszer automatikusan számolja az összpontszámot és a hivatalos 5 fokozatú érdemjegyet.
+          </p>
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+<div class="flex items-center gap-2.5 p-3 rounded-xl bg-success-soft/70 border border-success-border">
+<span class="material-symbols-outlined text-success text-[20px]">check_circle</span>
+<div class="flex flex-col">
+<span class="text-xs font-bold text-success">Zöld</span>
+<span class="text-[11px] text-on-surface-variant">Helyes válasz</span>
+</div>
+</div>
+<div class="flex items-center gap-2.5 p-3 rounded-xl bg-danger-soft/70 border border-danger-border">
+<span class="material-symbols-outlined text-danger text-[20px]">cancel</span>
+<div class="flex flex-col">
+<span class="text-xs font-bold text-danger">Piros</span>
+<span class="text-[11px] text-on-surface-variant">Hibás válasz</span>
+</div>
+</div>
+<div class="flex items-center gap-2.5 p-3 rounded-xl bg-warning-soft/70 border border-warning-border">
+<span class="material-symbols-outlined text-primary text-[20px]">edit_note</span>
+<div class="flex flex-col">
+<span class="text-xs font-bold text-primary">Narancs</span>
+<span class="text-[11px] text-on-surface-variant">Éppen szerkeszti</span>
+</div>
+</div>
+<div class="flex items-center gap-2.5 p-3 rounded-xl bg-surface-low border border-outline-variant/60">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">radio_button_unchecked</span>
+<div class="flex flex-col">
+<span class="text-xs font-bold text-on-surface">Szürke</span>
+<span class="text-[11px] text-on-surface-variant">Még nem nyitotta meg</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Tanári értesítési központ -->
+<div class="bg-white rounded-2xl border border-outline-variant/60 p-5 md:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col justify-between gap-4">
+<div class="flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[22px]">notifications_active</span>
+<h3 class="text-base md:text-lg font-bold text-on-surface">Értesítési központ</h3>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-success-soft text-success text-[11px] font-bold border border-success-border">Rendben</span>
+</div>
+<ul class="flex flex-col gap-2">
+<li class="flex items-start gap-2.5 p-2.5 rounded-xl bg-surface-low text-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-success text-[18px] shrink-0">check</span>
+<span>Gépváltási vagy újracsatlakozási kérelem jelenleg nincs.</span>
+</li>
+<li class="flex items-start gap-2.5 p-2.5 rounded-xl bg-surface-low text-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[18px] shrink-0">cloud_done</span>
+<span>Minden diák válasza szinkronizálva a felhőbe.</span>
+</li>
+</ul>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-outline-variant/40">
+<span class="text-[11px] text-on-surface-variant">Audit naplózás: Be</span>
+<button class="text-xs font-bold text-primary hover:text-primary-container inline-flex items-center gap-1 transition-colors" onclick="alert('Állapotmentés sikeres! Az összes diák válaszszálai eltárolva.')" type="button">
+<span class="material-symbols-outlined text-[16px]">save</span> Mentési napló
+            </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Tanári segédablak modal gépváltáshoz -->
+<dialog class="rounded-2xl p-6 bg-white text-on-surface shadow-2xl backdrop:bg-black/40 max-w-md w-full mx-auto border border-outline-variant/60" id="machineSwitchModal">
+<div class="flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<h4 class="text-lg font-bold text-on-surface">Tanuló gépváltása</h4>
+<button class="text-on-surface-variant hover:text-on-surface p-1 rounded-lg" onclick="closeMachineSwitch()" type="button">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<p class="text-xs md:text-sm text-on-surface-variant leading-relaxed">
+        Át szeretnéd helyezni <strong class="text-primary" id="modalStudentName">Tanuló</strong> munkamenetét másik munkaállomásra? A válaszok és időzítő automatikusan megmarad.
+      </p>
+<div class="flex flex-col gap-1.5">
+<label class="text-xs font-bold text-on-surface" for="targetStationSelect">Cél munkaállomás kiválasztása:</label>
+<select class="bg-surface-low text-on-surface p-3 rounded-xl text-xs md:text-sm border border-outline-variant focus:outline-none focus:border-primary" id="targetStationSelect">
+<option value="PC-15">PC-15 (Szabad tantermi gép)</option>
+<option value="PC-16">PC-16 (Szabad tantermi gép)</option>
+<option value="PC-18">PC-18 (Tartalék laptop)</option>
+</select>
+</div>
+<div class="flex items-center justify-end gap-2.5 pt-3">
+<button class="px-4 py-2 rounded-xl border border-outline-variant hover:bg-surface-low text-on-surface font-semibold text-xs transition-colors" onclick="closeMachineSwitch()" type="button">Mégse</button>
+<button class="px-4 py-2 rounded-xl bg-primary hover:bg-primary-container text-white font-bold text-xs shadow-sm transition-all" onclick="confirmMachineSwitch()" type="button">Áthelyezés jóváhagyása</button>
+</div>
+</div>
+</dialog>
+<!-- Interactive Scripts (Projector Mode, Switch Machine, Delete, Stop) -->
+<script>
+    let isProjectorMode = false;
+
+    // Projektor mód kapcsoló (nevek elrejtése a kivetítéshez)
+    const projectorBtn = document.getElementById('projectorToggleBtn');
+    const projectorBtnText = document.getElementById('projectorBtnText');
+
+    if (projectorBtn) {
+      projectorBtn.addEventListener('click', () => {
+        isProjectorMode = !isProjectorMode;
+        const studentNames = document.querySelectorAll('.student-name');
+        const studentAvatars = document.querySelectorAll('.student-avatar');
+
+        if (isProjectorMode) {
+          projectorBtn.classList.add('bg-primary', 'text-white', 'border-primary');
+          projectorBtn.classList.remove('bg-white', 'text-on-surface', 'border-outline-variant');
+          projectorBtnText.textContent = 'Projektor mód aktív (Nevek rejtve)';
+
+          studentNames.forEach((el, index) => {
+            el.dataset.originalName = el.textContent;
+            el.textContent = `Diák #${index + 1}`;
+          });
+
+          studentAvatars.forEach((el, index) => {
+            el.dataset.originalAvatar = el.textContent.trim();
+            el.textContent = `#${index + 1}`;
+          });
+        } else {
+          projectorBtn.classList.remove('bg-primary', 'text-white', 'border-primary');
+          projectorBtn.classList.add('bg-white', 'text-on-surface', 'border-outline-variant');
+          projectorBtnText.textContent = 'Projektor mód (nevek elrejtése)';
+
+          studentNames.forEach(el => {
+            if (el.dataset.originalName) {
+              el.textContent = el.dataset.originalName;
+            }
+          });
+
+          studentAvatars.forEach(el => {
+            if (el.dataset.originalAvatar) {
+              el.textContent = el.dataset.originalAvatar;
+            }
+          });
+        }
+      });
+    }
+
+    // Dolgozat leállítása
+    function confirmQuizStop() {
+      const confirmed = confirm("FIGYELEM!\nBiztosan leállítod a dolgozat kitöltését az egész 5.a osztály számára?\n\nA tanulók képernyője azonnal zárolásra kerül, és a rendszer rögzíti a jelenlegi pontszámokat.");
+      if (confirmed) {
+        alert("A dolgozat lezárva. Az érdemjegyek mentve lettek az elektronikus naplóba.");
+      }
+    }
+
+    // Tanuló sorának törlése
+    function deleteStudentRow(buttonEl, studentName) {
+      const ok = confirm(`Biztosan törölni szeretnéd "${studentName}" tanulót a dolgozatlistából? (Pl. téves bejelentkezés esetén)`);
+      if (ok) {
+        const row = buttonEl.closest('tr');
+        if (row) {
+          row.style.opacity = '0';
+          row.style.transition = 'opacity 0.25s ease';
+          setTimeout(() => row.remove(), 250);
+        }
+      }
+    }
+
+    // Gépváltás modal kezelése
+    const modal = document.getElementById('machineSwitchModal');
+    const modalNameSpan = document.getElementById('modalStudentName');
+
+    function switchMachine(studentName, currentMachine) {
+      if (modal && modalNameSpan) {
+        modalNameSpan.textContent = `${studentName} (${currentMachine})`;
+        modal.showModal();
+      }
+    }
+
+    function closeMachineSwitch() {
+      if (modal) modal.close();
+    }
+
+    function confirmMachineSwitch() {
+      const select = document.getElementById('targetStationSelect');
+      const targetPc = select ? select.value : 'Új gép';
+      alert(`Munkamenet sikeresen áthelyezve ide: ${targetPc}! A tanuló a fagyott állapotától folytathatja a tesztet.`);
+      closeMachineSwitch();
+    }
+
+    // Manuális szinkronizáció
+    function triggerRefreshNotice() {
+      const now = new Date().toLocaleTimeString('hu-HU');
+      alert(`Mátrix szinkronizálva a szerverrel (${now}). Minden tanulói adat naprakész.`);
+    }
+  </script>
+<!-- Clean Minimalist Footer -->
+<footer class="w-full bg-white border-t border-outline-variant/60 py-4 mt-auto">
+<div class="max-w-[1440px] mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-on-surface-variant text-xs">
+<div>Okoskodó Tanári Portál • Nyugodt és modern felmérő rendszer 3–6. osztályosoknak</div>
+<div class="flex items-center gap-5">
+<span>Oktatói Forródrót: +36 1 455 2020</span>
+<a class="hover:text-primary transition-colors font-semibold" data-path="segitseg" href="#">Pedagógus Súgóközpont</a>
+</div>
+</div>
+</footer>
+</body></html>
