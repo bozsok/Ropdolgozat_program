@@ -1194,7 +1194,7 @@ h5 {
 }
 
 .calm-select:focus {
-  background-color: var(--surface-lowest);
+  background-color: var(--surface-low);
   border-color: var(--primary);
   outline: none;
   box-shadow: 0 0 0 4px rgba(234, 88, 12, 0.18);
@@ -1451,11 +1451,11 @@ h5 {
 
 .calm-modal-card {
   background-color: var(--surface-lowest);
-  border-radius: var(--radius-xl);
+  border-radius: 18px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   width: 100%;
-  max-width: 400px;
-  padding: 28px;
+  max-width: 460px;
+  padding: 32px;
   border: 1.5px solid var(--border-color);
 }
 
@@ -1463,18 +1463,18 @@ h5 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .calm-modal-title-wrap {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .calm-modal-icon-badge {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background-color: var(--primary-fixed);
   color: var(--on-primary-fixed);
@@ -1484,19 +1484,19 @@ h5 {
 }
 
 .calm-modal-icon-badge .material-symbols-outlined {
-  font-size: 20px;
+  font-size: 24px;
 }
 
 .calm-modal-title {
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.45rem;
+  font-weight: 800;
   color: var(--text-main);
   margin: 0;
 }
 
 .calm-modal-close-btn {
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background-color: var(--surface-high);
   color: var(--text-main);
@@ -1508,15 +1508,19 @@ h5 {
   transition: background-color 0.2s;
 }
 
+.calm-modal-close-btn .material-symbols-outlined {
+  font-size: 22px;
+}
+
 .calm-modal-close-btn:hover {
   background-color: #dcd9dd;
 }
 
 .calm-modal-desc {
-  font-size: 0.88rem;
+  font-size: 1.05rem;
   color: var(--text-muted);
-  line-height: 1.45;
-  margin-bottom: 20px;
+  line-height: 1.55;
+  margin-bottom: 24px;
 }
 
 .password-input-wrapper {
@@ -1526,13 +1530,14 @@ h5 {
 
 .password-input {
   width: 100%;
-  height: 48px;
-  padding: 0 44px 0 16px;
+  height: 58px;
+  padding: 0 48px 0 18px;
   background-color: var(--surface-low);
   color: var(--text-main);
-  border: 1.5px solid transparent;
-  border-radius: 12px;
-  font-size: 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: 14px;
+  font-size: 1.25rem;
+  font-weight: 700;
   font-family: inherit;
   transition: all 0.2s ease;
 }
@@ -1546,16 +1551,20 @@ h5 {
 
 .password-eye-btn {
   position: absolute;
-  right: 12px;
+  right: 14px;
   top: 50%;
   transform: translateY(-50%);
   background: none;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
+  padding: 6px;
   display: flex;
   align-items: center;
+}
+
+.password-eye-btn .material-symbols-outlined {
+  font-size: 24px;
 }
 
 .password-eye-btn:hover {
@@ -1565,36 +1574,40 @@ h5 {
 .calm-modal-error {
   display: none;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: var(--danger);
-  font-size: 0.85rem;
+  font-size: 1rem;
   font-weight: 600;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .calm-modal-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 20px;
+  gap: 12px;
+  margin-top: 24px;
 }
 
 .calm-modal-btn-submit {
   width: 100%;
-  height: 48px;
+  height: 54px;
   background-color: var(--primary);
   color: #ffffff;
   border: none;
-  border-radius: 12px;
-  font-size: 0.95rem;
+  border-radius: 14px;
+  font-size: 1.15rem;
   font-family: inherit;
-  font-weight: 700;
+  font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.calm-modal-btn-submit .material-symbols-outlined {
+  font-size: 22px;
 }
 
 .calm-modal-btn-submit:hover {
@@ -1603,14 +1616,14 @@ h5 {
 
 .calm-modal-btn-cancel {
   width: 100%;
-  height: 40px;
+  height: 48px;
   background-color: var(--surface-high);
   color: var(--text-muted);
   border: none;
-  border-radius: 12px;
-  font-size: 0.85rem;
+  border-radius: 14px;
+  font-size: 1.05rem;
   font-family: inherit;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -1643,9 +1656,9 @@ h5 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 20px;
   width: 100%;
-  gap: 10px;
+  gap: 12px;
 }
 
 .quiz-header-channel-wrap {
@@ -1656,33 +1669,34 @@ h5 {
 .quiz-header-actions-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .quiz-user-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 10px 3px 5px;
+  gap: 8px;
+  padding: 5px 14px 5px 8px;
   border-radius: 9999px;
   background-color: var(--surface-low);
   border: 1px solid var(--border-color);
+  font-size: 0.95rem;
 }
 
 .quiz-user-icon-circle {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background-color: var(--primary);
   color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .quiz-user-name {
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--text-main);
 }
@@ -1690,25 +1704,25 @@ h5 {
 .quiz-timer-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
+  gap: 6px;
+  padding: 6px 14px;
   border-radius: 9999px;
   background-color: var(--primary-light);
   color: var(--on-primary-fixed);
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 700;
 }
 
 .quiz-exit-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
+  gap: 6px;
+  padding: 6px 14px;
   border-radius: 9999px;
   border: 1px solid transparent;
   background-color: transparent;
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1720,14 +1734,14 @@ h5 {
   border-color: var(--border-color);
 }
 
-/* Felső állapot és haladási kártya (Kompakt) */
+/* Felső állapot és haladási kártya (Szellős, jól látható) */
 .quiz-progress-card {
   background-color: var(--surface-lowest);
-  border-radius: 12px;
+  border-radius: 14px;
   box-shadow: 0 1px 6px rgba(27, 27, 30, 0.04);
   border: 1.5px solid var(--border-color);
-  padding: 8px 14px;
-  margin-bottom: 8px;
+  padding: 14px 20px;
+  margin-bottom: 20px;
   width: 100%;
 }
 
@@ -1737,7 +1751,7 @@ h5 {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .quiz-progress-title-wrap {
@@ -1747,7 +1761,7 @@ h5 {
 }
 
 .quiz-progress-count {
-  font-size: 1.05rem;
+  font-size: 1.25rem;
   font-weight: 800;
   color: var(--text-main);
   letter-spacing: -0.01em;
@@ -1774,10 +1788,10 @@ h5 {
 .quiz-metric-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
+  gap: 5px;
+  padding: 5px 12px;
   border-radius: 9999px;
-  font-size: 0.8rem;
+  font-size: 0.95rem;
   font-weight: 700;
 }
 
@@ -1795,17 +1809,17 @@ h5 {
 .quiz-metric-grade-label {
   color: var(--text-muted);
   font-weight: 500;
-  font-size: 0.78rem;
+  font-size: 0.9rem;
 }
 
 .quiz-progress-track {
   position: relative;
   width: 100%;
-  height: 6px;
+  height: 8px;
   border-radius: 9999px;
   background-color: var(--surface-high);
   overflow: hidden;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 .quiz-progress-bar-fill {
@@ -1819,8 +1833,8 @@ h5 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 4px;
-  font-size: 0.75rem;
+  margin-top: 6px;
+  font-size: 0.88rem;
   padding: 0 2px;
 }
 
@@ -1834,16 +1848,16 @@ h5 {
   font-weight: 700;
 }
 
-/* Fő Kérdéskártya (Kompakt méret, nulla felesleges scrollozás) */
+/* Fő Kérdéskártya (Szellős méret, tiszta olvashatóság) */
 .quiz-main-card {
   background-color: var(--surface-lowest);
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: 0 2px 12px rgba(27, 27, 30, 0.05);
   border: 1.5px solid var(--border-color);
-  padding: 14px 18px;
-  margin-bottom: 6px;
+  padding: 22px 24px 20px 24px;
+  margin-bottom: 16px;
   width: 100%;
-  min-height: 380px;
+  min-height: 400px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1853,20 +1867,20 @@ h5 {
 .quiz-question-header {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 14px;
+  margin-bottom: 16px;
 }
 
 .quiz-qnum-badge {
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background-color: var(--primary);
   color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-weight: 800;
   flex-shrink: 0;
   box-shadow: 0 2px 4px rgba(234, 88, 12, 0.25);
@@ -1878,22 +1892,22 @@ h5 {
 }
 
 .quiz-question-text {
-  font-size: 1.15rem;
-  font-weight: 700;
+  font-size: 1.35rem;
+  font-weight: 800;
   color: var(--text-main);
-  line-height: 1.35;
-  margin-bottom: 2px;
+  line-height: 1.45;
+  margin-bottom: 4px;
 }
 
 .quiz-question-hint {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--text-muted);
   font-style: italic;
 }
 
 .quiz-image-box {
-  margin: 8px 0 12px 0;
-  padding: 8px;
+  margin: 10px 0 16px 0;
+  padding: 10px;
   border-radius: var(--radius-md);
   background-color: var(--surface-low);
   text-align: center;
@@ -1902,33 +1916,33 @@ h5 {
 
 .quiz-image {
   max-width: 100%;
-  max-height: 180px;
+  max-height: 220px;
   object-fit: contain;
   border-radius: var(--radius-sm);
 }
 
-/* Választós kérdés (ABCD) kártyák */
+/* Választós kérdés (ABCD) kártyák (Szellős, nagy betűméret) */
 .quiz-options-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .quiz-option-tile {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  border-radius: var(--radius-md);
+  padding: 14px 20px;
+  border-radius: 14px;
   background-color: var(--surface-lowest);
   border: 1.5px solid var(--border-color);
   box-shadow: 0 1px 4px rgba(27, 27, 30, 0.04);
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
-  gap: 12px;
-  min-height: 48px;
+  gap: 14px;
+  min-height: 58px;
 }
 
 .quiz-option-tile:hover {
@@ -1945,22 +1959,22 @@ h5 {
 .quiz-option-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex: 1;
   min-width: 0;
 }
 
 .quiz-option-badge {
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background-color: var(--surface-high);
   color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.95rem;
-  font-weight: 700;
+  font-size: 1.15rem;
+  font-weight: 800;
   flex-shrink: 0;
   transition: all 0.15s ease;
 }
@@ -1972,20 +1986,20 @@ h5 {
 }
 
 .quiz-option-text {
-  font-size: 1.05rem;
+  font-size: 1.2rem;
   color: var(--text-main);
-  font-weight: 500;
-  line-height: 1.35;
+  font-weight: 600;
+  line-height: 1.4;
   word-break: break-word;
 }
 
 .quiz-option-tile.selected .quiz-option-text {
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .quiz-option-radio {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background-color: var(--surface-high);
   display: flex;
@@ -1996,7 +2010,7 @@ h5 {
 }
 
 .quiz-option-check {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 800;
   color: transparent;
 }
@@ -2013,8 +2027,8 @@ h5 {
 .quiz-tf-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 @media (max-width: 640px) {
@@ -2027,13 +2041,13 @@ h5 {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  border-radius: 16px;
   background-color: var(--surface-low);
   border: 2px solid transparent;
   cursor: pointer;
   transition: all 0.15s ease;
-  min-height: 100px;
+  min-height: 115px;
   text-align: left;
   user-select: none;
 }
@@ -2056,15 +2070,15 @@ h5 {
 }
 
 .quiz-tf-badge {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
   background-color: var(--surface-high);
   color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   font-weight: 800;
 }
 
@@ -2075,11 +2089,11 @@ h5 {
 }
 
 .quiz-tf-title-wrap {
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 .quiz-tf-label {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   font-weight: 700;
   color: var(--text-muted);
@@ -2091,15 +2105,15 @@ h5 {
 }
 
 .quiz-tf-name {
-  font-size: 1.35rem;
+  font-size: 1.55rem;
   font-weight: 800;
   color: var(--text-main);
   margin-top: 2px;
 }
 
 .quiz-tf-radio {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background-color: var(--surface-high);
   display: flex;
@@ -2108,7 +2122,7 @@ h5 {
 }
 
 .quiz-tf-radio .material-symbols-outlined {
-  font-size: 16px;
+  font-size: 18px;
   color: transparent;
 }
 
@@ -2124,8 +2138,8 @@ h5 {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 6px;
-  font-size: 0.82rem;
+  margin-top: 8px;
+  font-size: 0.92rem;
   color: var(--text-muted);
   font-weight: 500;
 }
@@ -2137,7 +2151,7 @@ h5 {
 
 /* SHORT kérdés mező */
 .quiz-short-wrap {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .quiz-short-input-box {
@@ -2148,19 +2162,19 @@ h5 {
 
 .quiz-short-icon {
   position: absolute;
-  left: 14px;
+  left: 16px;
   color: var(--text-muted);
-  font-size: 20px;
+  font-size: 24px;
 }
 
 .quiz-short-input {
   width: 100%;
-  height: 48px;
-  padding: 0 16px 0 44px;
-  font-size: 1.05rem;
-  font-weight: 600;
+  height: 58px;
+  padding: 0 18px 0 50px;
+  font-size: 1.25rem;
+  font-weight: 700;
   font-family: inherit;
-  border-radius: var(--radius-md);
+  border-radius: 14px;
   border: 2px solid var(--border-color);
   background-color: #ffffff;
   color: var(--text-main);
@@ -2177,9 +2191,9 @@ h5 {
 .quiz-footer-zone {
   width: 100%;
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: 14px;
   border-top: 1px solid var(--border-color);
-  min-height: 48px;
+  min-height: 56px;
   display: flex;
   align-items: center;
   box-sizing: border-box;
@@ -2203,7 +2217,7 @@ h5 {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: 14px;
   border-top: 1px solid var(--border-color);
   width: 100%;
 }
@@ -2212,14 +2226,14 @@ h5 {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   color: var(--text-muted);
   flex: 1;
   min-width: 160px;
 }
 
 .quiz-action-tip .material-symbols-outlined {
-  font-size: 16px;
+  font-size: 18px;
   color: var(--secondary);
 }
 
@@ -2227,16 +2241,16 @@ h5 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-width: 150px;
-  height: 40px;
-  padding: 0 20px;
-  border-radius: 8px;
+  gap: 8px;
+  min-width: 170px;
+  height: 52px;
+  padding: 0 28px;
+  border-radius: 12px;
   border: none;
   background-color: var(--primary);
   color: #ffffff;
-  font-size: 0.95rem;
-  font-weight: 700;
+  font-size: 1.2rem;
+  font-weight: 800;
   font-family: inherit;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(234, 88, 12, 0.2);
@@ -2259,40 +2273,41 @@ h5 {
   box-shadow: none;
 }
 
-/* Kompakt 1 soros azonnali Socrative visszajelző sáv (nulla vertikális scrollozás) */
+/* Kompakt 1 soros azonnali Socrative visszajelző sáv (Szellős, jól látható) */
 .quiz-feedback-strip {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  gap: 12px;
-  padding: 6px 12px;
-  border-radius: 10px;
-  min-height: 42px;
+  gap: 14px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  min-height: 52px;
   box-sizing: border-box;
 }
 
 .quiz-feedback-strip-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   min-width: 0;
-  font-size: 0.9rem;
+  font-size: 1.05rem;
 }
 
 .quiz-feedback-strip-icon {
-  font-size: 20px;
+  font-size: 24px;
   flex-shrink: 0;
 }
 
 .quiz-feedback-strip-title {
-  font-weight: 700;
+  font-weight: 800;
+  font-size: 1.1rem;
   white-space: nowrap;
 }
 
 .quiz-feedback-strip-body {
-  font-size: 0.88rem;
+  font-size: 1rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2322,15 +2337,15 @@ h5 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 16px;
-  border-radius: 8px;
+  gap: 8px;
+  height: 44px;
+  padding: 0 22px;
+  border-radius: 10px;
   border: none;
   background-color: var(--primary);
   color: #ffffff;
-  font-size: 0.88rem;
-  font-weight: 700;
+  font-size: 1.05rem;
+  font-weight: 800;
   font-family: inherit;
   cursor: pointer;
   flex-shrink: 0;

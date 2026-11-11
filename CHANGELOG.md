@@ -4,6 +4,49 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.9.0] – 2026-11-11
+
+### Szellős és nagyított tesztmegoldó felület, teljes tesztre vetített érdemjegyszámítás és konzisztens modálkezelés
+
+A tanulói tesztmegoldó felület és a felugró párbeszédpanelek átfogó vizuális és funkcionális megújítása: a dolgozat fejlécéből a felesleges kék tesztnév kapszula helyére a diák munkaállomás azonosítója került a bal oldalra, a folyamatjelző felől törlésre került a felesleges kérdéstípus-jelvény, a fejléc és a folyamatjelző kártya alatt 20 képpontos szellős térelválasztó rés jött létre, a kérdések és válaszkártyák megnövelt betűméretet és ergonomikus lapkaméretet kaptak, az élő érdemjegy és százalékszámítás a teljes teszt maximális összpontszámához lett igazítva, a főoldali bejelentkező és a tesztfelületi kilépési modáljai pedig egységesen nagyított méretet és mellékattintásos bezárhatóságot kaptak.
+
+#### Hozzáadva és átrendezve (Added and Changed)
+* **Tesztmegoldó fejléc és folyamatjelző sáv átrendezése:**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A korábbi kék színű tesztnév kapszula (`#quiz-live-channel-badge`) törlésre került a fejlécből; a helyére a fejléc bal oldalára a „🖥️ Diák munkaállomás” jelvény (`#pc-badge`) került.
+  - A folyamatjelző kártyáról törlésre került a redundáns kérdéstípus-jelvény (`#question-type-badge`, pl. Feleletválasztó / Igaz-hamis).
+  - A fejléc alatt `20px`, a folyamatjelző kártya alatt szintén `20px` térköz jött létre (`margin-bottom: 20px;`), megszüntetve a komponensek egybefolyását.
+
+* **Nagyított betű- és elemméretek a tesztmegoldás felületén:**
+  - **Fájl:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Kérdésszöveg: `1.35rem` és vastagított (`font-weight: 800`) betűk, `38px`-es kérdésszámozó jelvénnyel.
+  - Választós lapkák (ABCD): `min-height: 58px`, `1.2rem` betűméret, `38px`-es betűjelvények és `14px` belső margó.
+  - Igaz / Hamis felület: `min-height: 115px`, `1.55rem` kiemelt betűméret.
+  - Rövid válasz beviteli mező: `58px` magasság, `1.25rem` betűméret és `24px`-es ikon.
+  - Válasz beküldése gomb: `52px` magasság, `1.2rem` betűméret és `170px` minimális szélesség.
+  - Azonnali Socrative visszajelző sáv és Következő gomb: `52px` sáv, `1.05rem` / `1.1rem` szövegméret, `44px` magas gombbal.
+
+* **Megnövelt és szellős modál ablakok:**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html)
+  - A főoldali Tanári belépés és a tesztfelületi Kilépés megerősítése modálok maximális szélessége `400px`-ről `460px`-re, belső margójuk `28px`-ről `32px`-re nőtt.
+  - Címsor: `1.45rem` és `800`-as vastagság, leíró szöveg: `1.05rem`, jelszó beviteli mező: `58px` magasság és `1.25rem` betűméret, műveleti jóváhagyó gomb: `54px` magasság és `1.15rem` méret, elutasító gomb: `48px` magasság és `1.05rem` méret.
+
+#### Javítva (Fixed)
+* **Élő KRÉTA érdemjegy és százalékszámítás igazítása a teljes dolgozathoz:**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Az élő kiértékelés korábban az eddig megválaszolt kérdések számához viszonyította az eredményt (így az 1. helyes válasz után azonnal 100%-ot és 5-ös jegyet számolt).
+  - A javítás után a számítás a feladatsorban elérhető maximális összpontszámhoz (`totalMaxPoints`) viszonyítva képzi a százalékot és a KRÉTA érdemjegyet (pl. 5 kérdésből álló teszt esetén 1 helyes válasz = $20\% \rightarrow \mathbf{1\text{-es}}$ érdemjegy).
+
+* **Főoldali névválasztó fókusz háttérszínének egységesítése:**
+  - **Fájl:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A `.calm-select:focus` állapota `var(--surface-low)` szürke színt kapott a korábbi fehér (`var(--surface-lowest)`) helyett, így a 2. fázisra váltáskor automatikusan fókuszba lépő névválasztó mező háttérszíne hajszálpontosan megegyezik a tantárgy és osztály mező színével.
+
+* **Konzisztens modálkezelés a felületen:**
+  - **Fájl:** [`public/js/utils.js`](file:///d:/dev/Röpdolgozat%20program/public/js/utils.js)
+  - A főoldali Tanári belépés modál mostantól a Kilépés megerősítése modálhoz hasonlóan mellékattintással (az ablakon kívüli sötétített háttérre kattintva) is bezárható. Az adminisztrátori felület (`admin.html`) kötelező hitelesítési kapuja változatlanul védett maradt.
+
+---
+
 ## [1.8.0] – 2026-11-11
 
 ### Kétlépéses diák-belépési varázsló, letisztult fehér sík felület, azonos magasságú stabil fázisok és megnövelt betűméretek

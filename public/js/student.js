@@ -406,7 +406,17 @@
       return;
     }
 
-    const percentage = Math.round((earnedPoints / answeredCount) * 100);
+    let totalMaxPoints = 0;
+    if (currentQuestions && currentQuestions.length > 0) {
+      totalMaxPoints = currentQuestions.reduce((sum, q) => sum + (Number(q.points) || 1), 0);
+    } else if (currentQuiz && currentQuiz.total_points > 0) {
+      totalMaxPoints = currentQuiz.total_points;
+    }
+    if (totalMaxPoints <= 0) {
+      totalMaxPoints = (currentQuestions && currentQuestions.length) || 1;
+    }
+
+    const percentage = Math.min(100, Math.round((earnedPoints / totalMaxPoints) * 100));
     const grade = calculateKRÉTAGrade(percentage, sessionThresholds);
     const gradeText = getKRÉTAGradeText(grade);
 

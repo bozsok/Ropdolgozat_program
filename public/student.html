@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.8.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.9.0">
 </head>
 <body style="background-color: #ffffff;">
 
@@ -29,8 +29,8 @@
         A dolgozatok indításához, ellenőrzéséhez és az eredmények megtekintéséhez add meg a tanári jelszót!
       </p>
       <form id="form-teacher-login" onsubmit="return false;">
-        <div class="form-group" style="margin-bottom: 8px;">
-          <label class="form-label" for="input-pin" style="font-size: 0.88rem; font-weight: 700; color: var(--text-main); margin-bottom: 6px;">Tanári jelszó</label>
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label class="form-label" for="input-pin" style="font-size: 1.05rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px; display: block;">Tanári jelszó</label>
           <div class="password-input-wrapper">
             <input type="password" id="input-pin" class="password-input" placeholder="••••••••" autocomplete="current-password" required>
             <button type="button" id="btn-toggle-pin-visibility" class="password-eye-btn" title="Jelszó felfedése / elrejtése">
@@ -39,7 +39,7 @@
           </div>
         </div>
         <div id="teacher-login-error" class="calm-modal-error">
-          <span class="material-symbols-outlined" style="font-size: 18px;">error</span>
+          <span class="material-symbols-outlined" style="font-size: 22px;">error</span>
           <span id="teacher-login-error-text">Helytelen tanári jelszó!</span>
         </div>
         <div class="calm-modal-actions">
@@ -98,17 +98,13 @@
       <!-- Dolgozat dedikált fejléc (Tesztírás alatt aktív) -->
       <header id="quiz-top-bar" class="quiz-top-bar" style="display: none;">
         <div class="quiz-header-channel-wrap">
-          <div id="quiz-live-channel-badge" class="live-badge badge-subject-digital badge-active">
-            <span id="quiz-live-channel-dot" class="badge-subject-dot" style="background-color: #38bdf8;"></span>
-            <span id="quiz-live-channel-text" class="badge-text-compact"><strong>6. évf.</strong> · Dolgozat</span>
-          </div>
-        </div>
-        <div class="quiz-header-actions-wrap">
-          <!-- Gép jelölése: csak dolgozatírás alatt látható a fejlécben -->
+          <!-- Gép jelölése: a fejléc bal oldalán -->
           <div id="pc-badge" class="quiz-user-pill">
             <span class="top-pill-dot"></span>
             <span>🖥️ <span id="pc-number-text">Diák munkaállomás</span></span>
           </div>
+        </div>
+        <div class="quiz-header-actions-wrap">
           <div class="quiz-user-pill">
             <div class="quiz-user-icon-circle">
               <span class="material-symbols-outlined">person</span>
@@ -300,10 +296,9 @@
         <!-- 2.1 Felső állapot és haladási kártya -->
         <div class="quiz-progress-card">
           <div class="quiz-progress-header">
-            <!-- Bal oldal: Kérdésszám és kérdéstípus jelvény -->
+            <!-- Bal oldal: Kérdésszám -->
             <div class="quiz-progress-title-wrap">
               <span id="question-progress" class="quiz-progress-count">1 / 5. kérdés</span>
-              <span id="question-type-badge" class="quiz-type-badge">Feleletválasztó</span>
             </div>
             <!-- Jobb oldal: Élő eredmény és becsült érdemjegy -->
             <div class="quiz-metrics-wrap">
@@ -430,7 +425,7 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.8.0"></script>
-  <script src="/js/student.js?v=1.8.0"></script>
+  <script src="/js/utils.js?v=1.9.0"></script>
+  <script src="/js/student.js?v=1.9.0"></script>
 </body>
 </html>
