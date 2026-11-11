@@ -34,6 +34,7 @@
   const liveSessionTitle = document.getElementById('live-session-title');
   const liveSessionInfo = document.getElementById('live-session-info');
   const btnFinishSession = document.getElementById('btn-finish-session');
+  const btnAdminStartRace = document.getElementById('btn-admin-start-race');
   const badgeSessionFinished = document.getElementById('badge-session-finished');
   const matrixTable = document.getElementById('matrix-table');
   const matrixHeadRow = document.getElementById('matrix-head-row');
@@ -214,6 +215,10 @@
     socket.on('participant:focus_lost', (data) => {
       showToast(`⚠️ Fókuszvesztés: ${escapeHtml(data.studentName)} (${data.focusLostCount}x)`, 'danger');
     });
+
+    socket.on('race:started', () => {
+      if (btnAdminStartRace) btnAdminStartRace.style.display = 'none';
+    });
   }
 
   /**
@@ -229,6 +234,20 @@
     }
   }
 
+  function getSubjectTheme(subjectName) {
+    const norm = String(subjectName || '').toLowerCase().trim();
+    if (norm.includes('digit') || norm.includes('info')) {
+      return { cssClass: 'badge-subject-digital', color: '#38bdf8' };
+    }
+    if (norm.includes('tech')) {
+      return { cssClass: 'badge-subject-tech', color: '#fbbf24' };
+    }
+    if (norm.includes('fejl') || norm.includes('fogl')) {
+      return { cssClass: 'badge-subject-dev', color: '#c084fc' };
+    }
+    return { cssClass: 'badge-subject-other', color: '#2dd4bf' };
+  }
+
   function renderBadges() {
     liveBadgesList.innerHTML = '';
     if (activeSessionsList.length === 0) {
@@ -237,11 +256,15 @@
     }
 
     activeSessionsList.forEach(session => {
+      const theme = getSubjectTheme(session.subject_name);
+      const isCurrent = String(session.id) === String(currentSessionId);
       const badge = document.createElement('div');
-      badge.className = `live-badge ${String(session.id) === String(currentSessionId) ? 'badge-active' : ''}`;
+      badge.className = `live-badge ${theme.cssClass} ${isCurrent ? 'badge-active' : ''}`;
+      badge.title = `${session.subject_name} ${session.grade_level}. évfolyam – „${session.quiz_title}” (${session.participant_count} diák)`;
       badge.innerHTML = `
-        <span>🟢 ${escapeHtml(session.subject_name)} ${escapeHtml(session.grade_level)}. évf.</span>
-        <span style="opacity: 0.8;">(„${escapeHtml(session.quiz_title)}” – ${session.participant_count} diák)</span>
+        <span class="badge-subject-dot" style="background-color: ${theme.color};"></span>
+        <span class="badge-text-compact"><strong>${escapeHtml(session.grade_level)}. évf.</strong> · ${escapeHtml(session.quiz_title)}</span>
+        <span class="badge-count-pill">${session.participant_count}</span>
       `;
 
       badge.addEventListener('click', () => {
@@ -288,6 +311,7 @@
         const endedFormatted = data.session.ended_at ? data.session.ended_at.replace('T', ' ').substring(0, 16) : '–';
         liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${data.session.mode} | Befejezve: ${endedFormatted}`;
         if (btnFinishSession) btnFinishSession.style.display = 'none';
+        if (btnAdminStartRace) btnAdminStartRace.style.display = 'none';
         if (badgeSessionFinished) badgeSessionFinished.style.display = 'inline-block';
       } else {
         if (sessionBadgeChannel) {
@@ -301,6 +325,12 @@
         liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${data.session.mode}`;
         if (btnFinishSession) btnFinishSession.style.display = 'inline-block';
         if (badgeSessionFinished) badgeSessionFinished.style.display = 'none';
+
+        if (btnAdminStartRace) {
+          const isSpaceRace = data.session.mode === 'SPACE_RACE';
+          const isWaiting = isSpaceRace && (!data.session.current_question_index || data.session.current_question_index === 0);
+          btnAdminStartRace.style.display = isWaiting ? 'inline-block' : 'none';
+        }
       }
 
       // Export linkek beállítása
@@ -548,6 +578,34 @@
   // Kompatibilitási névfeloldó alias
   async function unlockParticipant(participantId) {
     return resetParticipant(participantId);
+  }
+
+  // Űrhajós verseny indítása (RAJT gomb)
+  if (btnAdminStartRace) {
+    btnAdminStartRace.addEventListener('click', async () => {
+      if (!currentSessionId) return;
+      try {
+        btnAdminStartRace.disabled = true;
+        btnAdminStartRace.textContent = '🚀 Indítás...';
+        const res = await fetch(`/api/admin/sessions/${currentSessionId}/start-race`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          showToast('🚀 A verseny sikeresen elindult!', 'success');
+          btnAdminStartRace.style.display = 'none';
+        } else {
+          const err = await res.json();
+          alert(err.error || 'Hiba a rajt indításakor!');
+          btnAdminStartRace.disabled = false;
+          btnAdminStartRace.textContent = '🚀 RAJT! Verseny indítása';
+        }
+      } catch (err) {
+        console.error('Hiba a rajt indításakor:', err);
+        btnAdminStartRace.disabled = false;
+        btnAdminStartRace.textContent = '🚀 RAJT! Verseny indítása';
+      }
+    });
   }
 
   // Dolgozat befejezése (Finish)

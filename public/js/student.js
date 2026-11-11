@@ -63,6 +63,9 @@
   ];
 
   const quizContainer = document.getElementById('quiz-container');
+  const lobbyContainer = document.getElementById('lobby-container');
+  const lobbyRocketBadge = document.getElementById('lobby-rocket-badge');
+  const lobbyTeamName = document.getElementById('lobby-team-name');
   const quizTitle = document.getElementById('quiz-title');
   const studentDisplayName = document.getElementById('student-display-name');
   const questionProgress = document.getElementById('question-progress');
@@ -138,6 +141,25 @@
       sessionStorage.removeItem('ropdolgozat_token');
       alert('A tanár feloldotta a munkamenetedet. Az oldal újratöltődik.');
       window.location.reload();
+    });
+
+    // Űrhajós verseny rajtot jelző esemény (Space Race indítása)
+    socket.on('race:started', (data) => {
+      if (activeSession && (!data || !data.sessionId || String(data.sessionId) === String(activeSession.id))) {
+        if (lobbyContainer) lobbyContainer.style.display = 'none';
+        if (quizContainer) quizContainer.style.display = 'block';
+        showToast('🚀 A verseny elindult! Sok sikert!', 'success');
+        if (currentQuestions && currentQuestions.length > 0) {
+          let nextIndex = 0;
+          for (let i = 0; i < currentQuestions.length; i++) {
+            if (!answeredQuestionIds.has(currentQuestions[i].id)) {
+              nextIndex = i;
+              break;
+            }
+          }
+          renderQuestion(nextIndex);
+        }
+      }
     });
 
     // Ha a tanár elindít egy új dolgozatot, azonnal reagál a diák felület
@@ -569,6 +591,37 @@
     // Felület váltás
     loginContainer.style.display = 'none';
     if (studentTopBar) studentTopBar.style.display = 'none';
+
+    // Űrhajós verseny ellenőrzése: ha Space Race módban vagyunk és a verseny még nem rajtolt el
+    const isSpaceRace = (data.participant && data.participant.session_mode === 'SPACE_RACE') || (activeSession && activeSession.mode === 'SPACE_RACE');
+    const isWaitingForStart = data.participant ? (data.participant.is_race_started === false) : true;
+
+    if (isSpaceRace && isWaitingForStart) {
+      if (quizContainer) quizContainer.style.display = 'none';
+      if (lobbyContainer) {
+        lobbyContainer.style.display = 'block';
+        const teamColors = {
+          'Kék': { bg: '#2563eb', shadow: 'rgba(37, 99, 235, 0.35)' },
+          'Piros': { bg: '#dc2626', shadow: 'rgba(220, 38, 38, 0.35)' },
+          'Zöld': { bg: '#16a34a', shadow: 'rgba(22, 163, 74, 0.35)' },
+          'Sárga': { bg: '#ca8a04', shadow: 'rgba(202, 138, 4, 0.35)' }
+        };
+        const colorName = (data.participant && data.participant.team_color) || selectedTeamColor || 'Kék';
+        const cInfo = teamColors[colorName] || teamColors['Kék'];
+        if (lobbyRocketBadge) {
+          lobbyRocketBadge.style.backgroundColor = cInfo.bg;
+          lobbyRocketBadge.style.boxShadow = `0 8px 24px ${cInfo.shadow}`;
+        }
+        if (lobbyTeamName) {
+          lobbyTeamName.textContent = colorName;
+          lobbyTeamName.style.color = cInfo.bg;
+        }
+      }
+      return;
+    }
+
+    // Normál dolgozat vagy már elrajtolt verseny
+    if (lobbyContainer) lobbyContainer.style.display = 'none';
     quizContainer.style.display = 'block';
 
     quizTitle.textContent = currentQuiz.title;

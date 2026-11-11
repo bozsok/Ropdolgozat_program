@@ -14,6 +14,7 @@
   const projParticipantCounter = document.getElementById('proj-participant-counter');
   const projTimerBox = document.getElementById('proj-timer-box');
   const projTimerText = document.getElementById('proj-timer-text');
+  const btnStartRace = document.getElementById('btn-start-race');
 
   const btnViewRace = document.getElementById('btn-view-race');
   const btnViewStats = document.getElementById('btn-view-stats');
@@ -63,6 +64,32 @@
       viewAnonStats.style.display = 'block';
     });
 
+    if (btnStartRace) {
+      btnStartRace.addEventListener('click', async () => {
+        if (!activeSessionId) return;
+        try {
+          btnStartRace.disabled = true;
+          btnStartRace.textContent = '🚀 Indítás...';
+          const res = await fetch(`/api/admin/sessions/${activeSessionId}/start-race`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if (res.ok) {
+            btnStartRace.style.display = 'none';
+          } else {
+            const err = await res.json();
+            alert('Hiba a verseny indításakor: ' + (err.error || 'Ismeretlen hiba'));
+            btnStartRace.disabled = false;
+            btnStartRace.textContent = '🚀 RAJT! Verseny indítása';
+          }
+        } catch (err) {
+          console.error('Hiba a rajt indításakor:', err);
+          btnStartRace.disabled = false;
+          btnStartRace.textContent = '🚀 RAJT! Verseny indítása';
+        }
+      });
+    }
+
     await findAndConnectSession();
   }
 
@@ -71,6 +98,10 @@
       if (!activeSessionId && badges.length > 0) {
         await findAndConnectSession();
       }
+    });
+
+    socket.on('race:started', () => {
+      if (btnStartRace) btnStartRace.style.display = 'none';
     });
 
     socket.on('matrix:updated', (data) => {
@@ -133,6 +164,13 @@
     projQuizTitle.textContent = session.quiz_title;
     projMetaInfo.textContent = `${session.subject_name} – ${session.grade_level}. évfolyam (${session.mode})`;
     projParticipantCounter.textContent = `${participants.length} résztvevő diák`;
+
+    // RAJT gomb láthatósága (Space Race módban a rajt előtt)
+    if (btnStartRace) {
+      const isSpaceRace = session.mode === 'SPACE_RACE';
+      const isWaitingForRace = isSpaceRace && (!session.current_question_index || session.current_question_index === 0);
+      btnStartRace.style.display = isWaitingForRace ? 'inline-flex' : 'none';
+    }
 
     // 1. SPACE RACE CSAPATOK SZÁMÍTÁSA
     const teams = {

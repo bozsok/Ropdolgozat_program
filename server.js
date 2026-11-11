@@ -33,9 +33,19 @@ app.use(cookieParser(config.cookieSecret));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Statikus fájlok kiszolgálása (Offline frontend és feltöltött képek)
-app.use(express.static(config.publicDir));
-app.use('/uploads', express.static(config.uploadsDir));
+// Statikus fájlok kiszolgálása (Offline frontend és feltöltött képek, LAN cache beállításokkal)
+app.use(express.static(config.publicDir, {
+  setHeaders: (res, filePath) => {
+    if (filePath.includes('fonts') || filePath.includes('img') || filePath.endsWith('.ico') || filePath.endsWith('.png')) {
+      // Kizárólag a betűkészletek és statikus arculati képek kapnak hosszú távú gyorsítótárazást (30 nap)
+      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+    } else {
+      // HTML, JS és CSS fájlok mindig azonnal frissüljenek az új verziók érvényesüléséhez
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
+  }
+}));
+app.use('/uploads', express.static(config.uploadsDir, { maxAge: '7d' }));
 
 // Útvonalak (API és Oldalnézetek)
 app.use('/api', apiRoutes);

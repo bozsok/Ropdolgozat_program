@@ -4,6 +4,45 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.6.0] – 2026-11-11
+
+### Space Race Tantermi Közös Rajt (RAJT gomb és lebegő űrhajós Lobby), kompakt tantárgyszínes Live Badges és FOUT-mentes gyorsítótárazás
+
+A tantermi versenyek szinkronizálását biztosító Tantermi Közös Rajt (Lobby + RAJT gomb) bevezetése, az adminisztrátori élő státuszfülek helytakarékos, tantárgyszínes átalakítása (zöld és piros színek mellőzésével), valamint a betűtípus-villogást (FOUT) és script-beragadást megszüntető gyorsítótár-architektúra.
+
+#### Hozzáadva (Added)
+* **Space Race Tantermi Közös Rajt mechanizmus (Lobby és RAJT gomb):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/projector.html`](file:///d:/dev/Röpdolgozat%20program/public/projector.html), [`public/js/projector.js`](file:///d:/dev/Röpdolgozat%20program/public/js/projector.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - **Diák Rajtállás (Lobby):** Űrhajós verseny módban a diák belépése és színválasztása után nem nyílik meg azonnal a teszt, hanem egy barátságos, lebegő űrhajós várakozó képernyő fogadja a tanuló által választott csapatszínben (`.lobby-rocket-floating`).
+  - **Tanári RAJT gomb:** A kivetítő képernyőn és az admin felületen is megjelent a feltűnő narancssárga **[ 🚀 RAJT! Verseny indítása ]** gomb, amely valós időben (Socket.io `race:started`) egyszerre indítja el a versenyt az összes diáknál.
+  - **Új végpont:** `POST /api/admin/sessions/:id/start-race` szigorú tanári hitelesítéssel.
+  - **Késve érkező diákok intelligens kezelése:** Ha egy tanuló a rajt után csatlakozik, a rendszer azonnal az 1. kérdéshez irányítja a várakoztatás helyett.
+
+#### Módosítva (Changed)
+* **Admin fejléc: Kompakt, tantárgyszínes élő státuszfülek (Live Badges):**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A zöld (helyes/élő) és piros (hibás/lezárt) színek teljes mellőzésével külön tantárgyi színkódok kerültek bevezetésre:
+    - 🔵 **Digitális kultúra:** Világoskék pont (`#38bdf8`), királykék kártya (`#0369a1`).
+    - 🟠 **Technika:** Borostyánsárga pont (`#fbbf24`), meleg bronz kártya (`#b45309`).
+    - 🟣 **Fejlesztő foglalkozás:** Lila pont (`#c084fc`), mélylila kártya (`#6b21a8`).
+    - 🔘 **Egyéb:** Türkiz pont (`#2dd4bf`), sötéttürkiz kártya (`#0f766e`).
+  - A feliratok kompakttá váltak (pl. `6. évf. · Hálózatok (21)`), a teljes név egérráhúzásra jelenik meg, így akár 6–8 futó dolgozat is kényelmesen elfér görgetősáv nélkül.
+
+* **Betűtípus-villogás (FOUT) és kliensoldali gyorsítótárazás optimalizálása:**
+  - **Fájlok:** [`server.js`](file:///d:/dev/Röpdolgozat%20program/server.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/projector.html`](file:///d:/dev/Röpdolgozat%20program/public/projector.html)
+  - A `font-display: swap` helyett a `font-display: block` került bevezetésre a helyi hálózaton azonnali Nunito Sans rendereléssel.
+  - A szerver a betűkészleteket és arculati képeket tartósan cache-eli (30 nap), míg az alkalmazáskódra (`.js`, `.css`, `.html`) `no-cache, must-revalidate` szabály vonatkozik verziókövetési paraméterekkel (`?v=1.6.0`), megakadályozva a kód beragadását a klienseknél.
+
+* **Space Race kártyák elrendezése:**
+  - **Fájl:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html)
+  - Mind a négy csapatszín kártya (Kék, Piros, Zöld, Sárga) megkapta a `calm-color-card` osztályt, így mindegyik konzisztensen két sorba törve (felül ikon, alul név) jelenik meg.
+
+* **Rendszerszintű verziószámok és dokumentáció aktualizálása:**
+  - **Fájlok:** [`package.json`](file:///d:/dev/Röpdolgozat%20program/package.json), [`project-context.md`](file:///d:/dev/Röpdolgozat%20program/project-context.md), [`README.md`](file:///d:/dev/Röpdolgozat%20program/README.md)
+  - A projektverzió egységesen `v1.6.0`-ra frissült.
+
+---
+
 ## [1.5.0] – 2026-11-11
 
 ### Főoldali „Calm Learner” arculat, 100% offline helyi betűkészletek (Nunito Sans & Material Symbols), tantermi gépszám-kijelzés és Best Practice font-renderelés

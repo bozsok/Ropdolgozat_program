@@ -256,6 +256,22 @@ router.post('/admin/sessions/:id/finish', requireAdminAuth, (req, res) => {
   }
 });
 
+// Űrhajós verseny indítása (Közös Rajt - Space Race)
+router.post('/admin/sessions/:id/start-race', requireAdminAuth, (req, res) => {
+  try {
+    const session = sessionRepo.startRace(req.params.id);
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`session_${req.params.id}`).emit('race:started', { sessionId: req.params.id });
+      const matrixData = sessionRepo.getLiveMatrixData(req.params.id);
+      io.to(`session_${req.params.id}`).emit('matrix:updated', matrixData);
+    }
+    res.json({ success: true, session });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Élő mátrix adatok lekérése a tanári 1. monitorhoz
 router.get('/admin/sessions/:id/matrix', requireAdminAuth, (req, res) => {
   try {
@@ -452,6 +468,8 @@ router.get('/student/session-data', (req, res) => {
         deadline_at: participant.deadline_at,
         time_limit_min: participant.time_limit_min,
         session_status: participant.session_status,
+        session_mode: participant.mode,
+        is_race_started: participant.mode === 'SPACE_RACE' ? (participant.current_question_index >= 1) : true,
         show_feedback_on_end: participant.show_feedback_on_end
       },
       quiz: {

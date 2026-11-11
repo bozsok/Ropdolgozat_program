@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Okoskodó – Tanári Vezérlőpult</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/style.css?v=1.6.0">
   <style>
     /* Admin specifikus elrendezés (Tilos az !important) */
     .admin-container {
@@ -117,6 +119,10 @@
 
             <!-- Egyetlen Lezárás gomb (Rule context 1.3) -->
             <div style="display: flex; gap: 10px; align-items: center;">
+              <!-- Űrhajós verseny RAJT gomb -->
+              <button id="btn-admin-start-race" class="btn btn-lg" style="display: none; background-color: #ea580c; color: #ffffff; font-weight: 800; border: none; box-shadow: 0 4px 12px rgba(234, 88, 12, 0.35);">
+                🚀 RAJT! Verseny indítása
+              </button>
               <span id="badge-session-finished" class="badge" style="display: none; background: #64748b; color: #ffffff; padding: 8px 14px; font-weight: 600; font-size: 0.95rem; border-radius: 6px;">⏹️ Dolgozat lezárva</span>
               <button id="btn-open-start-modal-alt" class="btn btn-secondary">➕ Újabb indítása</button>
               <button id="btn-finish-session" class="btn btn-danger btn-lg">
@@ -379,8 +385,8 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js"></script>
-  <script src="/js/admin.js"></script>
+  <script src="/js/utils.js?v=1.6.0"></script>
+  <script src="/js/admin.js?v=1.6.0"></script>
 </body>
 </html>
 

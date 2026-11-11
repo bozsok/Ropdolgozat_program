@@ -383,6 +383,7 @@ function getParticipantByToken(sessionToken) {
       q.title AS quiz_title,
       s.mode,
       s.status AS session_status,
+      s.current_question_index,
       s.time_limit_min,
       s.shuffle_options,
       s.show_feedback_on_end,
@@ -783,6 +784,18 @@ function getLiveMatrixData(sessionId) {
   };
 }
 
+/**
+ * Űrhajós verseny indítása (Közös Rajt - Space Race)
+ */
+function startRace(sessionId) {
+  const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId);
+  if (!session) throw new Error('A dolgozat nem található!');
+  if (session.status !== 'ACTIVE') throw new Error('Csak aktív dolgozat versenye indítható el!');
+
+  db.prepare('UPDATE sessions SET current_question_index = 1 WHERE id = ?').run(sessionId);
+  return { ...session, current_question_index: 1 };
+}
+
 module.exports = {
   getActiveSessions,
   getAllSessions,
@@ -790,6 +803,7 @@ module.exports = {
   getSessionById,
   startSession,
   finishSession,
+  startRace,
   joinSession,
   getParticipantByToken,
   recordFocusLost,

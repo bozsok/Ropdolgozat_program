@@ -6,7 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Okoskodó – Kivetítő Monitor (2. Monitor)</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/style.css?v=1.6.0">
   <style>
     /* Projektor specifikus sötét háttér a moziszerű élményhez (Tilos az !important) */
     body {
@@ -75,6 +77,11 @@
 
     <!-- Módváltó és Nagy Óra -->
     <div style="display: flex; align-items: center; gap: 20px;">
+      <!-- Tanári Rajt Gomb Space Race esetén -->
+      <button id="btn-start-race" class="btn" style="display: none; background-color: #ea580c; color: #ffffff; font-size: 1.15rem; font-weight: 800; padding: 10px 22px; border-radius: 12px; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(234, 88, 12, 0.45); transition: all 0.2s ease;">
+        🚀 RAJT! Verseny indítása
+      </button>
+
       <div class="admin-nav-tabs" style="border: none; margin: 0; padding: 0;">
         <button id="btn-view-race" class="nav-tab-btn active" style="color: #ffffff; background-color: #2563eb;">
           🚀 Space Race Verseny
@@ -185,8 +192,8 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js"></script>
-  <script src="/js/projector.js"></script>
+  <script src="/js/utils.js?v=1.6.0"></script>
+  <script src="/js/projector.js?v=1.6.0"></script>
 </body>
 
 </html>

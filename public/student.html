@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Okoskodó – Röpdolgozat program</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/style.css?v=1.6.0">
 </head>
 <body style="background-color: var(--surface);">
 
@@ -166,15 +168,15 @@
                 <span class="material-symbols-outlined">rocket_launch</span>
                 <span>Kék</span>
               </div>
-              <div class="color-card calm-color-red" data-color="Piros">
+              <div class="color-card calm-color-card calm-color-red" data-color="Piros">
                 <span class="material-symbols-outlined">rocket_launch</span>
                 <span>Piros</span>
               </div>
-              <div class="color-card calm-color-green" data-color="Zöld">
+              <div class="color-card calm-color-card calm-color-green" data-color="Zöld">
                 <span class="material-symbols-outlined">rocket_launch</span>
                 <span>Zöld</span>
               </div>
-              <div class="color-card calm-color-yellow" data-color="Sárga">
+              <div class="color-card calm-color-card calm-color-yellow" data-color="Sárga">
                 <span class="material-symbols-outlined">rocket_launch</span>
                 <span>Sárga</span>
               </div>
@@ -195,6 +197,25 @@
           </div>
           <p class="reassuring-text">
             Ne izgulj, a dolgozat egyszerű és nyugodt tempóban tölthető ki. Sok sikert!
+          </p>
+        </div>
+      </div>
+
+      <!-- ŰRHAJÓS VERSENY RAJTÁLLÁS (LOBBY - Várakozás a tanár indítására) -->
+      <div id="lobby-container" class="card calm-card" style="display: none; max-width: 580px; margin: 0 auto; text-align: center; padding: 40px 24px;">
+        <div id="lobby-rocket-badge" class="lobby-rocket-floating" style="width: 80px; height: 80px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; background-color: #2563eb; box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);">
+          <span class="material-symbols-outlined" style="font-size: 48px; color: #ffffff;">rocket_launch</span>
+        </div>
+        <h2 id="lobby-title" style="font-size: 1.5rem; margin-bottom: 8px;">Készen állsz a rajtra!</h2>
+        <p id="lobby-team-desc" style="font-size: 1.15rem; font-weight: 700; margin-bottom: 20px; color: var(--text-main);">
+          Csapatod: <span id="lobby-team-name" style="color: #2563eb;">Kék</span> űrhajó
+        </p>
+        <div class="reassuring-box" style="justify-content: center; max-width: 440px; margin: 0 auto;">
+          <div class="reassuring-icon-wrap">
+            <span class="material-symbols-outlined">hourglass_top</span>
+          </div>
+          <p class="reassuring-text" style="text-align: left;">
+            Kérlek, várj türelemmel a rajtra! A verseny akkor indul el egyszerre mindenkinek, amikor a tanár megnyomja a RAJT gombot.
           </p>
         </div>
       </div>
@@ -287,7 +308,7 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js"></script>
-  <script src="/js/student.js"></script>
+  <script src="/js/utils.js?v=1.6.0"></script>
+  <script src="/js/student.js?v=1.6.0"></script>
 </body>
 </html>

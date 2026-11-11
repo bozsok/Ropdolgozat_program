@@ -1,0 +1,7 @@
+Az miért van, hogy  minden oldal frissítéskor az alap betűtípussal töltődik be az oldal és utána 1-2mp múlva vált Nunito Sans betűtípusra? Hogyhogy nem őrzi meg a böngésző cache-e a letöltött tartalmat? Vagy mi az oka?
+----
+Jó lenne, ha az admin felületen a fejlécben nem foglalna olyan széles területet el egy-egy teszt megjelölése. Ugyanis most 3 aktív teszt olvasható kényelmesen, de a 4. aktív teszt után megjelenik egy görgetősáv, amely csúnya. Inkább színekkel különböztessük meg a tantárgyakat, és elég az évfolyam + teszt címe megjelölés. A színeknél ne a zöld és piros színeket hazsnáljuk, mert azt az admin panelen máshol használjuk.
+----
+Űrhajós verseny esetén nem mindegyik csapatszínnél van törve két sorba az űrhajó ikon és a szín megnevezése. Ez így nem konzisztens. Legyen mindegyik kettő sorba törve. Valamint mit gondolsz, a csapatszín kiválasztása után azonnal induljon-e a teszt? Van, aki lassabban választ osztályt és nevet, így ő később kezdi a tesztet. Vagy ez számítson?
+----
+Hogyan lehet az kiküszöbölni, hogy a kliens gépeken lévő parancsikonhoz ne fix IP címet írjunk be? Tudom, hogy egyik alapvető szabály az, hogy a szervernek fix IP címe kell legyen, de még ne ellenőriztem le azt, hogy ez így van-e. Ha nincs fiy IP címe, az abj, hiszen akkor az összes kliens gépen át kellene írni a parancsikonokban az IP címet. Milyen megoldások léteznek erre?
