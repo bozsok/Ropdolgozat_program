@@ -58,8 +58,12 @@
   const studentTopBar = document.getElementById('student-top-bar');
   const formTeacherLogin = document.getElementById('form-teacher-login');
 
-  // Belépési lenyíló listák és gombok (3 Lenyíló lista, 0 Gépelés)
+  // Belépési lenyíló listák és gombok (2 lépéses varázsló, 0 Gépelés)
   const loginContainer = document.getElementById('login-container');
+  const loginStep1 = document.getElementById('login-step-1');
+  const loginStep2 = document.getElementById('login-step-2');
+  const btnStep1Next = document.getElementById('btn-step1-next');
+  const btnStep2Back = document.getElementById('btn-step2-back');
   const selectSubject = document.getElementById('select-subject');
   const selectClass = document.getElementById('select-class');
   const selectStudent = document.getElementById('select-student');
@@ -157,11 +161,9 @@
       if (restored) return;
     }
 
-    // 6. Tantárgyak, osztályok és kezdő névsor betöltése
+    // 6. Tantárgyak és osztályok betöltése az 1. fázishoz
     await loadSubjects();
     await loadClasses();
-    await checkActiveSession();
-    await loadStudentsForClass(selectedClass);
   }
 
   /**
@@ -202,9 +204,9 @@
       }
     });
 
-    // Ha a tanár elindít egy új dolgozatot, azonnal reagál a diák felület
+    // Ha a tanár elindít egy új dolgozatot, azonnal reagál a diák felület, ha a 2. lépésben van
     socket.on('badges:updated', () => {
-      if (!sessionToken && selectedSubjectId && selectedClass) {
+      if (!sessionToken && selectedSubjectId && selectedClass && loginStep2 && loginStep2.style.display !== 'none') {
         checkActiveSession();
       }
     });
@@ -295,7 +297,9 @@
     if (selectSubject) {
       selectSubject.addEventListener('change', () => {
         selectedSubjectId = parseInt(selectSubject.value, 10);
-        checkActiveSession();
+        if (loginStep2 && loginStep2.style.display !== 'none') {
+          checkActiveSession();
+        }
       });
     }
 
@@ -303,8 +307,33 @@
     if (selectClass) {
       selectClass.addEventListener('change', async () => {
         selectedClass = selectClass.value;
+        if (loginStep2 && loginStep2.style.display !== 'none') {
+          await checkActiveSession();
+          await loadStudentsForClass(selectedClass);
+        }
+      });
+    }
+
+    // 1. lépés: Következő gomb kezelője (átváltás a 2. fázisra)
+    if (btnStep1Next) {
+      btnStep1Next.addEventListener('click', async () => {
+        if (!selectedSubjectId || !selectedClass) return;
+        if (loginStep1) loginStep1.style.display = 'none';
+        if (loginStep2) loginStep2.style.display = 'flex';
+
         await checkActiveSession();
         await loadStudentsForClass(selectedClass);
+        if (selectStudent) {
+          selectStudent.focus();
+        }
+      });
+    }
+
+    // 2. lépés: Vissza gomb kezelője (visszatérés az 1. fázisra)
+    if (btnStep2Back) {
+      btnStep2Back.addEventListener('click', () => {
+        if (loginStep2) loginStep2.style.display = 'none';
+        if (loginStep1) loginStep1.style.display = 'flex';
       });
     }
 
@@ -526,9 +555,9 @@
       activeSession = await res.json();
 
       if (!activeSession) {
-        sessionInfoBox.style.display = 'block';
+        sessionInfoBox.style.display = 'flex';
         sessionInfoContent.innerHTML = `
-          <div style="color: var(--warning); font-weight: 600; text-align: center; padding: 12px; background: rgba(245, 158, 11, 0.1); border-radius: 6px;">
+          <div style="color: var(--warning); font-weight: 700; font-size: 1.15rem; line-height: 1.5; text-align: center; padding: 16px; background: rgba(245, 158, 11, 0.12); border-radius: 12px; border: 1.5px solid rgba(245, 158, 11, 0.25);">
             ⚠️ Jelenleg nincs aktív dolgozat ehhez az évfolyamhoz (${gradeLevel}. évfolyam).<br>
             Kérlek, várj türelemmel, amíg a tanár elindítja!
           </div>
@@ -539,9 +568,9 @@
       }
 
       // Van aktív dolgozat!
-      sessionInfoBox.style.display = 'block';
+      sessionInfoBox.style.display = 'flex';
       sessionInfoContent.innerHTML = `
-        <div style="color: var(--success); font-weight: 600; text-align: center; padding: 10px; background: rgba(34, 197, 94, 0.1); border-radius: 6px;">
+        <div style="color: var(--success); font-weight: 700; font-size: 1.2rem; line-height: 1.5; text-align: center; padding: 16px; background: rgba(34, 197, 94, 0.12); border-radius: 12px; border: 1.5px solid rgba(34, 197, 94, 0.25);">
           🟢 Aktív dolgozat elérhető: <strong>${escapeHtml(activeSession.quiz_title)}</strong>
         </div>
       `;

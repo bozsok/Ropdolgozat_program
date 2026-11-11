@@ -7,9 +7,9 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.7.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.8.0">
 </head>
-<body style="background-color: var(--surface);">
+<body style="background-color: #ffffff;">
 
   <!-- Bejelentkezési képernyő (Tanári belépéshez) -->
   <div id="login-modal" class="calm-modal-backdrop">
@@ -87,12 +87,8 @@
   <main class="student-entry-wrapper">
     <div class="student-entry-inner">
 
-      <!-- Felső sáv (Gépszám és Tanári belépés gomb a bejelentkezéskor) -->
+      <!-- Felső sáv: Jobb felső Tanári belépés gomb a bejelentkezéskor -->
       <div id="student-top-bar" class="student-top-bar">
-        <div id="pc-badge" class="top-pill-badge">
-          <span class="top-pill-dot"></span>
-          <span>🖥️ <span id="pc-number-text">Diák munkaállomás</span></span>
-        </div>
         <button id="btn-open-login" class="top-pill-btn" type="button" title="Tanári bejelentkezés">
           <span class="material-symbols-outlined">lock</span>
           <span>Tanári belépés</span>
@@ -108,6 +104,11 @@
           </div>
         </div>
         <div class="quiz-header-actions-wrap">
+          <!-- Gép jelölése: csak dolgozatírás alatt látható a fejlécben -->
+          <div id="pc-badge" class="quiz-user-pill">
+            <span class="top-pill-dot"></span>
+            <span>🖥️ <span id="pc-number-text">Diák munkaállomás</span></span>
+          </div>
           <div class="quiz-user-pill">
             <div class="quiz-user-icon-circle">
               <span class="material-symbols-outlined">person</span>
@@ -125,124 +126,139 @@
         </div>
       </header>
 
-      <!-- 1. LÉPÉS: Belépés (3 Kompakt Lenyíló Lista, 0 Gépelés) -->
+      <!-- 1. LÉPÉS: Belépés -->
       <div id="login-container" class="calm-card">
         <!-- Brand Logo Header -->
         <div class="calm-brand-header">
           <div class="calm-logo-wrap">
             <img src="/img/logo.png" alt="Okoskodó – röpdolgozat program" class="calm-logo-img">
           </div>
-          <p class="calm-subtitle">
-            Üdvözlünk! Válaszd ki az adataidat a kezdéshez.
-          </p>
         </div>
 
         <form id="quiz-entry-form" onsubmit="return false;">
-          <!-- 1.1 Tantárgy kiválasztása -->
-          <div class="calm-step-group">
-            <div class="calm-step-header">
-              <label class="calm-step-label" for="select-subject">
-                <span class="calm-step-num">1</span>
-                <span>Tantárgy</span>
-              </label>
-              <span class="calm-step-hint">Kötelező</span>
-            </div>
-            <div class="calm-select-wrapper">
-              <div class="calm-select-icon-left">
-                <span class="material-symbols-outlined">menu_book</span>
+          <!-- 1. FÁZIS: Tantárgy és Osztály kiválasztása -->
+          <div id="login-step-1">
+            <!-- 1.1 Tantárgy kiválasztása -->
+            <div class="calm-step-group">
+              <div class="calm-step-header">
+                <label class="calm-step-label" for="select-subject">
+                  <span>Tantárgy</span>
+                </label>
+                <span class="calm-step-hint">Kötelező</span>
               </div>
-              <select id="select-subject" class="calm-select" required>
-                <!-- Dinamikusan töltődik be -->
-              </select>
-              <div class="calm-select-arrow-right">
-                <span class="material-symbols-outlined">expand_more</span>
+              <div class="calm-select-wrapper">
+                <div class="calm-select-icon-left">
+                  <span class="material-symbols-outlined">menu_book</span>
+                </div>
+                <select id="select-subject" class="calm-select" required>
+                  <!-- Dinamikusan töltődik be -->
+                </select>
+                <div class="calm-select-arrow-right">
+                  <span class="material-symbols-outlined">expand_more</span>
+                </div>
               </div>
             </div>
+
+            <!-- 1.2 Osztály kiválasztása -->
+            <div class="calm-step-group">
+              <div class="calm-step-header">
+                <label class="calm-step-label" for="select-class">
+                  <span>Osztályod</span>
+                </label>
+                <span class="calm-step-hint">Válassz egyet</span>
+              </div>
+              <div class="calm-select-wrapper">
+                <div class="calm-select-icon-left">
+                  <span class="material-symbols-outlined">school</span>
+                </div>
+                <select id="select-class" class="calm-select" required>
+                  <!-- 3.a - 7.c osztályok -->
+                </select>
+                <div class="calm-select-arrow-right">
+                  <span class="material-symbols-outlined">expand_more</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tovább a 2. lépésre (Következő gomb) -->
+            <button id="btn-step1-next" class="calm-btn-primary" type="button">
+              <span>Következő</span>
+              <span class="material-symbols-outlined">arrow_forward</span>
+            </button>
           </div>
 
-          <!-- 1.2 Osztály kiválasztása -->
-          <div class="calm-step-group">
-            <div class="calm-step-header">
-              <label class="calm-step-label" for="select-class">
-                <span class="calm-step-num">2</span>
-                <span>Osztályod</span>
-              </label>
-              <span class="calm-step-hint">Válassz egyet</span>
+          <!-- 2. FÁZIS: Névválasztó, dolgozat infó, csapatszín és belépés -->
+          <div id="login-step-2" style="display: none;">
+            <!-- 1.3 Névválasztó -->
+            <div class="calm-step-group">
+              <div class="calm-step-header">
+                <label class="calm-step-label" for="select-student">
+                  <span>Neved</span>
+                </label>
+                <span class="calm-step-hint">Keresd meg magad</span>
+              </div>
+              <div class="calm-select-wrapper">
+                <div class="calm-select-icon-left">
+                  <span class="material-symbols-outlined">badge</span>
+                </div>
+                <select id="select-student" class="calm-select" disabled required>
+                  <option value="">-- Válassz nevet a listából --</option>
+                </select>
+                <div class="calm-select-arrow-right">
+                  <span class="material-symbols-outlined">expand_more</span>
+                </div>
+              </div>
             </div>
-            <div class="calm-select-wrapper">
-              <div class="calm-select-icon-left">
-                <span class="material-symbols-outlined">school</span>
+
+            <!-- Dolgozat státusz infó üzenet (előre allokált stabil felület) -->
+            <div id="session-info-box" class="session-info-box">
+              <div id="session-info-content">
+                <div style="color: var(--text-muted); font-weight: 600; font-size: 1.05rem; text-align: center; padding: 14px; background: var(--surface-low); border-radius: 12px; border: 1.5px solid var(--border-color);">
+                  ⏳ Dolgozat állapotának ellenőrzése...
+                </div>
               </div>
-              <select id="select-class" class="calm-select" required>
-                <!-- 3.a - 7.c osztályok -->
-              </select>
-              <div class="calm-select-arrow-right">
-                <span class="material-symbols-outlined">expand_more</span>
+            </div>
+
+            <!-- 1.4 Space Race színválasztó (ha a session módban van) -->
+            <div id="step-team" class="calm-step-group" style="display: none;">
+              <div class="calm-step-header">
+                <label class="calm-step-label">
+                  <span>Válassz csapatszínt az űrhajós versenyhez:</span>
+                </label>
+                <span class="calm-step-hint">Csapatverseny</span>
               </div>
+              <div class="calm-team-picker">
+                <div class="color-card calm-color-card calm-color-blue selected" data-color="Kék">
+                  <span class="material-symbols-outlined">rocket_launch</span>
+                  <span>Kék</span>
+                </div>
+                <div class="color-card calm-color-card calm-color-red" data-color="Piros">
+                  <span class="material-symbols-outlined">rocket_launch</span>
+                  <span>Piros</span>
+                </div>
+                <div class="color-card calm-color-card calm-color-green" data-color="Zöld">
+                  <span class="material-symbols-outlined">rocket_launch</span>
+                  <span>Zöld</span>
+                </div>
+                <div class="color-card calm-color-card calm-color-yellow" data-color="Sárga">
+                  <span class="material-symbols-outlined">rocket_launch</span>
+                  <span>Sárga</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Kétlépéses műveleti gombok (Vissza + Belépés a dolgozatba) -->
+            <div class="calm-actions-row">
+              <button id="btn-step2-back" class="calm-btn-secondary" type="button">
+                <span class="material-symbols-outlined">arrow_back</span>
+                <span>Vissza</span>
+              </button>
+              <button id="btn-join-session" class="calm-btn-primary" type="button" disabled>
+                <span>Belépés a dolgozatba</span>
+                <span class="material-symbols-outlined">arrow_forward</span>
+              </button>
             </div>
           </div>
-
-          <!-- 1.3 Névválasztó -->
-          <div class="calm-step-group">
-            <div class="calm-step-header">
-              <label class="calm-step-label" for="select-student">
-                <span class="calm-step-num">3</span>
-                <span>Neved</span>
-              </label>
-              <span class="calm-step-hint">Keresd meg magad</span>
-            </div>
-            <div class="calm-select-wrapper">
-              <div class="calm-select-icon-left">
-                <span class="material-symbols-outlined">badge</span>
-              </div>
-              <select id="select-student" class="calm-select" disabled required>
-                <option value="">-- Válassz nevet a listából --</option>
-              </select>
-              <div class="calm-select-arrow-right">
-                <span class="material-symbols-outlined">expand_more</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Dolgozat státusz infó üzenet -->
-          <div id="session-info-box" style="display: none; margin-bottom: 20px;">
-            <div id="session-info-content"></div>
-          </div>
-
-          <!-- 1.4 Space Race színválasztó (ha a session módban van) -->
-          <div id="step-team" class="calm-step-group" style="display: none;">
-            <div class="calm-step-header">
-              <label class="calm-step-label">
-                <span class="calm-step-num">4</span>
-                <span>Válassz csapatszínt az űrhajós versenyhez:</span>
-              </label>
-              <span class="calm-step-hint">Csapatverseny</span>
-            </div>
-            <div class="calm-team-picker">
-              <div class="color-card calm-color-card calm-color-blue selected" data-color="Kék">
-                <span class="material-symbols-outlined">rocket_launch</span>
-                <span>Kék</span>
-              </div>
-              <div class="color-card calm-color-card calm-color-red" data-color="Piros">
-                <span class="material-symbols-outlined">rocket_launch</span>
-                <span>Piros</span>
-              </div>
-              <div class="color-card calm-color-card calm-color-green" data-color="Zöld">
-                <span class="material-symbols-outlined">rocket_launch</span>
-                <span>Zöld</span>
-              </div>
-              <div class="color-card calm-color-card calm-color-yellow" data-color="Sárga">
-                <span class="material-symbols-outlined">rocket_launch</span>
-                <span>Sárga</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Csatlakozás gomb -->
-          <button id="btn-join-session" class="calm-btn-primary" type="button" disabled>
-            <span>Belépés a dolgozatba</span>
-            <span class="material-symbols-outlined">arrow_forward</span>
-          </button>
         </form>
 
         <!-- Megnyugtató mikro-szöveg -->
@@ -414,7 +430,7 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.7.0"></script>
-  <script src="/js/student.js?v=1.7.0"></script>
+  <script src="/js/utils.js?v=1.8.0"></script>
+  <script src="/js/student.js?v=1.8.0"></script>
 </body>
 </html>

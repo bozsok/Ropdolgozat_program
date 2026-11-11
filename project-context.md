@@ -1,5 +1,5 @@
 # PROJEKT KONTEXTUS ÉS RENDSZERMEGÁLLAPODÁS (project-context.md)
-**Projekt verzió:** v1.7.0 (Stabil tantermi kiadás, változási napló: `CHANGELOG.md`)  
+**Projekt verzió:** v1.8.0 (Stabil tantermi kiadás, változási napló: `CHANGELOG.md`)  
 **Projekt neve:** Röpdolgozat program – Iskolai Helyi Hálózatos Röpdolgozat Rendszer (Socrative-klón)  
 **Célközönség:** Általános iskola 3–8. osztály (Digitális kultúra, Technika és Fejlesztő foglalkozás tantárgyak)  
 **Működési környezet:** 100% Offline Helyi Hálózat (LAN) – 1 db Windows Server 2016 (vagy újabb) + 42 db Windows 10 kliensgép + több tanári munkaállomás.  

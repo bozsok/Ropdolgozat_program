@@ -4,6 +4,56 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.8.0] – 2026-11-11
+
+### Kétlépéses diák-belépési varázsló, letisztult fehér sík felület, azonos magasságú stabil fázisok és megnövelt betűméretek
+
+A diák belépési főoldalának alapvető újratervezése a túlzsúfoltság és a vizuális ugrálások megszüntetésére: a Tantárgy és Osztály kiválasztása szétvált a Névválasztástól egy intuitív kétlépéses folyamatra, a tartalom a böngészőablak tetejére került, a korábbi kártya- és kerethatás helyett tiszta fehér sík felület jött létre, az 1. és 2. lépés hajszálpontosan egyforma magasságúvá és elmozdulásmentessé vált az alsó gombigazítással, az elemek és betűk mérete jelentősen megnőtt a kisdiákok könnyebb olvashatóságáért, a gépjelzés a tesztírás fejlécébe költözött, a tanári belépés gomb pedig közvetlenül a böngészőablak jobb felső sarkában rögzült.
+
+#### Hozzáadva (Added)
+* **Kétlépéses belépési folyamat (fázisválasztó):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - **1. fázis (`#login-step-1`):** A kezdőképernyőn kizárólag a tantárgy és az osztály lenyíló listája jelenik meg az Okoskodó-logó alatt. A névválasztó, a dolgozat státuszjelzése és a belépés gomb helyett mindössze egy hangsúlyos **[ Következő ➔ ]** gomb látható.
+  - **2. fázis (`#login-step-2`):** A „Következő” gombra kattintva jelenik meg a hivatalos névválasztó, az aktív dolgozat státuszdoboza (vagy a figyelmeztetés, ha nincs élő teszt), a csapatverseny színválasztója, valamint az alsó gombsorban a **[ ⬅ Vissza ]** és a **[ Belépés a dolgozatba ➔ ]** műveletgomb.
+
+* **Előre lefoglalt, stabil státuszfelület a 2. fázisban:**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `#session-info-box` előre lefoglalt magasságot (`min-height: 76px;`) kapott és azonnali állapotjelzést nyújt ahelyett, hogy késleltetve ugrana be a semmiből lefelé lökve a gombokat.
+
+#### Módosítva és javítva (Changed and Fixed)
+* **Az 1. és 2. lépés azonos magassága és a felületi rángatózás megszüntetése:**
+  - **Fájl:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Mindkét belépési fázis (`#login-step-1` és `#login-step-2`) egységes flexbox elrendezést és azonos minimális magasságot (`min-height: 330px;`) kapott.
+  - A műveleti gombok alsó igazítással (`margin-top: auto;`) rögzülnek a konténer legalján, így a gombok vízszintes alsó vonala és az alatta elhelyezkedő tájékoztató szöveg a két lépés közötti oda-vissza váltáskor hajszálpontosan ugyanazon a pozíción marad, egyetlen képpontot sem mozdul el.
+
+* **Felső igazítás és fehér, sík felület a korábbi szürke kártya helyett:**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A böngészőablak tetejétől mért korábbi ~200 képpontos üres hézag megszűnt: a tartalom a képernyő tetején kezdődik (`justify-content: flex-start;`).
+  - A háttér tiszta fehér (`#ffffff`), a `#login-container` kerete és dobozárnyéka megszűnt, így sík felületként simul a háttérbe.
+
+* **Számozás és felesleges feliratok eltávolítása:**
+  - **Fájl:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html)
+  - A mezőcímkék elől törlésre került a felesleges számozás (1-2-3-4), valamint elrejtésre került a felesleges „Üdvözlünk! Válaszd ki az adataidat...” felirat.
+
+* **Megnövelt betű- és elemméretek az alsó tagozatos kisdiákok számára:**
+  - **Fájl:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Mezőcímkék: `1.25rem`, vastag (`font-weight: 800`) betűk.
+  - Lenyíló választómezők: `64px` magasság, `1.25rem` betűméret és `26px`-es ikonok.
+  - Műveleti gombok: `64px` magasság, `1.25rem` betűméret és `28px`-es nyilak.
+  - Dinamikus státuszdobozok és tájékoztatók: `1.15rem` - `1.2rem` betűméret, diszkrét lágy keret.
+
+* **Gépazonosító és tanári belépés elrendezésének tisztítása:**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A gépjelzés (`#pc-badge`) a bejelentkezési főoldalról átkerült a dolgozat dedikált fejlécébe, így kizárólag a tesztírás közben jelenik meg a diák neve mellett.
+  - A tanári belépés gomb közvetlenül a böngészőablak jobb felső sarkában rögzült (`position: fixed; top: 16px; right: 20px;`).
+  - Az Okoskodó-logó hajszálpontosan megőrizte eredeti vízszintes és függőleges pozícióját.
+
+* **Rendszerszintű verziószámok és dokumentáció aktualizálása:**
+  - **Fájlok:** [`package.json`](file:///d:/dev/Röpdolgozat%20program/package.json), [`project-context.md`](file:///d:/dev/Röpdolgozat%20program/project-context.md), [`README.md`](file:///d:/dev/Röpdolgozat%20program/README.md), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/projector.html`](file:///d:/dev/Röpdolgozat%20program/public/projector.html)
+  - A projektverzió egységesen `v1.8.0`-ra frissült cache-busting paraméterekkel (`?v=1.8.0`).
+
+---
+
 ## [1.7.0] – 2026-11-11
 
 ### Calm Learner diák-tesztfelület (választós és igaz-hamis kérdések), élő csatornajelvény, görgetésmentes kompakt visszajelzés és megerősített kilépés

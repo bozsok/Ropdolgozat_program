@@ -40,7 +40,7 @@
   font-weight: 100 700;
   font-display: block;
   src: url('/fonts/material-symbols-outlined.woff2') format('woff2'),
-       url('/fonts/material-symbols-outlined.ttf') format('truetype');
+    url('/fonts/material-symbols-outlined.ttf') format('truetype');
 }
 
 .material-symbols-outlined {
@@ -131,7 +131,10 @@ body {
   flex-direction: column;
 }
 
-button, input, select, textarea {
+button,
+input,
+select,
+textarea {
   font-family: inherit;
 }
 
@@ -139,7 +142,11 @@ button, input, select, textarea {
    TIPOGRÁFIA ÉS KÓDKIEMELÉS
    ========================================================================== */
 
-h1, h2, h3, h4, h5 {
+h1,
+h2,
+h3,
+h4,
+h5 {
   font-weight: 700;
   color: var(--text-main);
 }
@@ -244,8 +251,13 @@ h1, h2, h3, h4, h5 {
 }
 
 @keyframes pulse-urgent {
-  from { opacity: 1; }
-  to { opacity: 0.7; }
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.7;
+  }
 }
 
 /* ==========================================================================
@@ -448,10 +460,21 @@ h1, h2, h3, h4, h5 {
   transform: scale(1.05);
 }
 
-.color-blue { background-color: #2563eb; }
-.color-red { background-color: #dc2626; }
-.color-green { background-color: #16a34a; }
-.color-yellow { background-color: #ca8a04; }
+.color-blue {
+  background-color: #2563eb;
+}
+
+.color-red {
+  background-color: #dc2626;
+}
+
+.color-green {
+  background-color: #16a34a;
+}
+
+.color-yellow {
+  background-color: #ca8a04;
+}
 
 /* Kérdések és opciók */
 .question-container {
@@ -876,10 +899,21 @@ h1, h2, h3, h4, h5 {
   transform: translateY(0);
 }
 
-.toast-info { background-color: var(--info); }
-.toast-success { background-color: var(--success); }
-.toast-danger { background-color: var(--danger); }
-.toast-warning { background-color: var(--warning); }
+.toast-info {
+  background-color: var(--info);
+}
+
+.toast-success {
+  background-color: var(--success);
+}
+
+.toast-danger {
+  background-color: var(--danger);
+}
+
+.toast-warning {
+  background-color: var(--warning);
+}
 
 .modal-backdrop {
   position: fixed;
@@ -928,36 +962,41 @@ h1, h2, h3, h4, h5 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 100vh;
-  padding: 24px 16px;
-  background-color: var(--surface);
+  padding: 16px 16px 32px 16px;
+  background-color: #ffffff;
 }
 
 .student-entry-inner {
   width: 100%;
-  max-width: 520px;
+  max-width: 580px;
+  margin-top: 56px;
 }
 
-/* Felső sáv (Gépszám és Tanári belépés gomb) */
+/* Felső sáv: Tanári belépés gomb a böngészőablak jobb felső sarkában */
 .student-top-bar {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  z-index: 100;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  padding: 0 4px;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
 }
 
 .top-pill-badge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
+  padding: 8px 16px;
   border-radius: 9999px;
   background-color: var(--surface-high);
   color: var(--on-surface-variant);
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 700;
   user-select: none;
 }
 
@@ -971,20 +1010,29 @@ h1, h2, h3, h4, h5 {
 }
 
 @keyframes calm-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.9); }
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
 }
 
 .top-pill-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  gap: 8px;
+  padding: 8px 16px;
   border-radius: 9999px;
   background-color: var(--surface-high);
   color: var(--on-surface);
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 700;
   border: none;
   cursor: pointer;
   transition: background-color 0.2s ease, color 0.2s ease;
@@ -997,7 +1045,7 @@ h1, h2, h3, h4, h5 {
 }
 
 .top-pill-btn .material-symbols-outlined {
-  font-size: 18px;
+  font-size: 20px;
   color: var(--text-muted);
   transition: color 0.2s ease;
 }
@@ -1017,9 +1065,22 @@ h1, h2, h3, h4, h5 {
   transition: all 0.3s ease;
 }
 
+/* Diák belépési főoldal: tiszta fehér, kártya- és keretmentes sík felület */
+#login-container {
+  background-color: #ffffff;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 8px 0 24px 0;
+}
+
 @media (max-width: 640px) {
   .calm-card {
     padding: 24px 20px;
+  }
+
+  #login-container {
+    padding: 4px 0 16px 0;
   }
 }
 
@@ -1028,70 +1089,53 @@ h1, h2, h3, h4, h5 {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  margin-bottom: 28px;
+  margin-bottom: 100px;
 }
 
 .calm-logo-wrap {
   width: 100%;
-  max-width: 320px;
+  max-width: 360px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 .calm-logo-img {
   width: 100%;
   height: auto;
-  max-height: 84px;
+  max-height: 90px;
   object-fit: contain;
   user-select: none;
 }
 
 .calm-subtitle {
-  font-size: 1.05rem;
-  color: var(--text-muted);
-  max-width: 380px;
-  line-height: 1.5;
-  margin: 0;
+  display: none;
 }
 
-/* Lépésenkénti kiválasztó folyamat (1 -> 2 -> 3) */
+/* Lépésenkénti kiválasztó folyamat */
 .calm-step-group {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .calm-step-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .calm-step-label {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.95rem;
-  font-weight: 700;
+  font-size: 1.25rem;
+  font-weight: 800;
   color: var(--text-main);
 }
 
-.calm-step-num {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background-color: var(--primary-fixed);
-  color: var(--on-primary-fixed);
-  font-size: 0.75rem;
-  font-weight: 800;
-}
-
 .calm-step-hint {
-  font-size: 0.8rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-light);
 }
@@ -1104,7 +1148,7 @@ h1, h2, h3, h4, h5 {
 
 .calm-select-icon-left {
   position: absolute;
-  left: 14px;
+  left: 16px;
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
@@ -1114,12 +1158,12 @@ h1, h2, h3, h4, h5 {
 }
 
 .calm-select-icon-left .material-symbols-outlined {
-  font-size: 22px;
+  font-size: 26px;
 }
 
 .calm-select-arrow-right {
   position: absolute;
-  right: 14px;
+  right: 16px;
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
@@ -1129,20 +1173,20 @@ h1, h2, h3, h4, h5 {
 }
 
 .calm-select-arrow-right .material-symbols-outlined {
-  font-size: 20px;
+  font-size: 24px;
 }
 
 .calm-select {
   width: 100%;
-  height: 56px;
-  padding: 0 40px 0 46px;
+  height: 64px;
+  padding: 0 46px 0 54px;
   background-color: var(--surface-low);
   color: var(--text-main);
-  border: 1.5px solid transparent;
-  border-radius: 12px;
-  font-size: 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: 14px;
+  font-size: 1.25rem;
   font-family: inherit;
-  font-weight: 600;
+  font-weight: 700;
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
@@ -1153,7 +1197,7 @@ h1, h2, h3, h4, h5 {
   background-color: var(--surface-lowest);
   border-color: var(--primary);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
+  box-shadow: 0 0 0 4px rgba(234, 88, 12, 0.18);
 }
 
 .calm-select:disabled {
@@ -1164,18 +1208,18 @@ h1, h2, h3, h4, h5 {
 /* Elsődleges belépés gomb */
 .calm-btn-primary {
   width: 100%;
-  height: 56px;
+  height: 64px;
   background-color: var(--primary);
   color: #ffffff;
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   font-family: inherit;
-  font-weight: 700;
+  font-weight: 800;
   border: none;
-  border-radius: 12px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(234, 88, 12, 0.28);
   transition: all 0.2s ease;
@@ -1200,24 +1244,98 @@ h1, h2, h3, h4, h5 {
 }
 
 .calm-btn-primary .material-symbols-outlined {
-  font-size: 24px;
+  font-size: 28px;
+}
+
+/* Kétlépéses belépési gombok sora */
+.calm-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.calm-actions-row .calm-btn-primary {
+  flex: 1;
+  margin-top: 0;
+}
+
+.calm-btn-secondary {
+  height: 64px;
+  padding: 0 24px;
+  background-color: var(--surface-high);
+  color: var(--text-main);
+  font-size: 1.2rem;
+  font-family: inherit;
+  font-weight: 800;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.calm-btn-secondary:hover {
+  background-color: var(--surface-highest, #e2e8f0);
+  border-color: var(--border-dark, #cbd5e1);
+  transform: translateY(-1px);
+}
+
+.calm-btn-secondary:active {
+  transform: scale(0.99);
+}
+
+.calm-btn-secondary .material-symbols-outlined {
+  font-size: 26px;
+}
+
+/* Kétlépéses belépési fázisok azonos magassággal és alsó gombigazítással */
+#login-step-1,
+#login-step-2 {
+  min-height: 330px;
+  display: flex;
+  flex-direction: column;
+}
+
+#login-step-1 .calm-btn-primary {
+  margin-top: auto;
+}
+
+#login-step-2 .calm-actions-row {
+  margin-top: auto;
+}
+
+#session-info-box {
+  min-height: 76px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#session-info-content {
+  width: 100%;
 }
 
 /* Megnyugtató mikro-szöveg doboz */
 .reassuring-box {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 24px;
-  padding: 14px 16px;
+  gap: 14px;
+  margin-top: 28px;
+  padding: 16px 18px;
   background-color: var(--surface-low);
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .reassuring-icon-wrap {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background-color: var(--secondary-fixed);
   color: var(--on-secondary-fixed);
@@ -1227,43 +1345,44 @@ h1, h2, h3, h4, h5 {
 }
 
 .reassuring-icon-wrap .material-symbols-outlined {
-  font-size: 20px;
+  font-size: 24px;
 }
 
 .reassuring-text {
-  font-size: 0.85rem;
+  font-size: 1.05rem;
+  line-height: 1.5;
   color: var(--text-muted);
-  line-height: 1.4;
   margin: 0;
+  font-weight: 600;
 }
 
 /* Space Race Színválasztó Calm Learner stílusban */
 .calm-team-picker {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-top: 10px;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .calm-color-card {
-  padding: 14px 8px;
-  border-radius: 12px;
+  padding: 16px 10px;
+  border-radius: 14px;
   text-align: center;
-  font-weight: 700;
-  font-size: 0.9rem;
+  font-weight: 800;
+  font-size: 1.05rem;
   color: #ffffff;
   cursor: pointer;
   border: 3px solid transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   transition: all 0.2s ease;
   user-select: none;
 }
 
 .calm-color-card .material-symbols-outlined {
-  font-size: 24px;
+  font-size: 28px;
 }
 
 .calm-color-card:hover {
@@ -1276,16 +1395,35 @@ h1, h2, h3, h4, h5 {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.calm-color-blue { background-color: #2563eb; }
-.calm-color-red { background-color: #dc2626; }
-.calm-color-green { background-color: #16a34a; }
-.calm-color-yellow { background-color: #ca8a04; }
+.calm-color-blue {
+  background-color: #2563eb;
+}
+
+.calm-color-red {
+  background-color: #dc2626;
+}
+
+.calm-color-green {
+  background-color: #16a34a;
+}
+
+.calm-color-yellow {
+  background-color: #ca8a04;
+}
 
 /* Űrhajós verseny Rajtállás (Lobby) barátságos lebegő animáció */
 @keyframes float-rocket {
-  0% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-10px) rotate(-3deg); }
-  100% { transform: translateY(0px) rotate(0deg); }
+  0% {
+    transform: translateY(0px) rotate(0deg);
+  }
+
+  50% {
+    transform: translateY(-10px) rotate(-3deg);
+  }
+
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
 }
 
 .lobby-rocket-floating {
@@ -2371,5 +2509,3 @@ h1, h2, h3, h4, h5 {
   color: var(--text-muted);
   line-height: 1.35;
 }
-
-
