@@ -4,6 +4,76 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.13.0] – 2026-11-13
+
+### Diákoldali Igaz–Hamis letisztítás, Mátrix nézet és eszköztár pixelpontos stabilizálása, összecsukható KPI mutatók, Tesztszerkesztő relációbiztos mentése és magyar helyesírási revízió
+
+Átfogó diákoldali, tanári és adatintegritási stabilitási kiadás: az alsó tagozatos (3. osztályos) tanulók számára letisztultak az Igaz–Hamis kérdéskártyák a zavaró feliratoktól. A Tesztszerkesztő mentése relációbiztossá vált (in-place Smart Sync), megszüntetve az SQLite FOREIGN KEY hibákat. A tanári Mátrix nézetben végérvényesen megszűnt a táblázat és az eszköztár ugrálása a fix cellageometriának és az egységes 24 px-es státuszkapszuláknak köszönhetően. A 4 KPI mutatókártya összecsukhatóvá vált egyetlen kattintással a felső eszköztárból, a működési módok egységes magyar elnevezést kaptak, a rendszer felületei pedig teljes körű revízión estek át az MTA 12. kiadásának helyesírási szabályai szerint.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Diákoldali Igaz–Hamis (TF) gombok letisztítása az általános iskolai 3–8. osztály számára:**
+  - **Fájlok:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html)
+  - A harmadikos kisdiákokat megzavaró felesleges feliratok (A/B betűjelvények, „VÁLASZLEHETŐSÉG” címkék, rádiógomb-ikonok, like/dislike hüvelykujjak és a másodlagos „Az állítás igaz/hamis” leírások) maradéktalanul eltávolításra kerültek.
+  - Helyüket két nagy méretű, tiszta, középre zárt és modern gombkártya vette át, kizárólag a lényeggel: **IGAZ** és **HAMIS**. Kiválasztáskor a kártya elegáns narancssárga kiemelést és finom árnyékot kap.
+
+#### Javítva (Fixed)
+* **Tesztszerkesztő relációbiztos mentése (FOREIGN KEY hiba megszűntetése):**
+  - **Fájlok:** [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - Megszűnt a tesztek szerkesztésekor és a *„Feladatsor mentése”* gomb megnyomásakor jelentkező `Mentési hiba: FOREIGN KEY constraint failed` hiba.
+  - A korábbi primitív `DELETE FROM questions WHERE quiz_id = ?` helyett intelligens in-place szinkronizáció (Smart Sync / Upsert) valósult meg: a meglévő kérdések `UPDATE`-tel frissülnek (az azonosítójuk nem változik, a válaszok relációi épek maradnak), az új kérdések `INSERT`-tel kerülnek be, a korábban megválaszolt kérdések pedig nem sérülnek.
+* **MTA 12. kiadása szerinti kis kezdőbetűsítés (Title Case felszámolása):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/projector.html`](file:///d:/dev/Röpdolgozat%20program/public/projector.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Megszüntetésre került az idegen hatású, angolos nagy kezdőbetűs írásmód (Title Case) a gombokon és menüfeliratokon.
+  - Szabályos magyar alakok léptek érvénybe: *„Feladatsor mentése”* (a hibás *„Feladatsor Mentése”* helyett), *„Névsor mentése”*, *„Új teszt létrehozása”*, *„Új dolgozat indítása”*, *„Tanári bejelentkezés”*, *„Hivatalos osztálynévsorok”*, *„Új osztály rögzítése”*, *„Dolgozat címe”*, *„Export- és kiértékelési központ”*, *„Teljes egyéni értékelőlap-csomag (.zip)”*, *„Űrhajós csapatverseny”*, *„Space Race verseny”*, *„Anonim statisztika”*, *„Kérdésenkénti eredményesség (anonim)”*.
+* **Projektverzió és kliensoldali gyorsítótár-frissítés (Cache-Busting):**
+  - **Fájlok:** [`package.json`](file:///d:/dev/Röpdolgozat%20program/package.json), [`project-context.md`](file:///d:/dev/Röpdolgozat%20program/project-context.md), [`README.md`](file:///d:/dev/Röpdolgozat%20program/README.md), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/projector.html`](file:///d:/dev/Röpdolgozat%20program/public/projector.html)
+  - A projektverzió egységesen `v1.13.0`-ra frissült.
+  - Minden HTML felületen frissültek a stíluslapok és szkriptek cache-busting paraméterei (`?v=1.13.0`), garantálva, hogy a tanári gép és a 42 db tanulói kliensgép böngészője azonnal, beragadt gyorsítótár nélkül a legfrissebb CSS-t és JS-t töltse be.
+* **Felesleges „Szerkeszthető” jelvény eltávolítása a tesztkártyákról:**
+  - **Fájl:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A Tesztszerkesztő felületén a tesztkártyák fejlécéből eltávolításra került a redundáns zöld pötty és a „Szerkeszthető” státuszjelvény, mivel a dinamikus feladattárban minden feladatsor alapértelmezetten és korlátozás nélkül szabadon szerkeszthető.
+* **Navigációs fül ikon- és szövegrögzítése (`admin.js`):**
+  - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html)
+  - Megszűnt az a rejtett hiba, amely futásidőben dinamikusan felülírta a fejléc navigációs fülét: a JavaScript többé nem semmisíti meg a gomb belső HTML szerkezetét a hibás `📊 Élő Dolgozat (Mátrix)` emojira és Title Case szövegre.
+  - A gomb mostantól stabilan megőrzi a terv szerinti Google Material Symbols `grid_view` rácsikont és a szabályos kis kezdőbetűs *„Élő felügyelet (mátrix)”* feliratot.
+* **Mátrix érdemjegy oszlop stabilitása és kisbetűsítése:**
+  - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Megszűnt az érdemjegy módosulásakor (pl. 3-ról 2-re) jelentkező zavaró táblázatugrálás: a Jegy oszlop (`.col-grade`, fix `130px`) és a jegykapszula (`.admin-grade-badge`, fix `110px`) stabil méretezést kapott, így a hosszabb és rövidebb jegyek hajszálpontosan ugyanakkora helyet foglalnak el.
+  - Az érdemjegyek szövege az MTA 12. kiadása szerint kisbetűs lett: *„5 (jeles)”*, *„4 (jó)”*, *„3 (közepes)”*, *„2 (elégséges)”*, *„1 (elégtelen)”*.
+  - A táblázat összes metaadat-oszlopa (`.col-pc`, `.col-points`, `.col-pct`, `.col-grade`, `.col-focus`, `.col-actions`) dedikált osztályokat kapott, teljesen megszüntetve a táblázat ugrálását.
+* **Mátrix kérdéscellák és pontszámfeliratok teljes ugrásmentesítése (`- 0.5p`):**
+  - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A kérdésoszlopok fejléce (`th.matrix-q-col`) és adatcellái (`td.col-question`) szigorúan fix `66px` szélességet kaptak, a bennük lévő jelvények (`.matrix-cell`) pedig egységes `58px` szélességet.
+  - Ezzel végérvényesen megszűnt az oszlopok és sorok meglódulása / ugrálása tanári pontszám-felülbíráláskor: mindegy, hogy a cella üres (`–`), helyes (`1p`), hibás (`0p`) vagy részpontos (`- 0.5p`), a cella és az oszlop szélessége hajszálpontosan állandó marad.
+* **Tanulói név előtti felesleges monogram-korong eltávolítása:**
+  - **Fájl:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Törlésre került a Mátrix nézetben a tanulók neve elől a nem kívánt kezdőbetűs színes kör (`.admin-student-avatar`), így a tanulók neve tisztán és áttekinthetően olvasható.
+* **Jelmagyarázat Narancs és Szürke kártyáinak vizuális harmonizálása:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A Narancs kártya megkapta a `- 0.5p` cellával harmonizáló narancssárga hátteret (`.bg-warning-soft`, `#fef3c7`), narancssárga keretet (`#fde68a`), narancssárga körben mínusz jel ikont (`remove_circle`) és a szabályos *„Részpont / felülbírálás”* alcímet.
+  - A Szürke kártyán megszűnt a sima kör ikon (`radio_button_unchecked`) zavaró pirosas árnyalata: tiszta szürke színt (`#64748b`), tiszta szürke hátteret (`#f8fafc`) és szürke keretet (`#e2e8f0`) kapott.
+* **Mátrix nézet fejlécének és kérdés-tooltipjeinek finomhangolása:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A Mátrix táblázat név oszlopából törlésre került a felesleges *„& státusz”* toldalék, így a fejléc tisztán *„Tanuló neve”* felirattal jelenik meg.
+  - Az *„Összpont”* oszlopfelirat helyére a tömörebb, lényegretörő *„Pont”* került.
+  - A kérdésszámok fölé víve az egeret (hover) a korábbi általános segédszöveg helyett közvetlenül a feltett kérdés teljes szövege jelenik meg felugró buborékként (tooltip).
+* **Munkamenet státuszkapszulák pixelpontos magasságegyezése (`.admin-session-toolbar`):**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Megszűnt az eszköztár ugrálása és az alatta lévő metaadatsor lejjebb tolódása, amikor a tanár egy lezárt archív dolgozat és az élő dolgozat között váltogat.
+  - A *„Lezárt dolgozat”* szürke kapszula (`.admin-session-finished-pill`) és a *„Kitöltés folyamatban”* zöld kapszula (`.admin-session-badge`) egységesen fix `24px` magasságot, `0.75rem` betűméretet és `0 12px` belső margót kapott.
+* **Működési módok magyarítása a tanári és kivetítő felületeken:**
+  - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/js/projector.js`](file:///d:/dev/Röpdolgozat%20program/public/js/projector.js)
+  - A korábbi nyers adatbázis-azonosítók helyett (pl. `Mód: STUDENT_PACED`) a felületek egységes, szabályos magyar feliratokkal jelenítik meg a működési módot: *„Diák-tempó”*, *„Űrhajós csapatverseny”*, *„Tanári léptetés”*.
+* **Összecsukható KPI mutatók és egykattintásos gyorsgomb (`#btn-toggle-kpi`):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A tanári munkamenet-eszköztárban helyet kapott a *„KPI mutatók”* váltógomb, amellyel a 4 kompakt kártya (*Osztályátlag, Leadott dolgozatok, Legnehezebb feladat, Legjobb feladat*) egyetlen kattintással elrejthető vagy megjeleníthető.
+  - Alapértelmezetten a kártyák rejtve vannak, így a Mátrix táblázat közvetlenül az eszköztár alatt kezdődik, rengeteg függőleges helyet felszabadítva a tanár számára; a tanár által választott nézetet a rendszer `localStorage`-ban megjegyzi.
+* **Görgetősáv miatti oldalugrálás megszüntetése (Scrollbar Shift védelem):**
+  - **Fájl:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A gyökér (`html`) elem megkapta a modern CSS3 `scrollbar-gutter: stable;` szabályát, amely folyamatosan fenntartja a helyet a függőleges görgetősáv számára. Ezzel teljesen megszűnt a tartalom oldalirányú rántása / ugrálása, amikor a tanár a hosszú névsoros Mátrix és a rövidebb fülek (pl. Reports, Kvízek) között váltogat.
+
+---
+
 ## [1.12.0] – 2026-11-12
 
 ### Szabad és dinamikus Tesztszerkesztő, archívum-tisztítás, 1400 px-es fejléckompozíció, ikonos gombrendszer és univerzális Calm Learner modális ablakok

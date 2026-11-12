@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Okoskodó – Tanári Vezérlőpult</title>
+  <title>Okoskodó – Tanári vezérlőpult</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.12.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.13.0">
   <style>
     /* Admin specifikus elrendezés (Tilos az !important) */
     .admin-container {
@@ -40,7 +40,7 @@
   <div id="login-modal" class="modal-backdrop">
     <div class="modal-window">
       <div class="card-header">
-        <h2 class="card-title">🔐 Tanári Bejelentkezés</h2>
+        <h2 class="card-title">🔐 Tanári bejelentkezés</h2>
         <p class="card-subtitle">Kérlek, add meg a tanári jelszót a hozzáféréshez!</p>
       </div>
       <form id="form-login" onsubmit="return false;">
@@ -84,7 +84,7 @@
       <nav class="admin-nav-tabs">
         <button id="tab-btn-live" class="nav-tab-btn active" data-tab="tab-live" type="button">
           <span class="material-symbols-outlined">grid_view</span>
-          <span>Élő felügyelet (Mátrix)</span>
+          <span>Élő felügyelet (mátrix)</span>
         </button>
         <button class="nav-tab-btn" data-tab="tab-reports" type="button">
           <span class="material-symbols-outlined">history_edu</span>
@@ -147,6 +147,11 @@
 
           <!-- Műveleti gombok -->
           <div class="admin-toolbar-actions">
+            <!-- KPI mutatók be/ki kapcsoló gomb -->
+            <button id="btn-toggle-kpi" class="admin-toolbar-btn-secondary" type="button" title="KPI mutatók megjelenítése / elrejtése">
+              <span class="material-symbols-outlined">insights</span>
+              <span>KPI mutatók</span>
+            </button>
             <!-- Űrhajós verseny RAJT gomb -->
             <button id="btn-admin-start-race" class="admin-toolbar-btn-race" style="display: none;" type="button">
               <span class="material-symbols-outlined">rocket_launch</span>
@@ -164,7 +169,7 @@
         </div>
 
         <!-- 4 Kompakt KPI Összegző Kártya -->
-        <div class="admin-kpi-grid">
+        <div id="admin-kpi-grid" class="admin-kpi-grid">
           <!-- 1. Kártya: Osztályátlag -->
           <div class="admin-kpi-card">
             <div class="admin-kpi-icon-wrap bg-primary-soft">
@@ -243,10 +248,10 @@
               <thead>
                 <tr id="matrix-head-row">
                   <th class="col-num">#</th>
-                  <th class="col-name">Tanuló neve &amp; Státusz</th>
+                  <th class="col-name">Tanuló neve</th>
                   <th>Gép</th>
                   <!-- Kérdés sorszámok dinamikusan -->
-                  <th>Összpont</th>
+                  <th>Pont</th>
                   <th>%</th>
                   <th>Jegy</th>
                   <th>Fókusz</th>
@@ -287,17 +292,17 @@
                 </div>
               </div>
               <div class="admin-legend-badge-item bg-warning-soft">
-                <span class="material-symbols-outlined text-warning">edit_note</span>
+                <span class="material-symbols-outlined text-warning">remove_circle</span>
                 <div>
                   <span class="admin-legend-badge-name text-warning">Narancs</span>
-                  <span class="admin-legend-badge-sub">Részpont / Folyamatban</span>
+                  <span class="admin-legend-badge-sub" style="color: #b45309;">Részpont / felülbírálás</span>
                 </div>
               </div>
               <div class="admin-legend-badge-item bg-neutral-soft">
-                <span class="material-symbols-outlined text-muted">radio_button_unchecked</span>
+                <span class="material-symbols-outlined text-neutral">radio_button_unchecked</span>
                 <div>
-                  <span class="admin-legend-badge-name text-main">Szürke</span>
-                  <span class="admin-legend-badge-sub">Még nem válaszolt</span>
+                  <span class="admin-legend-badge-name text-neutral">Szürke</span>
+                  <span class="admin-legend-badge-sub" style="color: #64748b;">Még nem válaszolt</span>
                 </div>
               </div>
             </div>
@@ -339,7 +344,7 @@
     <section id="tab-reports" class="admin-tab-content" style="display: none;">
       <div class="admin-toolbar">
         <div>
-          <h3 style="margin-bottom: 4px;">📑 Dolgozatok és Eredmények Archívuma (Reports)</h3>
+          <h3 style="margin-bottom: 4px;">📑 Dolgozatok és eredmények archívuma (Reports)</h3>
           <p style="color: var(--text-muted); font-size: 0.9rem;">
             Itt megtekintheted a korábban megírt és lezárt dolgozatokat, újra megnyithatod az eredménytáblát és letöltheted a KRÉTA Excel riportokat.
           </p>
@@ -359,7 +364,7 @@
             <tr style="background-color: var(--bg-hover); text-align: left; border-bottom: 2px solid var(--border-color);">
               <th style="padding: 12px 16px;">Időpont</th>
               <th style="padding: 12px 16px;">Tantárgy és Évfolyam</th>
-              <th style="padding: 12px 16px;">Dolgozat Címe</th>
+              <th style="padding: 12px 16px;">Dolgozat címe</th>
               <th style="padding: 12px 16px;">Osztály</th>
               <th style="padding: 12px 16px; text-align: center;">Létszám</th>
               <th style="padding: 12px 16px; text-align: center;">Státusz</th>
@@ -377,7 +382,7 @@
     <section id="tab-export" class="admin-tab-content" style="display: none;">
       <div class="admin-toolbar">
         <div>
-          <h2 style="font-size: 1.5rem; font-weight: 800; margin: 0 0 4px 0; color: var(--text-main);">Export és Kiértékelési Központ</h2>
+          <h2 style="font-size: 1.5rem; font-weight: 800; margin: 0 0 4px 0; color: var(--text-main);">Export- és kiértékelési központ</h2>
           <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
             Töltsd le a kiválasztott dolgozat eredményeit hivatalos KRÉTA Excel, nyomtatható A4 PDF vagy interaktív HTML formátumban!
           </p>
@@ -454,7 +459,7 @@
             <span class="material-symbols-outlined" style="font-size: 24px;">folder_zip</span>
           </div>
           <div>
-            <h4 style="margin: 0 0 2px 0; font-size: 1.05rem; font-weight: 800; color: var(--text-main);">Teljes Egyéni Értékelőlap Csomag (.zip)</h4>
+            <h4 style="margin: 0 0 2px 0; font-size: 1.05rem; font-weight: 800; color: var(--text-main);">Teljes egyéni értékelőlap-csomag (.zip)</h4>
             <p style="margin: 0; font-size: 0.82rem; color: var(--text-muted);">
               Minden tanuló számára egyéni, személyre szabott grafikus értékelőlap ZIP archívumba csomagolva.
             </p>
@@ -470,8 +475,8 @@
     <!-- 4. FÜL: TESZTSZERKESZTŐ -->
     <section id="tab-quizzes" class="admin-tab-content" style="display: none;">
       <div class="admin-toolbar">
-        <h3>Feladatsorok és Kérdések</h3>
-        <button id="btn-new-quiz" class="btn btn-primary">➕ Új Teszt Létrehozása</button>
+        <h3>Feladatsorok és kérdések</h3>
+        <button id="btn-new-quiz" class="btn btn-primary">➕ Új teszt létrehozása</button>
       </div>
 
       <!-- Tesztek kártyalistája -->
@@ -521,7 +526,7 @@
           </div>
 
           <div class="modal-footer">
-            <button type="button" id="btn-save-quiz" class="btn btn-success btn-lg">💾 Feladatsor Mentése</button>
+            <button type="button" id="btn-save-quiz" class="btn btn-success btn-lg">💾 Feladatsor mentése</button>
           </div>
         </form>
       </div>
@@ -530,8 +535,8 @@
     <!-- 3. FÜL: OSZTÁLYNÉVSOROK KEZELŐJE (ROSTER MANAGER) -->
     <section id="tab-roster" class="admin-tab-content" style="display: none;">
       <div class="admin-toolbar">
-        <h3>Hivatalos Osztálynévsorok</h3>
-        <button id="btn-new-class" class="btn btn-primary">➕ Új Osztály Rögzítése</button>
+        <h3>Hivatalos osztálynévsorok</h3>
+        <button id="btn-new-class" class="btn btn-primary">➕ Új osztály rögzítése</button>
       </div>
 
       <div style="display: grid; grid-template-columns: 280px 1fr; gap: 20px;">
@@ -558,7 +563,7 @@
           </div>
 
           <div style="text-align: right;">
-            <button id="btn-save-roster" class="btn btn-success btn-lg">💾 Névsor Mentése</button>
+            <button id="btn-save-roster" class="btn btn-success btn-lg">💾 Névsor mentése</button>
           </div>
         </div>
       </div>
@@ -624,7 +629,7 @@
   <div id="modal-start-session" class="modal-backdrop">
     <div class="modal-window">
       <div class="card-header">
-        <h3 class="card-title">🚀 Új Dolgozat Indítása</h3>
+        <h3 class="card-title">🚀 Új dolgozat indítása</h3>
         <p class="card-subtitle">Válaszd ki a tantárgyat, az évfolyamot és a tesztet!</p>
       </div>
 
@@ -645,10 +650,10 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="start-mode">Működési Mód:</label>
+          <label class="form-label" for="start-mode">Működési mód:</label>
           <select id="start-mode" class="form-control">
             <option value="STUDENT_PACED">Diák-tempó (Student Paced – önálló haladás)</option>
-            <option value="SPACE_RACE">Űrhajós Csapatverseny (Space Race)</option>
+            <option value="SPACE_RACE">Űrhajós csapatverseny (Space Race)</option>
             <option value="TEACHER_PACED">Tanári léptetés (Teacher Paced)</option>
           </select>
         </div>
@@ -872,8 +877,8 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.12.0"></script>
-  <script src="/js/admin.js?v=1.12.0"></script>
+  <script src="/js/utils.js?v=1.13.0"></script>
+  <script src="/js/admin.js?v=1.13.0"></script>
 </body>
 </html>
 

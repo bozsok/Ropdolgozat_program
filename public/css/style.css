@@ -121,6 +121,10 @@
   padding: 0;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   font-family: var(--font-family);
   background-color: var(--bg-main);
@@ -1339,6 +1343,7 @@ h5 {
   .admin-matrix-lower-grid {
     grid-template-columns: 1fr;
   }
+
   .admin-legend-badge-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1477,9 +1482,18 @@ h5 {
   padding-left: 16px;
 }
 
+.matrix-table th.matrix-q-col,
+.matrix-table td.col-question {
+  width: 66px;
+  min-width: 66px;
+  max-width: 66px;
+  text-align: center;
+  box-sizing: border-box;
+  padding: 8px 2px;
+}
+
 .matrix-table th.matrix-q-col {
   cursor: pointer;
-  min-width: 44px;
   user-select: none;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
@@ -1487,6 +1501,53 @@ h5 {
 .matrix-table th.matrix-q-col:hover {
   background-color: var(--primary-light, #e0e7ff);
   color: var(--primary, #3b82f6);
+}
+
+.matrix-table th.col-pc,
+.matrix-table td.col-pc {
+  width: 65px;
+  min-width: 65px;
+  max-width: 65px;
+  text-align: center;
+}
+
+.matrix-table th.col-points,
+.matrix-table td.col-points {
+  width: 80px;
+  min-width: 80px;
+  max-width: 80px;
+  text-align: center;
+}
+
+.matrix-table th.col-pct,
+.matrix-table td.col-pct {
+  width: 70px;
+  min-width: 70px;
+  max-width: 70px;
+  text-align: center;
+}
+
+.matrix-table th.col-grade,
+.matrix-table td.col-grade {
+  width: 130px;
+  min-width: 130px;
+  max-width: 130px;
+  text-align: center;
+}
+
+.matrix-table th.col-focus,
+.matrix-table td.col-focus {
+  width: 65px;
+  min-width: 65px;
+  max-width: 65px;
+  text-align: center;
+}
+
+.matrix-table th.col-actions,
+.matrix-table td.col-actions {
+  width: 180px;
+  min-width: 180px;
+  text-align: center;
 }
 
 .matrix-table td {
@@ -1567,9 +1628,12 @@ h5 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 48px;
+  box-sizing: border-box;
+  width: 58px;
+  min-width: 58px;
+  max-width: 58px;
   height: 32px;
-  padding: 0 8px;
+  padding: 0 4px;
   border-radius: 8px;
   font-weight: 700;
   font-size: 0.82rem;
@@ -1577,6 +1641,7 @@ h5 {
   transition: all 0.15s ease;
   border: 1px solid transparent;
   user-select: none;
+  white-space: nowrap;
 }
 
 .matrix-cell:hover {
@@ -1618,14 +1683,20 @@ h5 {
   border-color: transparent;
 }
 
-/* KRÉTA Érdemjegy jelvény */
+/* KRÉTA Érdemjegy jelvény (Fix szélesség a táblázat ugrálásának megelőzésére) */
 .admin-grade-badge {
-  display: inline-block;
-  padding: 3px 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 110px;
+  min-width: 110px;
+  padding: 4px 6px;
   border-radius: 6px;
   font-weight: 800;
   font-size: 0.82rem;
   line-height: 1.3;
+  white-space: nowrap;
 }
 
 .grade-5 {
@@ -1814,7 +1885,9 @@ h5 {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 12px;
   border-radius: 9999px;
   background-color: var(--success-bg, #dcfce7);
   color: var(--success, #16a34a);
@@ -1834,10 +1907,13 @@ h5 {
 }
 
 @keyframes adminPulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.4;
     transform: scale(0.85);
@@ -1901,6 +1977,12 @@ h5 {
   border-color: #d4cfd7;
 }
 
+.admin-toolbar-btn-secondary.active {
+  background-color: var(--primary-light, #ffedd5);
+  color: var(--primary, #ea580c);
+  border-color: #fdba74;
+}
+
 .admin-toolbar-btn-race {
   display: inline-flex;
   align-items: center;
@@ -1926,20 +2008,28 @@ h5 {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 12px;
   border-radius: 9999px;
   background-color: #64748b;
   color: #ffffff;
-  font-size: 0.85rem;
+  border: 1px solid #475569;
+  font-size: 0.75rem;
   font-weight: 700;
+  line-height: 1;
 }
 
-/* KPI 4-OSZLOPOS RÁCS */
+/* KPI 4-OSZLOPOS RÁCS (Alapértelmezetten rejtve, gombnyomásra megjeleníthető) */
 .admin-kpi-grid {
-  display: grid;
+  display: none;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 24px;
+}
+
+.admin-kpi-grid.is-visible {
+  display: grid;
 }
 
 .admin-kpi-card {
@@ -2045,15 +2135,16 @@ h5 {
   font-weight: 700;
 }
 
-/* KPI Színváltozatok ikonokhoz */
+/* KPI és Jelmagyarázat Színváltozatok */
 .bg-primary-soft {
   background-color: rgba(234, 88, 12, 0.12);
   color: var(--primary, #ea580c);
 }
 
 .bg-neutral-soft {
-  background-color: var(--surface-low, #f5f3f6);
-  color: var(--primary, #ea580c);
+  background-color: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
 }
 
 .bg-danger-soft {
@@ -2062,10 +2153,32 @@ h5 {
   border: 1px solid var(--danger-border, #fca5a5);
 }
 
+.bg-warning-soft {
+  background-color: var(--warning-bg, #fef3c7);
+  color: var(--warning, #d97706);
+  border: 1px solid var(--warning-border, #fde68a);
+}
+
 .bg-success-soft {
   background-color: var(--success-bg, #dcfce7);
   color: var(--success, #16a34a);
   border: 1px solid var(--success-border, #86efac);
+}
+
+.text-success {
+  color: var(--success, #16a34a);
+}
+
+.text-danger {
+  color: var(--danger, #dc2626);
+}
+
+.text-warning {
+  color: var(--warning, #d97706);
+}
+
+.text-neutral {
+  color: #64748b;
 }
 
 /* Reszponzív szabályok az admin rácshoz */
@@ -2080,6 +2193,7 @@ h5 {
     flex-direction: column;
     align-items: flex-start;
   }
+
   .admin-kpi-grid {
     grid-template-columns: 1fr;
   }
@@ -3145,7 +3259,7 @@ h5 {
   display: flex;
   align-items: flex-start;
   gap: 14px;
-  margin-bottom: 16px;
+  margin-bottom: 40px;
 }
 
 .quiz-qnum-badge {
@@ -3316,114 +3430,42 @@ h5 {
 
 .quiz-tf-tile {
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 16px 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
   border-radius: 16px;
   background-color: var(--surface-low);
   border: 2px solid transparent;
   cursor: pointer;
   transition: all 0.15s ease;
-  min-height: 115px;
-  text-align: left;
+  min-height: 96px;
+  text-align: center;
   user-select: none;
 }
 
 .quiz-tf-tile:hover {
   background-color: var(--surface-high);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .quiz-tf-tile.selected {
   background-color: #fff7ed;
   border-color: var(--primary);
-  box-shadow: 0 4px 14px rgba(163, 57, 0, 0.12);
-}
-
-.quiz-tf-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.quiz-tf-badge {
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  background-color: var(--surface-high);
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.25rem;
-  font-weight: 800;
-}
-
-.quiz-tf-tile.selected .quiz-tf-badge {
-  background-color: var(--primary);
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.35);
-}
-
-.quiz-tf-title-wrap {
-  margin-top: 6px;
-}
-
-.quiz-tf-label {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  font-weight: 700;
-  color: var(--text-muted);
-  letter-spacing: 0.05em;
-}
-
-.quiz-tf-tile.selected .quiz-tf-label {
-  color: var(--primary);
+  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.18);
+  transform: translateY(-2px);
 }
 
 .quiz-tf-name {
-  font-size: 1.55rem;
+  font-size: 1.85rem;
   font-weight: 800;
   color: var(--text-main);
-  margin-top: 2px;
+  letter-spacing: 0.04em;
+  transition: color 0.15s ease;
 }
 
-.quiz-tf-radio {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background-color: var(--surface-high);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.quiz-tf-radio .material-symbols-outlined {
-  font-size: 18px;
-  color: transparent;
-}
-
-.quiz-tf-tile.selected .quiz-tf-radio {
-  background-color: var(--primary);
-}
-
-.quiz-tf-tile.selected .quiz-tf-radio .material-symbols-outlined {
-  color: #ffffff;
-}
-
-.quiz-tf-desc {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  font-size: 0.92rem;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.quiz-tf-tile.selected .quiz-tf-desc {
-  color: var(--text-main);
-  font-weight: 600;
+.quiz-tf-tile.selected .quiz-tf-name {
+  color: var(--primary);
 }
 
 /* SHORT kérdés mező */

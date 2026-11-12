@@ -33,6 +33,15 @@
   const scoreGreen = document.getElementById('score-green');
   const scoreYellow = document.getElementById('score-yellow');
 
+  function formatSessionMode(mode) {
+    const modeMap = {
+      'STUDENT_PACED': 'Diák-tempó',
+      'SPACE_RACE': 'Űrhajós csapatverseny',
+      'TEACHER_PACED': 'Tanári léptetés'
+    };
+    return modeMap[mode] || mode || 'Diák-tempó';
+  }
+
   async function init() {
     if (typeof io !== 'undefined') {
       socket = io();
@@ -126,7 +135,7 @@
       const activeSessions = await res.json();
 
       if (activeSessions.length === 0) {
-        projQuizTitle.textContent = 'Röpdolgozat Kivetítő';
+        projQuizTitle.textContent = 'Röpdolgozat-kivetítő';
         projMetaInfo.textContent = 'Jelenleg nincs aktív futó dolgozat.';
         return;
       }
@@ -139,7 +148,7 @@
 
       activeSessionId = target.id;
       projQuizTitle.textContent = target.quiz_title;
-      projMetaInfo.textContent = `${target.subject_name} – ${target.grade_level}. évfolyam (${target.mode})`;
+      projMetaInfo.textContent = `${target.subject_name} – ${target.grade_level}. évfolyam (${formatSessionMode(target.mode)})`;
 
       // Csatlakozás a Socket szobához
       if (socket) {
@@ -162,7 +171,7 @@
     const { session, participants, questions, answers, totalMaxPoints } = data;
 
     projQuizTitle.textContent = session.quiz_title;
-    projMetaInfo.textContent = `${session.subject_name} – ${session.grade_level}. évfolyam (${session.mode})`;
+    projMetaInfo.textContent = `${session.subject_name} – ${session.grade_level}. évfolyam (${formatSessionMode(session.mode)})`;
     projParticipantCounter.textContent = `${participants.length} résztvevő diák`;
 
     // RAJT gomb láthatósága (Space Race módban a rajt előtt)

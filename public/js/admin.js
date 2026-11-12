@@ -33,6 +33,35 @@
   const sessionBadgeChannel = document.getElementById('session-badge-channel');
   const liveSessionTitle = document.getElementById('live-session-title');
   const liveSessionInfo = document.getElementById('live-session-info');
+  const btnToggleKpi = document.getElementById('btn-toggle-kpi');
+  const adminKpiGrid = document.getElementById('admin-kpi-grid');
+  let isKpiVisible = localStorage.getItem('ropdolgozat_kpi_visible') === 'true';
+
+  function applyKpiVisibility() {
+    if (!adminKpiGrid) return;
+    if (isKpiVisible) {
+      adminKpiGrid.classList.add('is-visible');
+      if (btnToggleKpi) {
+        btnToggleKpi.classList.add('active');
+        btnToggleKpi.title = 'KPI mutatók elrejtése';
+      }
+    } else {
+      adminKpiGrid.classList.remove('is-visible');
+      if (btnToggleKpi) {
+        btnToggleKpi.classList.remove('active');
+        btnToggleKpi.title = 'KPI mutatók megjelenítése';
+      }
+    }
+  }
+
+  if (btnToggleKpi) {
+    btnToggleKpi.addEventListener('click', () => {
+      isKpiVisible = !isKpiVisible;
+      localStorage.setItem('ropdolgozat_kpi_visible', String(isKpiVisible));
+      applyKpiVisibility();
+    });
+  }
+
   const btnFinishSession = document.getElementById('btn-finish-session');
   const btnAdminStartRace = document.getElementById('btn-admin-start-race');
   const badgeSessionFinished = document.getElementById('badge-session-finished');
@@ -50,6 +79,15 @@
   const inputSearchReports = document.getElementById('input-search-reports');
   const btnRefreshReports = document.getElementById('btn-refresh-reports');
   let allReports = [];
+
+  function formatSessionMode(mode) {
+    const modeMap = {
+      'STUDENT_PACED': 'Diák-tempó',
+      'SPACE_RACE': 'Űrhajós csapatverseny',
+      'TEACHER_PACED': 'Tanári léptetés'
+    };
+    return modeMap[mode] || mode || 'Diák-tempó';
+  }
 
   // Start modal
   const modalStartSession = document.getElementById('modal-start-session');
@@ -135,6 +173,7 @@
     }
 
     closeLoginModal();
+    applyKpiVisibility();
     setupSocket();
     await loadInitialData();
   }
@@ -319,14 +358,11 @@
       if (isFinished) {
         if (sessionBadgeChannel) {
           sessionBadgeChannel.className = 'admin-session-finished-pill';
-          sessionBadgeChannel.innerHTML = '⏹️ Dolgozat lezárva';
-        }
-        if (tabBtnLive) {
-          tabBtnLive.textContent = '📊 Lezárt Dolgozat (Mátrix)';
+          sessionBadgeChannel.innerHTML = '<span>⏹️</span><span>Lezárt dolgozat</span>';
         }
         liveSessionTitle.textContent = data.session.quiz_title + ' [LEZÁRT ARCHÍVUM]';
         const endedFormatted = data.session.ended_at ? data.session.ended_at.replace('T', ' ').substring(0, 16) : '–';
-        liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${data.session.mode} | Befejezve: ${endedFormatted}`;
+        liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${formatSessionMode(data.session.mode)} | Befejezve: ${endedFormatted}`;
         if (btnFinishSession) btnFinishSession.style.display = 'none';
         if (btnAdminStartRace) btnAdminStartRace.style.display = 'none';
       } else {
@@ -334,11 +370,8 @@
           sessionBadgeChannel.className = 'admin-session-badge';
           sessionBadgeChannel.innerHTML = '<span class="admin-pulse-dot"></span><span>Kitöltés folyamatban</span>';
         }
-        if (tabBtnLive) {
-          tabBtnLive.textContent = '📊 Élő Dolgozat (Mátrix)';
-        }
         liveSessionTitle.textContent = data.session.quiz_title;
-        liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${data.session.mode}`;
+        liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${formatSessionMode(data.session.mode)}`;
         if (btnFinishSession) btnFinishSession.style.display = 'inline-flex';
 
         if (btnAdminStartRace) {
@@ -376,9 +409,6 @@
     currentSessionId = null;
     noActiveSessionBox.style.display = 'flex';
     activeSessionPanel.style.display = 'none';
-    if (tabBtnLive) {
-      tabBtnLive.textContent = '📊 Élő Dolgozat (Mátrix)';
-    }
     if (sessionBadgeChannel) {
       sessionBadgeChannel.className = 'live-badge badge-active';
       sessionBadgeChannel.textContent = '🟢 ÉLŐ';
@@ -546,19 +576,19 @@
 
     // Fejléc sor összeállítása (Calm Learner Mátrix)
     const qColsHtml = questions.map((q, idx) => `
-      <th class="matrix-q-col" data-q-idx="${idx}" title="${idx + 1}. kérdés és tanulói válaszok részletei (kattints a megtekintéshez!)">${idx + 1}</th>
+      <th class="matrix-q-col col-question" data-q-idx="${idx}" title="${escapeHtml(q.question_text || `${idx + 1}. kérdés`)}">${idx + 1}</th>
     `).join('');
 
     matrixHeadRow.innerHTML = `
       <th class="col-num">#</th>
-      <th class="col-name">Tanuló neve &amp; Státusz</th>
-      <th style="min-width: 60px;">Gép</th>
+      <th class="col-name">Tanuló neve</th>
+      <th class="col-pc">Gép</th>
       ${qColsHtml}
-      <th style="min-width: 75px;">Összpont</th>
-      <th style="min-width: 65px;">%</th>
-      <th style="min-width: 105px;">Jegy</th>
-      <th style="min-width: 65px;">Fókusz</th>
-      <th style="min-width: 170px;">Műveletek</th>
+      <th class="col-points">Pont</th>
+      <th class="col-pct">%</th>
+      <th class="col-grade">Jegy</th>
+      <th class="col-focus">Fókusz</th>
+      <th class="col-actions">Műveletek</th>
     `;
 
     // Eseménydelegáció a fejléc sorra (Best Practice - soha nem vész el)
@@ -597,17 +627,15 @@
       tdNum.textContent = String(pIdx + 1);
       tr.appendChild(tdNum);
 
-      // 1. Név, avatár és befejezett állapot
+      // 1. Név és befejezett állapot
       const tdName = document.createElement('td');
       tdName.className = 'col-name';
-      const initials = getStudentInitials(p.student_name);
       const statusHtml = p.is_finished
         ? `<span class="admin-student-status status-finished"><span class="material-symbols-outlined" style="font-size: 13px;">check_circle</span> Kész</span>`
         : `<span class="admin-student-status status-working"><span class="material-symbols-outlined" style="font-size: 13px;">edit_note</span> Folyamatban...</span>`;
 
       tdName.innerHTML = `
         <div class="admin-student-cell">
-          <div class="admin-student-avatar">${escapeHtml(initials)}</div>
           <div class="admin-student-info">
             <span class="admin-student-name">${escapeHtml(p.student_name)}</span>
             ${statusHtml}
@@ -618,6 +646,7 @@
 
       // 2. Gépszám
       const tdPc = document.createElement('td');
+      tdPc.className = 'col-pc';
       tdPc.innerHTML = p.pc_number
         ? `<span style="font-weight: 700; color: var(--text-muted); font-size: 0.85rem;">PC-${p.pc_number}</span>`
         : '<span style="color: #94a3b8;">–</span>';
@@ -628,6 +657,7 @@
 
       questions.forEach(q => {
         const tdQ = document.createElement('td');
+        tdQ.className = 'col-question';
         const ans = answerMap.get(`${p.id}:${q.id}`);
 
         if (!ans) {
@@ -675,27 +705,31 @@
 
       // 4. Összpontszám
       const tdPoints = document.createElement('td');
+      tdPoints.className = 'col-points';
       tdPoints.innerHTML = `<strong style="font-size: 0.95rem; color: var(--text-main);">${p.total_points}</strong> <span style="font-size: 0.78rem; color: var(--text-muted);">/ ${data.totalMaxPoints}</span>`;
       tr.appendChild(tdPoints);
 
       // 5. Százalék
       const tdPct = document.createElement('td');
+      tdPct.className = 'col-pct';
       let pctColor = 'var(--text-main)';
       if (p.percentage >= 85) pctColor = 'var(--success, #16a34a)';
       else if (p.percentage < 50) pctColor = 'var(--danger, #dc2626)';
       tdPct.innerHTML = `<strong style="color: ${pctColor}; font-size: 0.92rem;">${p.percentage}%</strong>`;
       tr.appendChild(tdPct);
 
-      // 6. KRÉTA érdemjegy
+      // 6. KRÉTA érdemjegy (MTA 12. kiadása szerinti kisbetűs alakok)
       const tdGrade = document.createElement('td');
+      tdGrade.className = 'col-grade';
       const gradeNum = parseInt(p.grade, 10) || 1;
-      const gradeLabels = { 5: '5 (Jeles)', 4: '4 (Jó)', 3: '3 (Közepes)', 2: '2 (Elégséges)', 1: '1 (Elégtelen)' };
+      const gradeLabels = { 5: '5 (jeles)', 4: '4 (jó)', 3: '3 (közepes)', 2: '2 (elégséges)', 1: '1 (elégtelen)' };
       const gradeLabel = gradeLabels[gradeNum] || `${gradeNum}`;
       tdGrade.innerHTML = `<span class="admin-grade-badge grade-${gradeNum}">${gradeLabel}</span>`;
       tr.appendChild(tdGrade);
 
       // 7. Fókuszvesztések
       const tdFocus = document.createElement('td');
+      tdFocus.className = 'col-focus';
       if (p.focus_lost_count > 0) {
         tdFocus.innerHTML = `<span class="focus-alert">⚠️ ${p.focus_lost_count}x</span>`;
       } else {
@@ -705,6 +739,7 @@
 
       // 8. Diák műveletek: Gép váltása és Név törlése (Calm Learner Stílus & Report 12 / 2.2)
       const tdAction = document.createElement('td');
+      tdAction.className = 'col-actions';
       tdAction.style.whiteSpace = 'nowrap';
 
       const actionWrap = document.createElement('div');
@@ -1150,7 +1185,7 @@
           btnAdminStartRace.style.display = 'none';
         } else {
           const err = await res.json();
-          showAdminAlert('⚠️ Rajt hiba', err.error || 'Hiba a rajt indításakor!');
+          showAdminAlert('⚠️ Rajthiba', err.error || 'Hiba a rajt indításakor!');
           btnAdminStartRace.disabled = false;
           btnAdminStartRace.textContent = '🚀 RAJT! Verseny indítása';
         }
@@ -1261,9 +1296,6 @@
         card.innerHTML = `
           <div class="quiz-card-header">
             <h4 class="quiz-card-title">${escapeHtml(q.title)}</h4>
-            <span style="font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; background:#dcfce7; color:#166534; white-space: nowrap;">
-              🟢 Szerkeszthető
-            </span>
           </div>
           <p class="quiz-card-meta">
             ${escapeHtml(q.subject_name)} &bull; ${escapeHtml(q.subject_grade)}. évfolyam<br>
@@ -1401,6 +1433,9 @@
     block.style.padding = '16px';
     block.style.marginBottom = '16px';
     block.style.backgroundColor = '#f8fafc';
+    if (existing && existing.id) {
+      block.dataset.questionId = existing.id;
+    }
 
     const qType = existing ? existing.question_type : 'ABCD';
     const qText = existing ? existing.question_text : '';
@@ -1411,7 +1446,7 @@
 
     block.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h5>${qIndex}. Kérdés</h5>
+        <h5>${qIndex}. kérdés</h5>
         <button type="button" class="btn btn-secondary btn-remove-q" style="padding: 4px 8px; font-size: 0.8rem;">❌ Eltávolítás</button>
       </div>
 
@@ -1507,7 +1542,9 @@
         options = ['Igaz', 'Hamis'];
       }
 
+      const qId = b.dataset.questionId ? parseInt(b.dataset.questionId, 10) : undefined;
       questions.push({
+        id: qId,
         question_order: i + 1,
         question_type: type,
         question_text: text,
@@ -1607,7 +1644,7 @@
       if (res.ok && data.success) {
         showToast('Névsor sikeresen elmentve!', 'success');
       } else {
-        showAdminAlert('⚠️ Névsor hiba', data.error || 'Hiba a névsor mentésekor!');
+        showAdminAlert('⚠️ Névsorhiba', data.error || 'Hiba a névsor mentésekor!');
       }
     } catch (err) {
       showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a névsor mentése során!');

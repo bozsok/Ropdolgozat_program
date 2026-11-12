@@ -1164,8 +1164,8 @@
     } else if (q.question_type === 'TF') {
       optionsContainer.className = 'quiz-tf-grid';
       const tfData = [
-        { value: 'Igaz', letter: 'A', title: 'IGAZ', icon: 'thumb_up', desc: 'Az állítás igaz' },
-        { value: 'Hamis', letter: 'B', title: 'HAMIS', icon: 'thumb_down', desc: 'Az állítás hamis' }
+        { value: 'Igaz', title: 'IGAZ' },
+        { value: 'Hamis', title: 'HAMIS' }
       ];
 
       tfData.forEach(item => {
@@ -1173,20 +1173,7 @@
         tile.className = 'quiz-tf-tile';
         tile.dataset.value = item.value;
         tile.innerHTML = `
-          <div class="quiz-tf-top">
-            <div class="quiz-tf-badge">${item.letter}</div>
-            <div class="quiz-tf-radio">
-              <span class="material-symbols-outlined">check</span>
-            </div>
-          </div>
-          <div class="quiz-tf-title-wrap">
-            <span class="quiz-tf-label">Válaszlehetőség</span>
-            <div class="quiz-tf-name">${item.title}</div>
-          </div>
-          <div class="quiz-tf-desc">
-            <span class="material-symbols-outlined">${item.icon}</span>
-            <span>${item.desc}</span>
-          </div>
+          <span class="quiz-tf-name">${item.title}</span>
         `;
 
         tile.addEventListener('click', () => {

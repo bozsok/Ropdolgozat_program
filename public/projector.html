@@ -4,11 +4,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Okoskodó – Kivetítő Monitor (2. Monitor)</title>
+  <title>Okoskodó – Kivetítő-monitor (2. monitor)</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.11.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.13.0">
   <style>
     /* Projektor specifikus sötét háttér a moziszerű élményhez (Tilos az !important) */
     body {
@@ -70,7 +70,7 @@
         <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path>
       </svg>
       <div>
-        <h1 id="proj-quiz-title" class="projector-title">Röpdolgozat Kivetítő</h1>
+        <h1 id="proj-quiz-title" class="projector-title">Röpdolgozat-kivetítő</h1>
         <p id="proj-meta-info" style="color: #9ca3af; font-size: 1rem;">Csatlakozás folyamatban...</p>
       </div>
     </div>
@@ -84,10 +84,10 @@
 
       <div class="admin-nav-tabs" style="border: none; margin: 0; padding: 0;">
         <button id="btn-view-race" class="nav-tab-btn active" style="color: #ffffff; background-color: #2563eb;">
-          🚀 Space Race Verseny
+          🚀 Space Race verseny
         </button>
         <button id="btn-view-stats" class="nav-tab-btn" style="color: #94a3b8;">
-          📊 Anonim Statisztika
+          📊 Anonim statisztika
         </button>
       </div>
 
@@ -105,7 +105,7 @@
       <div style="max-width: 1200px; margin: 0 auto;">
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-          <h2>🚀 Csapatverseny Futam</h2>
+          <h2>🚀 Csapatverseny-futam</h2>
           <span id="proj-participant-counter" style="color: #9ca3af; font-size: 1.1rem; font-weight: 600;">
             0 résztvevő diák
           </span>
@@ -114,7 +114,7 @@
         <!-- 1. KÉK CSAPAT PÁLYÁJA -->
         <div class="race-track">
           <div class="race-header">
-            <span style="color: #60a5fa;">🔵 Kék Csapat</span>
+            <span style="color: #60a5fa;">🔵 Kék csapat</span>
             <span id="score-blue" style="color: #60a5fa;">0 pont</span>
           </div>
           <div class="track-line">
@@ -130,7 +130,7 @@
         <!-- 2. PIROS CSAPAT PÁLYÁJA -->
         <div class="race-track">
           <div class="race-header">
-            <span style="color: #f87171;">🔴 Piros Csapat</span>
+            <span style="color: #f87171;">🔴 Piros csapat</span>
             <span id="score-red" style="color: #f87171;">0 pont</span>
           </div>
           <div class="track-line">
@@ -146,7 +146,7 @@
         <!-- 3. ZÖLD CSAPAT PÁLYÁJA -->
         <div class="race-track">
           <div class="race-header">
-            <span style="color: #4ade80;">🟢 Zöld Csapat</span>
+            <span style="color: #4ade80;">🟢 Zöld csapat</span>
             <span id="score-green" style="color: #4ade80;">0 pont</span>
           </div>
           <div class="track-line">
@@ -162,7 +162,7 @@
         <!-- 4. SÁRGA CSAPAT PÁLYÁJA -->
         <div class="race-track">
           <div class="race-header">
-            <span style="color: #facc15;">🟡 Sárga Csapat</span>
+            <span style="color: #facc15;">🟡 Sárga csapat</span>
             <span id="score-yellow" style="color: #facc15;">0 pont</span>
           </div>
           <div class="track-line">
@@ -181,7 +181,7 @@
     <!-- 2. ANONIM STATISZTIKA NÉZET -->
     <section id="view-anon-stats" style="display: none;">
       <div style="max-width: 1000px; margin: 0 auto;">
-        <h2 style="margin-bottom: 24px;">📊 Kérdésenkénti Eredményesség (Anonim)</h2>
+        <h2 style="margin-bottom: 24px;">📊 Kérdésenkénti eredményesség (anonim)</h2>
         <div id="anon-questions-list">
           <!-- Dinamikus statisztika sávok -->
         </div>
@@ -192,8 +192,8 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.11.0"></script>
-  <script src="/js/projector.js?v=1.11.0"></script>
+  <script src="/js/utils.js?v=1.13.0"></script>
+  <script src="/js/projector.js?v=1.13.0"></script>
 </body>
 
 </html>

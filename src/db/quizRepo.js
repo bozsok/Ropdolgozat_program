@@ -91,7 +91,7 @@ function getQuizById(quizId, isStudentView = false) {
       explanation,
       points
     FROM questions
-    WHERE quiz_id = ?
+    WHERE quiz_id = ? AND question_order < 100000
     ORDER BY question_order ASC
   `);
 
@@ -223,35 +223,102 @@ function updateQuiz(quizId, { subject_id, title, subject_grade, default_time_lim
       quizId
     );
 
-    // Kérdések frissítése: a nem zárolt kérdések újraépítése
-    db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(quizId);
+    // Kérdések relációbiztos in-place frissítése (Smart Sync / Upsert)
+    // Meglévő kérdések lekérése az esetleges diákválaszok védelmére
+    const existingDbQuestions = db.prepare('SELECT id, question_order FROM questions WHERE quiz_id = ?').all(quizId);
+    const existingMap = new Map();
+    for (const eq of existingDbQuestions) {
+      existingMap.set(eq.id, eq);
+    }
+
+    // UNIQUE(quiz_id, question_order) ütközések megelőzése: ideiglenes eltolás magas tartományba (CHECK > 0 érvényes)
+    db.prepare('UPDATE questions SET question_order = 100000 + id WHERE quiz_id = ?').run(quizId);
+
+    const updateQuestionStmt = db.prepare(`
+      UPDATE questions SET
+        question_order = ?,
+        question_type = ?,
+        question_text = ?,
+        image_path = ?,
+        options_json = ?,
+        correct_answer = ?,
+        explanation = ?,
+        points = ?
+      WHERE id = ? AND quiz_id = ?
+    `);
+
+    const insertQuestionStmt = db.prepare(`
+      INSERT INTO questions (
+        quiz_id, question_order, question_type, question_text, 
+        image_path, options_json, correct_answer, explanation, points
+      ) VALUES (
+        ?, ?, ?, ?, 
+        ?, ?, ?, ?, ?
+      )
+    `);
 
     if (Array.isArray(questions) && questions.length > 0) {
-      const insertQuestion = db.prepare(`
-        INSERT INTO questions (
-          quiz_id, question_order, question_type, question_text, 
-          image_path, options_json, correct_answer, explanation, points
-        ) VALUES (
-          ?, ?, ?, ?, 
-          ?, ?, ?, ?, ?
-        )
-      `);
-
       questions.forEach((q, idx) => {
-        const order = Number(q.question_order) || (idx + 1);
+        const order = idx + 1;
         const optionsJson = Array.isArray(q.options) ? JSON.stringify(q.options) : (q.options_json || '[]');
-        insertQuestion.run(
-          quizId,
-          order,
-          q.question_type || 'ABCD',
-          q.question_text || '',
-          q.image_path || null,
-          optionsJson,
-          String(q.correct_answer || '').trim(),
-          String(q.explanation || '').trim(),
-          Number(q.points) || 1.0
-        );
+        const qType = q.question_type || 'ABCD';
+        const qText = q.question_text || '';
+        const qImage = q.image_path || null;
+        const qCorrect = String(q.correct_answer || '').trim();
+        const qExpl = String(q.explanation || '').trim();
+        const qPoints = Number(q.points) || 1.0;
+
+        let targetId = null;
+        if (q.id && existingMap.has(Number(q.id))) {
+          targetId = Number(q.id);
+        } else if (!q.id && existingDbQuestions[idx] && existingMap.has(existingDbQuestions[idx].id)) {
+          // Ha nem küldött explicit id-t a kliens, index szerint párosítjuk a meglévővel
+          targetId = existingDbQuestions[idx].id;
+        }
+
+        if (targetId) {
+          updateQuestionStmt.run(
+            order,
+            qType,
+            qText,
+            qImage,
+            optionsJson,
+            qCorrect,
+            qExpl,
+            qPoints,
+            targetId,
+            quizId
+          );
+          existingMap.delete(targetId);
+        } else {
+          insertQuestionStmt.run(
+            quizId,
+            order,
+            qType,
+            qText,
+            qImage,
+            optionsJson,
+            qCorrect,
+            qExpl,
+            qPoints
+          );
+        }
       });
+    }
+
+    // A szerkesztőben eltávolított korábbi kérdések kezelése
+    const checkAnswersStmt = db.prepare('SELECT 1 FROM answers WHERE question_id = ? LIMIT 1');
+    const deleteQuestionStmt = db.prepare('DELETE FROM questions WHERE id = ?');
+    const archiveQuestionStmt = db.prepare('UPDATE questions SET question_order = 100000 + id WHERE id = ?');
+
+    for (const [remId] of existingMap) {
+      const hasAnswers = checkAnswersStmt.get(remId);
+      if (!hasAnswers) {
+        deleteQuestionStmt.run(remId);
+      } else {
+        // Ha van rá válasz korábbi lezárt dolgozatból, megőrizzük a rekordot, de kint tartjuk a sorrendből
+        archiveQuestionStmt.run(remId);
+      }
     }
   });
 

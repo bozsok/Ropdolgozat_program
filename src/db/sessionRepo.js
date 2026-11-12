@@ -310,7 +310,7 @@ function joinSession({ session_id, student_id, student_name, pc_number = null, t
   // Kérdések sorrendjének generálása (Shuffle kezelése)
   const questions = db.prepare(`
     SELECT id FROM questions 
-    WHERE quiz_id = ? 
+    WHERE quiz_id = ? AND question_order < 100000
     ORDER BY question_order ASC
   `).all(session.quiz_id);
 
@@ -603,7 +603,7 @@ function submitAnswer({
     const savedAnswer = db.prepare('SELECT * FROM answers WHERE id = ?').get(insertRes.lastInsertRowid);
 
     // 7. Ellenőrizzük, hogy válaszolt-e az összes kérdésre
-    const totalQuestions = db.prepare('SELECT COUNT(*) as cnt FROM questions WHERE quiz_id = ?').get(participant.quiz_id).cnt;
+    const totalQuestions = db.prepare('SELECT COUNT(*) as cnt FROM questions WHERE quiz_id = ? AND question_order < 100000').get(participant.quiz_id).cnt;
     const answeredCount = db.prepare('SELECT COUNT(*) as cnt FROM answers WHERE participant_id = ?').get(participant.id).cnt;
 
     let isNowFinished = false;

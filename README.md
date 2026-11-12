@@ -1,4 +1,4 @@
-# Okoskodó – Röpdolgozat program (v1.11.0)
+# Okoskodó – Röpdolgozat program (v1.13.0)
 
 > **100% Offline Helyi Hálózatos Iskolai Röpdolgozat Rendszer (Socrative-klón)**  
 > Kifejezetten általános iskolai 3–8. évfolyamos oktatási környezetre (Digitális kultúra, Technika és Fejlesztő foglalkozás tantárgyakhoz) tervezve.  
@@ -130,7 +130,7 @@ A dolgozat befejezésekor (vagy az archívumból utólag bármikor) 4 professzio
 ## 7. Projekt Könyvtárstruktúra
 
 ```text
-├── CHANGELOG.md              # Részletes verziótörténet és változási napló (v1.11.0)
+├── CHANGELOG.md              # Részletes verziótörténet és változási napló (v1.13.0)
 ├── config.js                 # Központi konfiguráció (port: 3000, PIN, elérési utak, ponthatárok)
 ├── DATABASE_SCHEMA.sql       # Teljes relációs adatbázis séma 7 táblával és 22 triggerrel
 ├── package.json              # Node.js projektleíró és környezeti követelmények (Node >= 22.11.0)
