@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="hu">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,9 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.10.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.11.0">
 </head>
+
 <body style="background-color: #ffffff;">
 
   <!-- Bejelentkezési képernyő (Tanári belépéshez) -->
@@ -30,10 +32,14 @@
       </p>
       <form id="form-teacher-login" onsubmit="return false;">
         <div class="form-group" style="margin-bottom: 12px;">
-          <label class="form-label" for="input-pin" style="font-size: 1.05rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px; display: block;">Tanári jelszó</label>
+          <label class="form-label" for="input-pin"
+            style="font-size: 1.05rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px; display: block;">Tanári
+            jelszó</label>
           <div class="password-input-wrapper">
-            <input type="password" id="input-pin" class="password-input" placeholder="••••••••" autocomplete="current-password" required>
-            <button type="button" id="btn-toggle-pin-visibility" class="password-eye-btn" title="Jelszó felfedése / elrejtése">
+            <input type="password" id="input-pin" class="password-input" placeholder="••••••••"
+              autocomplete="current-password" required>
+            <button type="button" id="btn-toggle-pin-visibility" class="password-eye-btn"
+              title="Jelszó felfedése / elrejtése">
               <span class="material-symbols-outlined" id="eye-icon">visibility</span>
             </button>
           </div>
@@ -60,7 +66,8 @@
     <div class="calm-modal-card">
       <div class="calm-modal-header">
         <div class="calm-modal-title-wrap">
-          <div class="calm-modal-icon-badge" style="background-color: var(--secondary-fixed); color: var(--on-secondary-fixed);">
+          <div class="calm-modal-icon-badge"
+            style="background-color: var(--secondary-fixed); color: var(--on-secondary-fixed);">
             <span class="material-symbols-outlined">logout</span>
           </div>
           <h3 class="calm-modal-title">Befejezed a dolgozatot?</h3>
@@ -70,7 +77,8 @@
         </button>
       </div>
       <p class="calm-modal-desc">
-        Az eddig megadott válaszaid rögzítésre és kiértékelésre kerülnek. Ha most kilépsz, a teszt számodra véget ér és nem folytathatod.
+        Az eddig megadott válaszaid rögzítésre és kiértékelésre kerülnek. Ha most kilépsz, a teszt számodra véget ér és
+        nem folytathatod.
       </p>
       <div class="calm-modal-actions">
         <button type="button" id="btn-cancel-exit" class="calm-modal-btn-submit">
@@ -89,7 +97,8 @@
     <div class="calm-modal-card">
       <div class="calm-modal-header">
         <div class="calm-modal-title-wrap">
-          <div id="modal-alert-icon-badge" class="calm-modal-icon-badge" style="background-color: var(--secondary-fixed); color: var(--on-secondary-fixed);">
+          <div id="modal-alert-icon-badge" class="calm-modal-icon-badge"
+            style="background-color: var(--secondary-fixed); color: var(--on-secondary-fixed);">
             <span id="modal-alert-icon" class="material-symbols-outlined">warning</span>
           </div>
           <h3 id="modal-alert-title" class="calm-modal-title">Figyelmeztetés</h3>
@@ -233,7 +242,8 @@
             <!-- Dolgozat státusz infó üzenet (előre allokált stabil felület) -->
             <div id="session-info-box" class="session-info-box">
               <div id="session-info-content">
-                <div style="color: var(--text-muted); font-weight: 600; font-size: 1.05rem; text-align: center; padding: 14px; background: var(--surface-low); border-radius: 12px; border: 1.5px solid var(--border-color);">
+                <div
+                  style="color: var(--text-muted); font-weight: 600; font-size: 1.05rem; text-align: center; padding: 14px; background: var(--surface-low); border-radius: 12px; border: 1.5px solid var(--border-color);">
                   ⏳ Dolgozat állapotának ellenőrzése...
                 </div>
               </div>
@@ -293,12 +303,15 @@
       </div>
 
       <!-- ŰRHAJÓS VERSENY RAJTÁLLÁS (LOBBY - Várakozás a tanár indítására) -->
-      <div id="lobby-container" class="card calm-card" style="display: none; max-width: 580px; margin: 0 auto; text-align: center; padding: 40px 24px;">
-        <div id="lobby-rocket-badge" class="lobby-rocket-floating" style="width: 80px; height: 80px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; background-color: #2563eb; box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);">
+      <div id="lobby-container" class="card calm-card"
+        style="display: none; max-width: 580px; margin: 0 auto; text-align: center; padding: 40px 24px;">
+        <div id="lobby-rocket-badge" class="lobby-rocket-floating"
+          style="width: 80px; height: 80px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; background-color: #2563eb; box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);">
           <span class="material-symbols-outlined" style="font-size: 48px; color: #ffffff;">rocket_launch</span>
         </div>
         <h2 id="lobby-title" style="font-size: 1.5rem; margin-bottom: 8px;">Készen állsz a rajtra!</h2>
-        <p id="lobby-team-desc" style="font-size: 1.15rem; font-weight: 700; margin-bottom: 20px; color: var(--text-main);">
+        <p id="lobby-team-desc"
+          style="font-size: 1.15rem; font-weight: 700; margin-bottom: 20px; color: var(--text-main);">
           Csapatod: <span id="lobby-team-name" style="color: #2563eb;">Kék</span> űrhajó
         </p>
         <div class="reassuring-box" style="justify-content: center; max-width: 440px; margin: 0 auto;">
@@ -306,7 +319,8 @@
             <span class="material-symbols-outlined">hourglass_top</span>
           </div>
           <p class="reassuring-text" style="text-align: left;">
-            Kérlek, várj türelemmel a rajtra! A verseny akkor indul el egyszerre mindenkinek, amikor a tanár megnyomja a RAJT gombot.
+            Kérlek, várj türelemmel a rajtra! A verseny akkor indul el egyszerre mindenkinek, amikor a tanár megnyomja a
+            RAJT gombot.
           </p>
         </div>
       </div>
@@ -377,7 +391,8 @@
           <div id="short-answer-container" class="quiz-short-wrap" style="display: none;">
             <div class="quiz-short-input-box">
               <span class="material-symbols-outlined quiz-short-icon">edit_note</span>
-              <input type="text" id="short-answer-input" class="quiz-short-input" placeholder="Írd be ide a választ..." autocomplete="off">
+              <input type="text" id="short-answer-input" class="quiz-short-input" placeholder="Írd be ide a választ..."
+                autocomplete="off">
             </div>
           </div>
 
@@ -419,29 +434,86 @@
         </aside>
       </div>
 
-      <!-- 3. LÉPÉS: Dolgozat végi értékelőlap -->
-      <div id="summary-container" class="card calm-card" style="display: none; max-width: 600px; margin: 0 auto;">
-        <div class="card-header" style="text-align: center; margin-bottom: 24px;">
-          <h2 class="card-title">Dolgozat befejezve!</h2>
-          <p class="card-subtitle">Köszönjük a munkádat! A válaszaid rögzítésre kerültek.</p>
-        </div>
+      <!-- 3. LÉPÉS: Dolgozat végi értékelő felület (Sík, szellős, kártyamentes Calm dizájn) -->
+      <div id="summary-container" class="calm-summary-view" style="display: none;">
 
-        <div class="student-summary">
-          <p style="font-size: 1.1rem; color: var(--text-muted); margin-bottom: 8px;">Elért összpontszám:</p>
-          <div id="final-score" class="score-display">0 / 0 pont</div>
-          <div id="final-grade" class="grade-badge-lg">Érdemjegy: –</div>
+        <!-- 3.1 Felső megnyugtató fejléc (tiszta, sík, sallangmentes) -->
+        <section class="calm-summary-hero">
+          <h1 id="summary-greeting" class="calm-summary-title">Köszönjük a munkádat!</h1>
+          <p class="calm-summary-subtitle">A mai röpdolgozatodat sikeresen leadtad, megkaptuk a válaszaidat.</p>
+        </section>
 
-          <div id="feedback-allowed-box" style="margin-top: 24px; text-align: center;">
-            <p style="color: var(--text-muted);">Nyugodtan bezárhatod az ablakot, vagy várhatsz a tanár további utasításaira.</p>
+        <!-- 3.2 Elért eredmény sáv (kártyamentes, megnövelt kördiagram + KRÉTA jegy + kitöltési idő) -->
+        <section class="calm-summary-results">
+          <div class="calm-summary-results-top">
+            <span class="calm-summary-section-label">Elért eredményed</span>
+            <span id="summary-performance-badge" class="calm-summary-perf-badge">
+              <span class="material-symbols-outlined">grade</span>
+              <span id="summary-performance-text">Közepes teljesítmény</span>
+            </span>
           </div>
 
-          <div style="margin-top: 28px; text-align: center;">
-            <button id="btn-restart-student" class="calm-modal-btn-cancel" style="height: 48px; font-size: 1rem; width: auto; padding: 0 24px; display: inline-flex; align-items: center; gap: 8px;">
-              <span class="material-symbols-outlined">refresh</span>
-              <span>Új belépés / Vissza a kezdőlapra</span>
-            </button>
+          <div class="calm-summary-score-layout">
+            <!-- 1. Oszlop: Megszerzett érdemjegy (kiemelt Hero szám + szöveges minősítés) -->
+            <div class="calm-summary-col-grade">
+              <span class="calm-summary-grade-label">Megszerzett érdemjegy</span>
+              <div class="calm-summary-grade-row">
+                <span id="summary-grade-num" class="calm-summary-grade-num">5</span>
+                <span id="final-grade" class="calm-summary-grade-text">(jeles)</span>
+              </div>
+            </div>
+
+            <!-- 2. Oszlop: Szöveges értékelés (2 sorban) és Kitöltési idő szürke háttérrel -->
+            <div class="calm-summary-col-feedback">
+              <p id="summary-grade-quote" class="calm-summary-grade-quote">Minden kérdésre hibátlanul válaszoltál!</p>
+              <div class="calm-summary-timer-row">
+                <span class="material-symbols-outlined">timer</span>
+                <span>Kitöltési idő:</span>
+                <strong id="summary-time-spent">0p 0mp</strong>
+              </div>
+            </div>
+
+            <!-- 3. Oszlop: Kör alakú százalékos és pontszám tartalom (finomabb, halványabb megjelenés) -->
+            <div class="calm-summary-col-circle">
+              <div class="calm-summary-circle-wrap">
+                <svg class="calm-summary-svg-circle" viewBox="0 0 100 100">
+                  <circle class="calm-circle-bg" cx="50" cy="50" r="42" fill="none" stroke-width="7"></circle>
+                  <circle id="summary-circle-bar" class="calm-circle-bar" cx="50" cy="50" r="42" fill="none"
+                    stroke-width="7" stroke-dasharray="264" stroke-dashoffset="0" stroke-linecap="round"></circle>
+                </svg>
+                <div class="calm-summary-circle-inner">
+                  <span id="summary-percent-val" class="calm-summary-circle-percent">100%</span>
+                  <span id="final-score" class="calm-summary-circle-points">5 / 5 pont</span>
+                </div>
+              </div>
+            </div>
           </div>
+        </section>
+
+        <!-- 3.3 A kérdések tételes áttekintése -->
+        <section id="summary-questions-section" class="calm-summary-questions-section">
+          <div class="calm-summary-questions-header">
+            <div class="calm-summary-q-header-left">
+              <span class="material-symbols-outlined">task_alt</span>
+              <h2>A kérdések áttekintése</h2>
+            </div>
+            <span id="summary-questions-count" class="calm-summary-q-count">0 / 0 helyes válasz</span>
+          </div>
+
+          <!-- Dinamikusan feltöltött kérdéslista -->
+          <div id="summary-questions-list" class="calm-summary-q-list">
+            <!-- JavaScript tölti fel a válaszokat -->
+          </div>
+        </section>
+
+        <!-- 3.5 Alsó egyszerű műveleti gomb -->
+        <div class="calm-summary-actions">
+          <button id="btn-restart-student" type="button" class="calm-summary-btn-finish">
+            <span>Kész, vissza a kezdőlapra</span>
+            <span class="material-symbols-outlined">arrow_forward</span>
+          </button>
         </div>
+
       </div>
 
     </div>
@@ -449,7 +521,8 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.10.0"></script>
-  <script src="/js/student.js?v=1.10.0"></script>
+  <script src="/js/utils.js?v=1.11.0"></script>
+  <script src="/js/student.js?v=1.11.0"></script>
 </body>
+
 </html>

@@ -4,6 +4,40 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.11.0] – 2026-11-12
+
+### Sík és kártyamentes Calm értékelő felület, érdemjegy-központú 3 oszlopos eredményelrendezés, tételes kérdésáttekintés belső görgetéssel és rögzített alsó műveleti sáv
+
+A diákoldali dolgozat végi értékelő felület átfogó megújítása a bejelentkezési fázis tiszta, sík, dobozmentes dizájnfilozófiája szerint: a korábbi egyszerű befejezési kártya helyett teljes körű, pedagógiailag motiváló és sallangmentes értékelőlap (`#summary-container`) készült. Az eredményblokk az érdemjegyre fókuszáló 3 oszlopos kompozíciót kapott (kiemelt 4.8rem méretű érdemjegy, véletlenszerű pedagógiai idézet a tanuló nevének törésmentes rögzítésével, egysoros szürke hátterű kitöltési idő az új `14p 18mp` formátumban, valamint halványított, visszafogott SVG kördiagram). A kérdések tételes áttekintése fix fejléc mellett kizárólag belső vékony görgetősávval böngészhető a képernyő 100%-os magasságában (`100vh`), miközben a *„Kész, vissza a kezdőlapra”* befejezés gomb stabilan és mindig elérhetően a böngészőablak alján rögzül.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Sík és kártyamentes Calm értékelő felület (`#summary-container`):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A korábbi szürke kártyás doboz (`.calm-card`) helyett a bejelentkezéshez hasonlóan tiszta fehér vászon, dobozok és határoló keretek nélkül (`border: none; background: transparent; padding: 0;`).
+  - Eltávolításra kerültek a figyelmet elvonó felső színes kapszulák (a zöld *Dolgozat beküldve* és a *Tantárgy / dátum* jelvények), valamint a „Tudtad?” sárga információs blokk.
+  - A fejléc megszólítása őszinte, a tanuló érdemjegyéhez igazodó üzenetet ad (pl. jelesnél *„Remek munka”*, elégségesnél *„Dolgozat leadva”*), miközben a tanuló neve garantáltan egy sorban marad (`.student-name-nowrap`).
+
+* **Érdemjegy-központú 3 oszlopos eredményelrendezés (`.calm-summary-score-layout`):**
+  - **1. oszlop (Megszerzett érdemjegy):** Hero méretű (`4.8rem`, `font-weight: 900`) érdemjegyszám a bal szélen, közvetlenül mellette a hivatalos KRÉTA szöveges minősítéssel (pl. `3 (közepes)` duplikációk nélkül).
+  - **2. oszlop (Pedagógiai kontextus és kitöltési idő):** A jegyhez illeszkedő bátorító mondat (osztályzatonként 3-3 véletlenszerű pedagógiai variáció), alatta pedig az egysoros, diszkrét szürke hátterű (`#f4f4f5`) kitöltési idő az új `Xp Ymp` (pl. `14p 18mp`) formátumban, a redundáns tempójelzés elhagyásával.
+  - **3. oszlop (Halványított kördiagram):** Finom, lágyabb hatású (`opacity: 0.75`), `120px × 120px` méretű SVG kördiagram semleges grafit színű százalékkal és diszkrét pontszámmal, tökéletes vizuális egyensúlyt biztosítva az érdemjegy elnyomása nélkül.
+
+* **Tételes kérdésáttekintés belső görgetéssel (`#summary-questions-section`):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A kérdések fejléce (*„A kérdések áttekintése · X/Y helyes válasz”*) fixen rögzül a helyén, miközben a kérdések listája (`.calm-summary-q-list`) a rendelkezésre álló függőleges teret tölti ki dinamikusan (`flex: 1 1 auto; min-height: 0;`).
+  - Belső, vékony diszkrét görgetősáv (`6px`, `scrollbar-width: thin;`), amely meggátolja a teljes oldal elgörgetését, kompakt kérdéskártyákkal (`10px 16px` padding), amelyekből egyszerre 4–5 kérdés is kényelmesen áttekinthető.
+  - Tételes kiértékelés: kérdésszám, formázott kérdésszöveg (`formatCode`), a tanuló által leadott válasz és színes státuszjelvény (`Helyes (+X pont)`, `Részpont (+X pont)`, `0 pont`).
+
+* **Rögzített alsó műveleti sáv (`.calm-summary-actions`):**
+  - A *„Kész, vissza a kezdőlapra”* műveletgomb (`#btn-restart-student`) fixen a böngészőablak alján kapott helyet (`margin-top: auto;`), így 25 kérdéses teszt esetén sem kell lefelé lapozni a kilépéshez.
+  - Mobilos nézetben (`max-width: 640px`) az elrendezés automatikusan kényelmes, függőleges folyamattá alakul.
+
+* **Backend válasz- és időbélyeg-továbbítás:**
+  - **Fájl:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - A `/api/student/session-data` végpont kiegészült a résztvevő leadott válaszaival (`answers` lista: `question_id`, `submitted_answer`, `is_correct`, `points_earned`, `eval_status`), valamint a `joined_at` és `finished_at` időadatokkal, biztosítva az értékelőlap azonnali, pontos felépítését.
+
+---
+
 ## [1.10.0] – 2026-11-12
 
 ### Valós idejű ülésfoglalás és jelenlét-kezelés aktív teszt nélküli névvédelemmel, automatikus névsor-kiszürkítés és barátságos Calm figyelmeztető modál

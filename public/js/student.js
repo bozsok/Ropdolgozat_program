@@ -136,9 +136,23 @@
   const finalGrade = document.getElementById('final-grade');
   const btnRestartStudent = document.getElementById('btn-restart-student');
 
+  // Új Calm Learner értékelő felület DOM elemei
+  const summaryGreeting = document.getElementById('summary-greeting');
+  const summaryPerformanceBadge = document.getElementById('summary-performance-badge');
+  const summaryPerformanceText = document.getElementById('summary-performance-text');
+  const summaryCircleBar = document.getElementById('summary-circle-bar');
+  const summaryPercentVal = document.getElementById('summary-percent-val');
+  const summaryGradeNum = document.getElementById('summary-grade-num');
+  const summaryGradeQuote = document.getElementById('summary-grade-quote');
+  const summaryTimeSpent = document.getElementById('summary-time-spent');
+  const summaryQuestionsCount = document.getElementById('summary-questions-count');
+  const summaryQuestionsList = document.getElementById('summary-questions-list');
+
   // Dinamikus eredmény- és jegyszámítási állapot
   let earnedPoints = 0;
   let sessionThresholds = { 2: 30, 3: 55, 4: 75, 5: 90 };
+  let quizStartTime = null;
+  const studentSubmittedAnswers = new Map();
 
   /**
    * Alkalmazás inicializálása
@@ -916,11 +930,15 @@
       if (data.participant.is_finished === 1) {
         showSummary({
           totalPoints: data.results ? data.results.total_points : 0,
-          maxPoints: (data.results && data.results.max_points) || data.quiz.total_points,
+          maxPoints: (data.results && data.results.max_points) || (data.quiz && data.quiz.total_points),
           percentage: data.results ? data.results.percentage : 0,
           grade: data.results ? data.results.grade : null,
           gradeText: data.results ? data.results.grade_text : '',
-          showFeedback: data.participant.show_feedback_on_end === 1
+          showFeedback: data.participant.show_feedback_on_end === 1,
+          participant: data.participant,
+          session: data.session,
+          quiz: data.quiz,
+          answers: data.answers || []
         });
         return true;
       }
@@ -945,6 +963,12 @@
 
     currentQuiz = data.quiz;
     currentQuestions = data.quiz.questions;
+    if (!quizStartTime) quizStartTime = Date.now();
+
+    // Korábban leadott válaszok betöltése a memóriába (Recovery esetén)
+    if (Array.isArray(data.answers)) {
+      data.answers.forEach(a => studentSubmittedAnswers.set(a.question_id, a));
+    }
 
     // Felület váltás
     loginContainer.style.display = 'none';
@@ -1235,6 +1259,13 @@
       }
 
       answeredQuestionIds.add(q.id);
+      studentSubmittedAnswers.set(q.id, {
+        question_id: q.id,
+        submitted_answer: submittedValue,
+        is_correct: result.is_correct,
+        points_earned: Number(result.points_earned) || 0,
+        eval_status: result.eval_status || (result.is_correct === 1 ? 'CORRECT' : 'WRONG')
+      });
       if (result.is_correct === 1) {
         earnedPoints += Number(result.points_earned) || 1;
       }
@@ -1335,7 +1366,11 @@
           percentage: data.results ? data.results.percentage : 0,
           grade: data.results ? data.results.grade : null,
           gradeText: data.results ? data.results.grade_text : '',
-          showFeedback: data.participant.show_feedback_on_end === 1
+          showFeedback: data.participant.show_feedback_on_end === 1,
+          participant: data.participant,
+          session: data.session,
+          quiz: data.quiz,
+          answers: data.answers || []
         };
       }
     } catch {
@@ -1345,29 +1380,213 @@
     showSummary(summaryData);
   }
 
+  /**
+   * Dolgozat végi értékelő felület megjelenítése (Sík, kártyamentes Calm Learner stílus)
+   */
   function showSummary(data) {
     loginContainer.style.display = 'none';
     if (studentTopBar) studentTopBar.style.display = 'none';
     if (quizTopBar) quizTopBar.style.display = 'none';
-    if (studentEntryWrapper) studentEntryWrapper.classList.remove('quiz-active');
-    if (studentEntryInner) studentEntryInner.classList.remove('quiz-active');
-    quizContainer.style.display = 'none';
-    summaryContainer.style.display = 'block';
-    quizContainer.style.display = 'none';
-    summaryContainer.style.display = 'block';
+    if (lobbyContainer) lobbyContainer.style.display = 'none';
+    if (quizContainer) quizContainer.style.display = 'none';
 
-    if (data) {
-      if (data.totalPoints !== undefined && data.maxPoints !== undefined) {
-        finalScore.textContent = `${data.totalPoints} / ${data.maxPoints} pont (${data.percentage || 0}%)`;
+    // Sík, szellős konténer beállítása
+    if (studentEntryWrapper) {
+      studentEntryWrapper.classList.remove('quiz-active');
+      studentEntryWrapper.classList.add('summary-active');
+    }
+    if (studentEntryInner) {
+      studentEntryInner.classList.remove('quiz-active');
+      studentEntryInner.classList.add('summary-active');
+    }
+    if (summaryContainer) {
+      summaryContainer.style.display = 'flex';
+    }
+
+    if (!data) return;
+
+    // 1. Megszerzett KRÉTA érdemjegy kiszámítása az adatok alapján
+    const grade = data.grade || (data.percentage !== undefined ? calculateKRÉTAGrade(percentage, sessionThresholds) : 5);
+
+    // Szöveges értékelések, jelvények és megszólítások érdemjegyenként (3-3 pedagógiai változat)
+    const studentName = (data.participant && data.participant.student_name) || (selectedStudent && selectedStudent.student_name) || 'Diák';
+    const GRADE_FEEDBACKS = {
+      5: {
+        badge: 'Jeles teljesítmény',
+        greeting: `Remek munka, ${studentName}!`,
+        quotes: [
+          'A kérdésekre hibátlanul válaszoltál! Példamutató felkészültség!',
+          'Fantasztikus tudásról tettél tanúbizonyságot, csak így tovább!',
+          'Kimagasló eredmény! Látszik a figyelmes, alapos órai munka.'
+        ]
+      },
+      4: {
+        badge: 'Jó teljesítmény',
+        greeting: `Szép munka, ${studentName}!`,
+        quotes: [
+          'Nagyon szép, magabiztos tudás, alig néhány apró hiba csúszott be!',
+          'Szép eredmény! A tananyag nagy részét kiválóan megértetted.',
+          'Dicséretes munka! Egy pici plusz odafigyeléssel a jeles is elérhető.'
+        ]
+      },
+      3: {
+        badge: 'Közepes teljesítmény',
+        greeting: `Köszönjük a munkádat, ${studentName}!`,
+        quotes: [
+          'A tananyag alapjait magabiztosan tudod, de van még hova fejlődni!',
+          'Közepes szintű tudás: a főbb fogalmak megvannak, egy kis gyakorlással még jobb lesz!',
+          'Szilárd kiindulási alap, érdemes még egy keveset gyakorolni az órákon!'
+        ]
+      },
+      2: {
+        badge: 'Elégséges eredmény',
+        greeting: `Dolgozat leadva, ${studentName}!`,
+        quotes: [
+          'A követelmények minimumát teljesítetted, de szükséged lesz még gyakorlásra!',
+          'Sikerült átlépned a határt, de érdemes alaposan átismételni az órai anyagot!',
+          'Az alapok még bizonytalanok, kérj bátran segítséget a tanárodtól a felkészüléshez!'
+        ]
+      },
+      1: {
+        badge: 'Javításra szorul',
+        greeting: `Dolgozat rögzítve, ${studentName}!`,
+        quotes: [
+          'Ez most sajnos nem sikerült, de ne csüggedj: alapos ismétléssel javítani fogsz!',
+          'A mai téma még nehéznek bizonyult. Kérdezz a tanártól, és a következő alkalommal sokkal jobb lesz!',
+          'Ne veszítsd el a kedved! Nézd át a hibás válaszokat, és gyakorolj a javításra!'
+        ]
       }
-      if (data.grade) {
-        const gradeText = getKRÉTAGradeText(data.grade);
-        finalGrade.textContent = `Érdemjegy: ${data.grade} (${gradeText})`;
-      } else if (data.gradeText) {
-        finalGrade.textContent = `Érdemjegy: ${data.gradeText.toLowerCase()}`;
+    };
+
+    const gradeFeedback = GRADE_FEEDBACKS[grade] || GRADE_FEEDBACKS[3];
+
+    // Felső megnyugtató fejléc kitöltése (az érdemjegyhez igazodó őszinte megszólítással, a tanuló neve soha nem törik szét)
+    if (summaryGreeting) {
+      const wrappedName = `<span class="student-name-nowrap">${escapeHtml(studentName)}</span>`;
+      const greetingHtml = escapeHtml(gradeFeedback.greeting).replace(escapeHtml(studentName), wrappedName);
+      summaryGreeting.innerHTML = greetingHtml;
+    }
+
+    // 2. Pontszám és SVG kördiagram
+    const totalPoints = data.totalPoints !== undefined ? Number(data.totalPoints) : earnedPoints;
+    const maxPoints = data.maxPoints || (currentQuiz ? currentQuiz.total_points : 0) || 1;
+    const percentage = Math.min(100, Math.max(0, data.percentage !== undefined ? data.percentage : Math.round((totalPoints / maxPoints) * 100)));
+
+    if (summaryPercentVal) {
+      summaryPercentVal.textContent = `${percentage}%`;
+    }
+    if (finalScore) {
+      finalScore.textContent = `${totalPoints} / ${maxPoints} pont`;
+    }
+
+    // SVG körív kirajzolása (2 * PI * 42 = 263.89)
+    if (summaryCircleBar) {
+      const circumference = 264;
+      const offset = circumference - (percentage / 100) * circumference;
+      summaryCircleBar.style.strokeDashoffset = offset;
+    }
+
+    // 3. Megszerzett KRÉTA érdemjegy tiszta megjelenítése (duplikáció nélkül: pl. 3 (közepes))
+    const cleanGradeLabel = getKRÉTAGradeText(grade);
+
+    if (summaryGradeNum) {
+      summaryGradeNum.textContent = String(grade);
+    }
+    if (finalGrade) {
+      finalGrade.textContent = `(${cleanGradeLabel})`;
+    }
+
+    // Véletlenszerű dicsérő mondat kiválasztása a 3 variáció közül
+    const randomQuote = gradeFeedback.quotes[Math.floor(Math.random() * gradeFeedback.quotes.length)];
+
+    if (summaryGradeQuote) {
+      summaryGradeQuote.textContent = randomQuote;
+    }
+    if (summaryPerformanceText) {
+      summaryPerformanceText.textContent = gradeFeedback.badge;
+    }
+
+    // 4. Kitöltési idő és tempójelzés
+    if (summaryTimeSpent) {
+      let spentSec = 0;
+      if (quizStartTime) {
+        spentSec = Math.max(5, Math.round((Date.now() - quizStartTime) / 1000));
+      } else if (data.participant && data.participant.joined_at) {
+        const startMs = new Date(data.participant.joined_at).getTime();
+        const endMs = data.participant.finished_at ? new Date(data.participant.finished_at).getTime() : Date.now();
+        spentSec = Math.max(5, Math.round((endMs - startMs) / 1000));
+      }
+      const min = Math.floor(spentSec / 60);
+      const sec = spentSec % 60;
+      summaryTimeSpent.textContent = `${min}p ${sec}mp`;
+    }
+
+    // 5. Kérdések tételes áttekintése
+    if (summaryQuestionsList) {
+      summaryQuestionsList.innerHTML = '';
+      const questions = (data.quiz && data.quiz.questions) || currentQuestions || [];
+      let correctCount = 0;
+
+      // Válaszok összeállítása
+      const answersMap = new Map();
+      if (Array.isArray(data.answers)) {
+        data.answers.forEach(a => answersMap.set(a.question_id, a));
+      }
+      studentSubmittedAnswers.forEach((val, key) => {
+        if (!answersMap.has(key)) answersMap.set(key, val);
+      });
+
+      questions.forEach((q, idx) => {
+        const userAns = answersMap.get(q.id);
+        const isCorrect = userAns ? (userAns.is_correct === 1 || userAns.isCorrect === true) : false;
+        const pointsEarned = userAns ? (Number(userAns.points_earned !== undefined ? userAns.points_earned : userAns.pointsEarned) || 0) : 0;
+        const maxQPoints = q.points || 1;
+        if (isCorrect) correctCount++;
+
+        const item = document.createElement('div');
+        item.className = 'calm-summary-q-item';
+
+        let badgeClass = 'wrong';
+        let badgeIcon = 'cancel';
+        let badgeText = '0 pont';
+        if (pointsEarned >= maxQPoints) {
+          badgeClass = 'correct';
+          badgeIcon = 'check_circle';
+          badgeText = `Helyes (+${pointsEarned} pont)`;
+        } else if (pointsEarned > 0) {
+          badgeClass = 'partial';
+          badgeIcon = 'check_circle';
+          badgeText = `Részpont (+${pointsEarned} pont)`;
+        }
+
+        let submittedText = userAns ? (userAns.submitted_answer || userAns.submittedAnswer || '–') : 'Nem válaszolt';
+        if (q.question_type === 'TF') {
+          if (submittedText === 'true' || submittedText === '1') submittedText = 'Igaz';
+          if (submittedText === 'false' || submittedText === '0') submittedText = 'Hamis';
+        }
+
+        item.innerHTML = `
+          <div class="calm-summary-q-left">
+            <span class="calm-summary-q-num">${idx + 1}</span>
+            <div class="calm-summary-q-info">
+              <span class="calm-summary-q-title">${formatCode(q.question_text)}</span>
+              <span class="calm-summary-q-ans">Válaszod: <strong>${escapeHtml(submittedText)}</strong></span>
+            </div>
+          </div>
+          <div class="calm-summary-q-badge ${badgeClass}">
+            <span class="material-symbols-outlined">${badgeIcon}</span>
+            <span>${badgeText}</span>
+          </div>
+        `;
+        summaryQuestionsList.appendChild(item);
+      });
+
+      if (summaryQuestionsCount) {
+        summaryQuestionsCount.textContent = `${correctCount} / ${questions.length} helyes válasz`;
       }
     }
 
+    // 6. Új belépés gomb kezelése
     if (btnRestartStudent) {
       btnRestartStudent.onclick = () => {
         sessionStorage.removeItem('ropdolgozat_token');
@@ -1414,7 +1633,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session_token: sessionToken })
-        }).catch(() => {});
+        }).catch(() => { });
 
         showToast('⚠️ Figyelem! A dolgozat közben az ablak elhagyását a rendszer rögzíti!', 'danger');
       }

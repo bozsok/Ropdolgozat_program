@@ -472,6 +472,13 @@ router.get('/student/session-data', (req, res) => {
     const grade = grader.calculateGrade(percentage, thresholds);
     const gradeText = grader.getGradeText(grade);
 
+    // Tanuló leadott válaszai az értékeléshez és áttekintéshez
+    const answers = db.prepare(`
+      SELECT question_id, submitted_answer, is_correct, points_earned, eval_status
+      FROM answers
+      WHERE participant_id = ?
+    `).all(participant.id);
+
     res.json({
       session: {
         id: participant.session_id,
@@ -491,6 +498,8 @@ router.get('/student/session-data', (req, res) => {
         is_finished: participant.is_finished,
         deadline_at: participant.deadline_at,
         time_limit_min: participant.time_limit_min,
+        joined_at: participant.joined_at,
+        finished_at: participant.finished_at,
         session_status: participant.session_status,
         session_mode: participant.mode,
         is_race_started: participant.mode === 'SPACE_RACE' ? (participant.current_question_index >= 1) : true,
@@ -508,7 +517,8 @@ router.get('/student/session-data', (req, res) => {
         percentage,
         grade,
         grade_text: gradeText
-      }
+      },
+      answers
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
