@@ -1,5 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+
+// Izolált teszt adatbázis használata az éles ropdolgozat.db védelmében
+process.env.DB_PATH = path.join(__dirname, '..', 'data', 'ropdolgozat_test.db');
+
 const Database = require('better-sqlite3');
 const config = require('../config');
 const db = require('../src/db/init');
@@ -281,6 +285,16 @@ if (checkConn1.ended_at === finish1.ended_at && checkConn2.ended_at === finish1.
 }
 
 conn2.close();
+db.close();
+
+// Teszt adatbázis letakarítása
+try {
+  if (fs.existsSync(config.dbPath)) fs.unlinkSync(config.dbPath);
+  if (fs.existsSync(config.dbPath + '-wal')) fs.unlinkSync(config.dbPath + '-wal');
+  if (fs.existsSync(config.dbPath + '-shm')) fs.unlinkSync(config.dbPath + '-shm');
+} catch (e) {
+  // Ignored if busy
+}
 
 console.log('\n================================================================');
 console.log('🎉 REPORT 12 MINDEN CÉLZOTT ELLENŐRZÉSE SIKERESEN LEFUTOTT!    🎉');

@@ -4,6 +4,49 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.12.0] – 2026-11-12
+
+### Szabad és dinamikus Tesztszerkesztő, archívum-tisztítás, 1400 px-es fejléckompozíció, ikonos gombrendszer és univerzális Calm Learner modális ablakok
+
+Átfogó adminisztrációs és tanári felületfrissítés: a korábbi merev kvíz-zárolási mechanizmus feloldásra került, a Tesztszerkesztő valódi, dinamikus feladattárrá vált. A `Reports / Korábbi dolgozatok` archívuma törlési képességet kapott a próba- és rontott dolgozatok eltávolítására. A fejléc elrendezése teljes szélességében igazodott a fő tartalom 1400 px-es rácsához, a navigációs fülek balra zártak. A tesztkártyák kompakt, egy sorban maradó ikongombokat kaptak (kellemes kék szerkesztéssel), a natív böngészős popupokat pedig egységes Calm Learner modális ablakok váltották fel.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **1400 px-es fejléc- és navigáció-igazítás:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A fejléc külső konténere (`.admin-header-clean`) önálló blokk-elemmé vált, megszüntetve a flex child miatti összehúzódást.
+  - A fejléc belső konténere (`.admin-header-container`) `max-width: 1400px; width: 100%; margin: 0 auto; padding: 0 16px;` szabályozást kapott.
+  - Az Okoskodó logó (`.admin-header-top-row`) és a navigációs fülek sora (`.admin-nav-tabs`) pixelre pontosan ott kezdődik a bal oldalon, ahol az alsó tartalom (`.admin-main-container`), és balra zárt (`justify-content: flex-start;`). A Kilépés gomb a lenti kártyák jobb szélével egy vonalba zár.
+
+* **Szabad és dinamikus Tesztszerkesztő (Feladattár):**
+  - **Fájlok:** [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql), [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Törlésre kerültek az automatikus és visszavonhatatlan zárolási triggerek (`trg_auto_lock_quiz_on_session`, `trg_lock_quiz_*`, `trg_lock_question_*`).
+  - A meglévő kvízek zárolása feloldásra került, minden feladatsor szabadon szerkeszthető, bővíthető és törölhető.
+
+* **Ikonos, helytakarékos és szintbe hozott tesztkártyák (`.quiz-cards-grid`, `.quiz-card`):**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A hosszú szöveges gombok helyett letisztult 36×36 px-es ikongombok: Szerkesztés (kellemes Calm kék `#0284c7`), Másolás (szürke `#f1f5f9`) és Törlés (diszkrét piros `#fee2e2`), magyar nyelvű tooltip-pel.
+  - A gombok mindössze 124 px-et foglalnak el, így sosem törnek egymás alá.
+  - Az alsó gombsor (`.quiz-card-actions`) `margin-top: auto;` igazítást kapott: a különböző címhosszúságú tesztdobozok ellenére a gombok mindig hajszálpontosan egy magasságban, egy egyenes vonalban állnak.
+
+* **Korábbi dolgozatok törlése (`Reports / Korábbi dolgozatok`):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Új `DELETE /api/admin/sessions/:id` végpont a korábbi dolgozatok, próbamérések és szemét rekordok tranzakciós törlésére (`deleteSession`).
+  - Új Calm Learner megerősítő modál (`#modal-confirm-delete-session`) a véletlen törlések megelőzésére.
+
+* **Univerzális Calm Learner modális rendszer a böngészős alert/confirm helyett:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Elkészült és bekötésre került az 5 dedikált modális ablak: Dolgozat lezárása (`#modal-confirm-finish`), Név törlése (`#modal-confirm-delete-name`), Gépváltás (`#modal-confirm-seat-change`), Kvíz törlése (`#modal-confirm-delete-quiz`), valamint a Rendszerértesítő modál (`#modal-admin-alert`) a csúnya `alert()` helyett.
+
+* **Mátrix alsó panelek:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A felesleges export doboz helyett megvalósult a terv szerinti 2 oszlopos rács: *Jelmagyarázat és értékelési küszöbök* (színes kártyákkal), valamint az *Értesítési központ* élő szerveridővel.
+
+#### Javítva (Fixed)
+* **Gépváltás gomb folyamatos láthatósága:** A gomb lezárt diák esetén sem tűnik el a DOM-ból, hanem diszkréten tiltott (`disabled`) állapotba kerül, megelőzve az ugráló felületet.
+* **Éles adatbázis kitakarítása és tesztizoláció:** A 104 db automatikusan felhalmozódott tesztkvíz eltávolításra került az éles adatbázisból, az `npm test` pedig elkülönített, önmegsemmisítő teszt-adatbázison (`data/ropdolgozat_test.db`) fut.
+
+---
+
 ## [1.11.0] – 2026-11-12
 
 ### Sík és kártyamentes Calm értékelő felület, érdemjegy-központú 3 oszlopos eredményelrendezés, tételes kérdésáttekintés belső görgetéssel és rögzített alsó műveleti sáv

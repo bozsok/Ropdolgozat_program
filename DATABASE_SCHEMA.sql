@@ -152,72 +152,8 @@ CREATE TABLE IF NOT EXISTS answers (
 CREATE INDEX IF NOT EXISTS idx_answers_session_participant ON answers(session_id, participant_id);
 
 -- ============================================================================
--- 8. INTEGRITÁSI ÉS ZÁROLÁSI TRIGGEREK (Adatbázisszintű garanciák)
+-- 8. INTEGRITÁSI TRIGGEREK (Adatbázisszintű garanciák)
 -- ============================================================================
-
--- 8.1. Kvíz automatikus zárolása az első dolgozat (session) indításakor
-CREATE TRIGGER IF NOT EXISTS trg_auto_lock_quiz_on_session
-AFTER INSERT ON sessions
-BEGIN
-    UPDATE quizzes 
-    SET locked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-    WHERE id = NEW.quiz_id AND locked_at IS NULL;
-END;
-
--- 8.2. Kvíz zárolásának feloldása és időpontjának módosítása szigorúan tiltott
-CREATE TRIGGER IF NOT EXISTS trg_prevent_quiz_unlock
-BEFORE UPDATE OF locked_at ON quizzes
-WHEN OLD.locked_at IS NOT NULL AND NEW.locked_at IS NOT OLD.locked_at
-BEGIN
-    SELECT RAISE(ABORT, 'A teszt zárolási időpontja nem módosítható!');
-END;
-
--- 8.3. Zárolt kvíz adatainak módosítása tiltott (beleértve a címet, tantárgyat, évfolyamot és időkorlátot is!)
-CREATE TRIGGER IF NOT EXISTS trg_lock_quiz_update
-BEFORE UPDATE ON quizzes
-WHEN OLD.locked_at IS NOT NULL
- AND (
-     NEW.title IS NOT OLD.title
-  OR NEW.subject_id IS NOT OLD.subject_id
-  OR NEW.subject_grade IS NOT OLD.subject_grade
-  OR NEW.default_time_limit_min IS NOT OLD.default_time_limit_min
- )
-BEGIN
-    SELECT RAISE(ABORT, 'Zárolt teszt adatai nem módosíthatók! Használd a másolást.');
-END;
-
--- 8.4. Zárolt kvíz fizikai törlése tiltott
-CREATE TRIGGER IF NOT EXISTS trg_lock_quiz_delete
-BEFORE DELETE ON quizzes
-WHEN OLD.locked_at IS NOT NULL
-BEGIN
-    SELECT RAISE(ABORT, 'Zárolt teszt nem törölhető!');
-END;
-
--- 8.5. Zárolt kvízhez új kérdés beszúrása tiltott
-CREATE TRIGGER IF NOT EXISTS trg_lock_question_insert
-BEFORE INSERT ON questions
-WHEN (SELECT locked_at FROM quizzes WHERE id = NEW.quiz_id) IS NOT NULL
-BEGIN
-    SELECT RAISE(ABORT, 'Zárolt teszthez nem adható hozzá új kérdés! Használd a másolást.');
-END;
-
--- 8.6. Zárolt kvíz kérdésének módosítása vagy áthelyezése tiltott
-CREATE TRIGGER IF NOT EXISTS trg_lock_question_update
-BEFORE UPDATE ON questions
-WHEN (SELECT locked_at FROM quizzes WHERE id = OLD.quiz_id) IS NOT NULL
-  OR (SELECT locked_at FROM quizzes WHERE id = NEW.quiz_id) IS NOT NULL
-BEGIN
-    SELECT RAISE(ABORT, 'Zárolt kérdés nem módosítható! Használd a másolást.');
-END;
-
--- 8.7. Zárolt kvíz kérdésének törlése tiltott
-CREATE TRIGGER IF NOT EXISTS trg_lock_question_delete
-BEFORE DELETE ON questions
-WHEN (SELECT locked_at FROM quizzes WHERE id = OLD.quiz_id) IS NOT NULL
-BEGIN
-    SELECT RAISE(ABORT, 'Zárolt teszt kérdése nem törölhető!');
-END;
 
 -- 8.8. Elindított munkamenetnél a quiz_id utólagos módosítása tiltott
 CREATE TRIGGER IF NOT EXISTS trg_prevent_session_quiz_change
@@ -247,22 +183,6 @@ BEGIN
     SELECT RAISE(ABORT, 'A leadott diákválasz alapadatai és időadatai nem módosíthatók!');
 END;
 
--- 8.11. Lezárt dolgozat válaszainak közvetlen törlése tiltott
-CREATE TRIGGER IF NOT EXISTS trg_prevent_answer_delete_when_finished
-BEFORE DELETE ON answers
-WHEN (SELECT status FROM sessions WHERE id = OLD.session_id) = 'FINISHED'
-BEGIN
-    SELECT RAISE(ABORT, 'Tilos törölni választ lezárt dolgozatból!');
-END;
-
--- 8.12. Lezárt dolgozat résztvevőinek törlése tiltott (aktívnál a tanári feloldás megengedett)
-CREATE TRIGGER IF NOT EXISTS trg_prevent_participant_delete_when_finished
-BEFORE DELETE ON participants
-WHEN (SELECT status FROM sessions WHERE id = OLD.session_id) = 'FINISHED'
-BEGIN
-    SELECT RAISE(ABORT, 'Tilos törölni résztvevőt lezárt dolgozatból!');
-END;
-
 -- 8.13. Az eredeti gépi pontszám rögzítés után nem módosítható
 CREATE TRIGGER IF NOT EXISTS trg_prevent_original_points_change
 BEFORE UPDATE OF original_points_earned ON answers
@@ -270,14 +190,6 @@ WHEN OLD.original_points_earned IS NOT NULL
  AND NEW.original_points_earned IS NOT OLD.original_points_earned
 BEGIN
     SELECT RAISE(ABORT, 'Az eredeti gépi pontszám utólag nem módosítható!');
-END;
-
--- 8.14. Lezárt dolgozat szülőrekordja (session) sem törölhető
-CREATE TRIGGER IF NOT EXISTS trg_prevent_finished_session_delete
-BEFORE DELETE ON sessions
-WHEN OLD.status = 'FINISHED'
-BEGIN
-    SELECT RAISE(ABORT, 'Lezárt dolgozat nem törölhető!');
 END;
 
 -- 8.15. Lezárt dolgozat újranyitása (FINISHED -> ACTIVE) szigorúan tiltott!

@@ -262,6 +262,20 @@ router.post('/admin/sessions/:id/finish', requireAdminAuth, (req, res) => {
   }
 });
 
+// Dolgozat végleges törlése az archívumból (Admin)
+router.delete('/admin/sessions/:id', requireAdminAuth, (req, res) => {
+  try {
+    sessionRepo.deleteSession(req.params.id);
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('badges:updated', sessionRepo.getActiveSessions());
+    }
+    res.json({ success: true, message: 'Dolgozat sikeresen törölve az archívumból!' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Űrhajós verseny indítása (Közös Rajt - Space Race)
 router.post('/admin/sessions/:id/start-race', requireAdminAuth, (req, res) => {
   try {

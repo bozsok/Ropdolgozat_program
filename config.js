@@ -17,7 +17,7 @@ const config = {
   },
 
   // Fájlrendszer elérési utak
-  dbPath: path.join(__dirname, 'data', 'ropdolgozat.db'),
+  dbPath: process.env.DB_PATH || path.join(__dirname, 'data', 'ropdolgozat.db'),
   uploadsDir: path.join(__dirname, 'data', 'uploads'),
   publicDir: path.join(__dirname, 'public'),
 

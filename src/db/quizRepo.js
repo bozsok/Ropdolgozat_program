@@ -203,13 +203,9 @@ function createQuiz({ subject_id = 1, title, subject_grade = '', default_time_li
 }
 
 /**
- * Meglévő teszt szerkesztése (Kizárólag nem zárolt tesztnél!)
+ * Meglévő teszt szerkesztése (Szabadon szerkeszthető tanári sablon)
  */
 function updateQuiz(quizId, { subject_id, title, subject_grade, default_time_limit_min, questions }) {
-  if (isQuizLocked(quizId)) {
-    throw new Error('Zárolt teszt közvetlenül nem módosítható! Használja a duplikálást/másolást.');
-  }
-
   const trimmedTitle = String(title || '').trim();
   if (!trimmedTitle) throw new Error('A teszt címe kötelező!');
 
@@ -291,14 +287,16 @@ function duplicateQuiz(quizId, customTitle = null) {
 }
 
 /**
- * Teszt törlése
+ * Teszt törlése (kérdésekkel és esetleges kapcsolódó munkamenetekkel együtt)
  */
 function deleteQuiz(quizId) {
-  if (isQuizLocked(quizId)) {
-    throw new Error('Zárolt teszt nem törölhető az adatbázisból!');
-  }
-
   const tx = db.transaction(() => {
+    const sessions = db.prepare('SELECT id FROM sessions WHERE quiz_id = ?').all(quizId);
+    for (const s of sessions) {
+      db.prepare('DELETE FROM answers WHERE session_id = ?').run(s.id);
+      db.prepare('DELETE FROM participants WHERE session_id = ?').run(s.id);
+    }
+    db.prepare('DELETE FROM sessions WHERE quiz_id = ?').run(quizId);
     db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(quizId);
     db.prepare('DELETE FROM quizzes WHERE id = ?').run(quizId);
   });

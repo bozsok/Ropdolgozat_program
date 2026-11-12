@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.11.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.11.4">
   <style>
     /* Admin specifikus elrendezés (Tilos az !important) */
     .admin-container {
@@ -55,120 +55,282 @@
     </div>
   </div>
 
-  <!-- Felső Élő Státusz Sáv (Live Badges - Single Source of Truth) -->
-  <div id="badge-nav-bar" class="badge-nav-bar" style="display: none;">
-    <span style="color: #94a3b8; font-size: 0.85rem; font-weight: 600; margin-right: 8px;">CSATORNÁK:</span>
-    <div id="live-badges-list" style="display: flex; gap: 8px; overflow-x: auto;">
-      <!-- Dinamikusan frissülő zöld/szürke jelvények -->
-    </div>
-  </div>
+  <!-- Fő Alkalmazás Fejléc (Calm Learner Stílus) -->
+  <header class="admin-header-clean">
+    <div class="admin-header-container">
+      <!-- Felső sor: Logó + Csatornák és Kilépés -->
+      <div class="admin-header-top-row">
+        <div class="admin-header-brand-wrap">
+          <a href="#" class="admin-brand-link">
+            <img src="/img/logo.png" alt="Okoskodó – röpdolgozat program" class="admin-brand-logo">
+          </a>
+          <!-- Felső Élő Státusz Sáv (Live Badges - Single Source of Truth) -->
+          <div id="badge-nav-bar" class="admin-badge-nav-bar" style="display: none;">
+            <div id="live-badges-list" class="admin-live-badges-list">
+              <!-- Dinamikusan frissülő zöld/szürke jelvények -->
+            </div>
+          </div>
+        </div>
 
-  <!-- Fő Alkalmazás Fejléc -->
-  <header class="app-header">
-    <div class="header-brand">
-      <img src="/img/logo.png" alt="Okoskodó – röpdolgozat program" class="brand-logo-img">
-      <div class="brand-divider"></div>
-      <span class="brand-subtitle">Tanári Vezérlőpult (1. Monitor)</span>
-    </div>
+        <div id="header-meta-box" class="admin-header-actions" style="display: none;">
+          <button id="btn-logout" class="admin-btn-logout" type="button" title="Kijelentkezés">
+            <span class="material-symbols-outlined">logout</span>
+            <span>Kilépés</span>
+          </button>
+        </div>
+      </div>
 
-    <div id="header-meta-box" class="header-meta" style="display: none;">
-      <a href="/projector" target="_blank" class="btn btn-secondary" title="Másodlagos kivetítő megnyitása">
-        🖥️ Kivetítő (2. Monitor)
-      </a>
-      <button id="btn-logout" class="btn btn-secondary">Kijelentkezés</button>
+      <!-- Alsó sor: 4 Főmenü + Dedikált Tesztszerkesztő gomb -->
+      <nav class="admin-nav-tabs">
+        <button id="tab-btn-live" class="nav-tab-btn active" data-tab="tab-live" type="button">
+          <span class="material-symbols-outlined">grid_view</span>
+          <span>Élő felügyelet (Mátrix)</span>
+        </button>
+        <button class="nav-tab-btn" data-tab="tab-reports" type="button">
+          <span class="material-symbols-outlined">history_edu</span>
+          <span>Reports / Korábbi dolgozatok</span>
+        </button>
+        <button class="nav-tab-btn" data-tab="tab-export" type="button">
+          <span class="material-symbols-outlined">file_download</span>
+          <span>Export (.xlsx, .pdf, .html)</span>
+        </button>
+        <button class="nav-tab-btn" data-tab="tab-backup" type="button">
+          <span class="material-symbols-outlined">tune</span>
+          <span>Beállítások és mentés</span>
+        </button>
+        <button class="nav-tab-btn admin-nav-btn-highlight" data-tab="tab-quizzes" type="button">
+          <span class="material-symbols-outlined">edit_note</span>
+          <span>Tesztszerkesztő</span>
+        </button>
+      </nav>
     </div>
   </header>
 
   <!-- Fő Tartalom -->
   <main id="admin-main-container" class="admin-container" style="display: none;">
 
-    <!-- Admin Navigációs Fülek -->
-    <div class="admin-nav-tabs">
-      <button id="tab-btn-live" class="nav-tab-btn active" data-tab="tab-live">📊 Élő Dolgozat (Mátrix)</button>
-      <button class="nav-tab-btn" data-tab="tab-reports">📑 Eredmények (Reports)</button>
-      <button class="nav-tab-btn" data-tab="tab-quizzes">📝 Tesztszerkesztő</button>
-      <button class="nav-tab-btn" data-tab="tab-roster">👥 Osztálynévsorok</button>
-      <button class="nav-tab-btn" data-tab="tab-backup">💾 Biztonsági mentés</button>
-    </div>
-
     <!-- 1. FÜL: ÉLŐ DOLGOZAT (MÁTRIX ÉS VEZÉRLÉS) -->
     <section id="tab-live" class="admin-tab-content">
       
-      <!-- Ha nincs kiválasztott vagy aktív dolgozat -->
-      <div id="no-active-session-box" class="card" style="text-align: center; padding: 40px 20px;">
-        <h3 style="margin-bottom: 12px; color: var(--text-muted);">Jelenleg nincs kiválasztott élő dolgozat.</h3>
-        <p style="color: var(--text-muted); margin-bottom: 24px;">Válassz ki egy aktív dolgozatot a fenti zöld sávból, vagy indíts egy új felmérést!</p>
-        <button id="btn-open-start-modal" class="btn btn-primary btn-lg">🚀 Új Dolgozat Indítása</button>
+      <!-- Ha nincs kiválasztott vagy aktív dolgozat (Letisztult Calm Empty State) -->
+      <div id="no-active-session-box" class="admin-empty-state">
+        <div class="admin-empty-icon-badge">
+          <span class="material-symbols-outlined">rocket_launch</span>
+        </div>
+        <h2 class="admin-empty-title">Jelenleg nincs folyamatban lévő dolgozat</h2>
+        <p class="admin-empty-desc">
+          Indíts új dolgozatot az osztálynak, vagy válassz ki egy folyamatban lévő csatornát a fenti sávból!
+        </p>
+        <button id="btn-open-start-modal" type="button" class="admin-empty-btn-start">
+          <span class="material-symbols-outlined">add_circle</span>
+          <span>Új dolgozat indítása</span>
+        </button>
       </div>
 
       <!-- Ha van aktív dolgozat (Élő Mátrix) -->
       <div id="active-session-panel" style="display: none;">
         
-        <!-- Munkamenet Eszköztár -->
-        <div class="card" style="padding: 16px 20px; margin-bottom: 16px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-            <div>
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <span id="session-badge-channel" class="live-badge badge-active">🟢 ÉLŐ</span>
-                <h2 id="live-session-title" style="font-size: 1.3rem;">Teszt címe</h2>
-              </div>
-              <p id="live-session-info" style="color: var(--text-muted); font-size: 0.9rem; margin-top: 4px;">
-                Tantárgy: Digitális kultúra | Évfolyam: 6 | Mód: Diák-tempó
-              </p>
+        <!-- Munkamenet Eszköztár (Calm Learner Stílus) -->
+        <div class="admin-session-toolbar">
+          <div class="admin-session-meta-wrap">
+            <div class="admin-session-title-row">
+              <h2 id="live-session-title" class="admin-session-title">Teszt címe</h2>
+              <span id="session-badge-channel" class="admin-session-badge">
+                <span class="admin-pulse-dot"></span>
+                <span>Kitöltés folyamatban</span>
+              </span>
+              <span id="badge-session-finished" class="admin-session-finished-pill" style="display: none;">
+                ⏹️ Dolgozat lezárva
+              </span>
             </div>
+            <p id="live-session-info" class="admin-session-meta">
+              Tantárgy: Digitális kultúra | Évfolyam: 6 | Mód: Diák-tempó
+            </p>
+          </div>
 
-            <!-- Egyetlen Lezárás gomb (Rule context 1.3) -->
-            <div style="display: flex; gap: 10px; align-items: center;">
-              <!-- Űrhajós verseny RAJT gomb -->
-              <button id="btn-admin-start-race" class="btn btn-lg" style="display: none; background-color: #ea580c; color: #ffffff; font-weight: 800; border: none; box-shadow: 0 4px 12px rgba(234, 88, 12, 0.35);">
-                🚀 RAJT! Verseny indítása
-              </button>
-              <span id="badge-session-finished" class="badge" style="display: none; background: #64748b; color: #ffffff; padding: 8px 14px; font-weight: 600; font-size: 0.95rem; border-radius: 6px;">⏹️ Dolgozat lezárva</span>
-              <button id="btn-open-start-modal-alt" class="btn btn-secondary">➕ Újabb indítása</button>
-              <button id="btn-finish-session" class="btn btn-danger btn-lg">
-                ⏹️ Dolgozat befejezése (Finish)
-              </button>
+          <!-- Műveleti gombok -->
+          <div class="admin-toolbar-actions">
+            <!-- Űrhajós verseny RAJT gomb -->
+            <button id="btn-admin-start-race" class="admin-toolbar-btn-race" style="display: none;" type="button">
+              <span class="material-symbols-outlined">rocket_launch</span>
+              <span>RAJT! Verseny indítása</span>
+            </button>
+            <button id="btn-open-start-modal-alt" class="admin-toolbar-btn-secondary" type="button">
+              <span class="material-symbols-outlined">add_circle</span>
+              <span>Újabb indítása</span>
+            </button>
+            <button id="btn-finish-session" class="admin-toolbar-btn-danger" type="button">
+              <span class="material-symbols-outlined">stop_circle</span>
+              <span>Dolgozat befejezése</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 Kompakt KPI Összegző Kártya -->
+        <div class="admin-kpi-grid">
+          <!-- 1. Kártya: Osztályátlag -->
+          <div class="admin-kpi-card">
+            <div class="admin-kpi-icon-wrap bg-primary-soft">
+              <span class="material-symbols-outlined">grade</span>
+            </div>
+            <div class="admin-kpi-content">
+              <span class="admin-kpi-label">Osztályátlag</span>
+              <div class="admin-kpi-val-row">
+                <span id="kpi-avg-grade" class="admin-kpi-main-val">–</span>
+                <span id="kpi-avg-percent" class="admin-kpi-badge admin-badge-success">–%</span>
+              </div>
+              <span id="kpi-avg-desc" class="admin-kpi-subtext">Számítás folyamatban</span>
+            </div>
+          </div>
+
+          <!-- 2. Kártya: Leadott dolgozatok -->
+          <div class="admin-kpi-card">
+            <div class="admin-kpi-icon-wrap bg-neutral-soft">
+              <span class="material-symbols-outlined">assignment_turned_in</span>
+            </div>
+            <div class="admin-kpi-content">
+              <span class="admin-kpi-label">Leadott dolgozatok</span>
+              <div class="admin-kpi-val-row">
+                <span id="kpi-completed-count" class="admin-kpi-main-val">0 / 0</span>
+                <span id="kpi-completed-percent" class="admin-kpi-badge admin-badge-primary">0%</span>
+              </div>
+              <span id="kpi-completed-desc" class="admin-kpi-subtext">Még senki nem fejezte be</span>
+            </div>
+          </div>
+
+          <!-- 3. Kártya: Legnehezebb feladat -->
+          <div class="admin-kpi-card">
+            <div class="admin-kpi-icon-wrap bg-danger-soft">
+              <span class="material-symbols-outlined">trending_down</span>
+            </div>
+            <div class="admin-kpi-content">
+              <span class="admin-kpi-label">Legnehezebb feladat</span>
+              <span id="kpi-hardest-title" class="admin-kpi-task-title">–</span>
+              <span class="admin-kpi-subtext">Sikerességi ráta: <strong id="kpi-hardest-rate" class="admin-kpi-rate-danger">–</strong></span>
+            </div>
+          </div>
+
+          <!-- 4. Kártya: Legjobb feladat -->
+          <div class="admin-kpi-card">
+            <div class="admin-kpi-icon-wrap bg-success-soft">
+              <span class="material-symbols-outlined">verified</span>
+            </div>
+            <div class="admin-kpi-content">
+              <span class="admin-kpi-label">Legjobb feladat</span>
+              <span id="kpi-best-title" class="admin-kpi-task-title">–</span>
+              <span class="admin-kpi-subtext">Sikerességi ráta: <strong id="kpi-best-rate" class="admin-kpi-rate-success">–</strong></span>
             </div>
           </div>
         </div>
 
-        <!-- Élő Mátrix Táblázat -->
-        <div class="table-responsive">
-          <table id="matrix-table" class="matrix-table">
-            <thead>
-              <tr id="matrix-head-row">
-                <th class="col-name">Tanuló neve</th>
-                <th>Gép</th>
-                <!-- Kérdés sorszámok dinamikusan -->
-                <th>Összpont</th>
-                <th>%</th>
-                <th>Jegy</th>
-                <th>Fókusz</th>
-                <th>Művelet</th>
-              </tr>
-            </thead>
-            <tbody id="matrix-body">
-              <!-- Diákok sora dinamikusan -->
-            </tbody>
-          </table>
+        <!-- Élő Mátrix Táblázat Kártya (Calm Learner Stílus) -->
+        <div class="admin-matrix-card">
+          <!-- Fejléc sáv és Színmagyarázat -->
+          <div class="admin-matrix-card-header">
+            <div class="admin-matrix-card-title-wrap">
+              <span class="admin-pulse-dot"></span>
+              <h3 class="admin-matrix-card-title">Tanulói válaszmátrix és pontszámok</h3>
+              <span class="admin-matrix-card-subtitle">• Valós idejű szinkronizáció aktív</span>
+            </div>
+            <div class="admin-matrix-legend">
+              <span class="admin-legend-item"><span class="admin-legend-dot dot-correct"></span> Helyes</span>
+              <span class="admin-legend-item"><span class="admin-legend-dot dot-partial"></span> Részpont</span>
+              <span class="admin-legend-item"><span class="admin-legend-dot dot-wrong"></span> Hibás</span>
+              <span class="admin-legend-item"><span class="admin-legend-dot dot-pending"></span> Folyamatban</span>
+            </div>
+          </div>
+
+          <!-- Görgethető Táblázat Konténer -->
+          <div class="admin-matrix-scroll-wrap">
+            <table id="matrix-table" class="matrix-table admin-matrix-table">
+              <thead>
+                <tr id="matrix-head-row">
+                  <th class="col-num">#</th>
+                  <th class="col-name">Tanuló neve &amp; Státusz</th>
+                  <th>Gép</th>
+                  <!-- Kérdés sorszámok dinamikusan -->
+                  <th>Összpont</th>
+                  <th>%</th>
+                  <th>Jegy</th>
+                  <th>Fókusz</th>
+                  <th>Művelet</th>
+                </tr>
+              </thead>
+              <tbody id="matrix-body">
+                <!-- Diákok sora dinamikusan -->
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <!-- Export lehetőségek a mátrix alatt -->
-        <div class="card" style="margin-top: 20px; padding: 18px 24px;">
-          <h4 style="margin-bottom: 12px;">📊 Eredmények letöltése és Exportok:</h4>
-          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-            <a id="btn-export-excel" href="#" class="btn btn-success" target="_blank">
-              📊 KRÉTA-kompatibilis Excel (.xlsx)
-            </a>
-            <a id="btn-export-html" href="#" class="btn btn-primary" target="_blank">
-              🌐 Interaktív Csoportos HTML (.html)
-            </a>
-            <a id="btn-export-zip" href="#" class="btn btn-secondary" target="_blank">
-              📦 Egyéni Értékelőlapok (.zip)
-            </a>
-            <a id="btn-export-print" href="/print" class="btn btn-secondary" target="_blank">
-              🖨️ Nyomtatható A4 PDF nézet
-            </a>
+        <!-- Alsó Panelek: Jelmagyarázat és Értesítési központ (Calm Learner Stílus) -->
+        <div class="admin-matrix-lower-grid">
+          <!-- 1. Kártya: Jelmagyarázat és Értékelési küszöbök -->
+          <div class="admin-matrix-lower-card admin-legend-panel">
+            <div class="admin-lower-card-title-row">
+              <span class="material-symbols-outlined text-primary">palette</span>
+              <h3 class="admin-lower-card-title">Jelmagyarázat és értékelési küszöbök</h3>
+            </div>
+            <p class="admin-lower-card-desc">
+              A cellák színe valós időben frissül a tanulói válaszadás során. A rendszer automatikusan számolja az összpontszámot és a hivatalos 5 fokozatú KRÉTA érdemjegyet.
+            </p>
+            <div class="admin-legend-badge-grid">
+              <div class="admin-legend-badge-item bg-success-soft">
+                <span class="material-symbols-outlined text-success">check_circle</span>
+                <div>
+                  <span class="admin-legend-badge-name text-success">Zöld</span>
+                  <span class="admin-legend-badge-sub">Helyes válasz</span>
+                </div>
+              </div>
+              <div class="admin-legend-badge-item bg-danger-soft">
+                <span class="material-symbols-outlined text-danger">cancel</span>
+                <div>
+                  <span class="admin-legend-badge-name text-danger">Piros</span>
+                  <span class="admin-legend-badge-sub">Hibás válasz</span>
+                </div>
+              </div>
+              <div class="admin-legend-badge-item bg-warning-soft">
+                <span class="material-symbols-outlined text-warning">edit_note</span>
+                <div>
+                  <span class="admin-legend-badge-name text-warning">Narancs</span>
+                  <span class="admin-legend-badge-sub">Részpont / Folyamatban</span>
+                </div>
+              </div>
+              <div class="admin-legend-badge-item bg-neutral-soft">
+                <span class="material-symbols-outlined text-muted">radio_button_unchecked</span>
+                <div>
+                  <span class="admin-legend-badge-name text-main">Szürke</span>
+                  <span class="admin-legend-badge-sub">Még nem válaszolt</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Kártya: Értesítési központ -->
+          <div class="admin-matrix-lower-card admin-notify-panel">
+            <div>
+              <div class="admin-lower-card-title-row" style="justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="material-symbols-outlined text-primary">notifications_active</span>
+                  <h3 class="admin-lower-card-title">Értesítési központ</h3>
+                </div>
+                <span class="admin-notify-status-pill">Rendben</span>
+              </div>
+              <ul class="admin-notify-list">
+                <li class="admin-notify-item">
+                  <span class="material-symbols-outlined text-success">check</span>
+                  <span id="notify-seat-status">Gépváltási kérelem jelenleg nincs.</span>
+                </li>
+                <li class="admin-notify-item">
+                  <span class="material-symbols-outlined text-primary">cloud_done</span>
+                  <span>Helyi adatbázis szinkronizáció aktív.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="admin-notify-footer">
+              <span class="admin-notify-audit">Audit naplózás: Aktív</span>
+              <span class="admin-notify-time" id="notify-server-time">Rendszeridő: –</span>
+            </div>
           </div>
         </div>
 
@@ -213,6 +375,102 @@
         </table>
       </div>
     </section>
+
+    <!-- 3. FÜL: EXPORT KÖZPONT (.xlsx, .pdf, .html, .zip) -->
+    <section id="tab-export" class="admin-tab-content" style="display: none;">
+      <div class="admin-toolbar">
+        <div>
+          <h2 style="font-size: 1.5rem; font-weight: 800; margin: 0 0 4px 0; color: var(--text-main);">Export és Kiértékelési Központ</h2>
+          <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
+            Töltsd le a kiválasztott dolgozat eredményeit hivatalos KRÉTA Excel, nyomtatható A4 PDF vagy interaktív HTML formátumban!
+          </p>
+        </div>
+      </div>
+
+      <!-- 3 Oszlopos Formátumválasztó Kártyarács -->
+      <div class="admin-export-grid">
+        <!-- 1. Kártya: KRÉTA Excel -->
+        <div class="admin-export-card">
+          <div>
+            <div class="admin-export-card-header">
+              <div class="admin-export-icon">
+                <span class="material-symbols-outlined">table_view</span>
+              </div>
+              <span class="admin-export-pill">KRÉTA</span>
+            </div>
+            <h3 class="admin-export-title">Excel táblázat (.xlsx)</h3>
+            <p class="admin-export-desc">
+              KRÉTA-kompatibilis formátum tanulónkénti jegyekkel, százalékokkal és pontszámokkal. Ideális naplózáshoz és fogadóórához.
+            </p>
+          </div>
+          <a id="export-center-excel" href="#" class="admin-export-btn" target="_blank">
+            <span class="material-symbols-outlined">download</span>
+            <span>Letöltés .xlsx fájlként</span>
+          </a>
+        </div>
+
+        <!-- 2. Kártya: Nyomtatható A4 PDF -->
+        <div class="admin-export-card">
+          <div>
+            <div class="admin-export-card-header">
+              <div class="admin-export-icon">
+                <span class="material-symbols-outlined">picture_as_pdf</span>
+              </div>
+              <span class="admin-export-pill">A4 NYOMTATÁS</span>
+            </div>
+            <h3 class="admin-export-title">Nyomtatható jelentés (.pdf)</h3>
+            <p class="admin-export-desc">
+              A4-es nyomtatásra optimalizált, hivatalos jegyzőkönyv az osztályeredményekkel és az elért érdemjegyek statisztikájával.
+            </p>
+          </div>
+          <a id="export-center-print" href="#" class="admin-export-btn" target="_blank">
+            <span class="material-symbols-outlined">print</span>
+            <span>Nyomtatás / PDF mentés</span>
+          </a>
+        </div>
+
+        <!-- 3. Kártya: Interaktív HTML -->
+        <div class="admin-export-card">
+          <div>
+            <div class="admin-export-card-header">
+              <div class="admin-export-icon">
+                <span class="material-symbols-outlined">code_blocks</span>
+              </div>
+              <span class="admin-export-pill">INTERAKTÍV</span>
+            </div>
+            <h3 class="admin-export-title">Webes dokumentum (.html)</h3>
+            <p class="admin-export-desc">
+              Bármilyen böngészőben offline is megnyitható, interaktív áttekintő a tanulói válaszok szűrhető és rendezhető mátrixával.
+            </p>
+          </div>
+          <a id="export-center-html" href="#" class="admin-export-btn" target="_blank">
+            <span class="material-symbols-outlined">download</span>
+            <span>Letöltés .html fájlként</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Kijelölt Csomag Master Letöltés (ZIP) -->
+      <div class="admin-export-master-card">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 44px; height: 44px; border-radius: 12px; background-color: var(--surface-low); color: var(--primary); display: flex; align-items: center; justify-content: center;">
+            <span class="material-symbols-outlined" style="font-size: 24px;">folder_zip</span>
+          </div>
+          <div>
+            <h4 style="margin: 0 0 2px 0; font-size: 1.05rem; font-weight: 800; color: var(--text-main);">Teljes Egyéni Értékelőlap Csomag (.zip)</h4>
+            <p style="margin: 0; font-size: 0.82rem; color: var(--text-muted);">
+              Minden tanuló számára egyéni, személyre szabott grafikus értékelőlap ZIP archívumba csomagolva.
+            </p>
+          </div>
+        </div>
+        <a id="export-center-zip" href="#" class="admin-export-master-btn" target="_blank">
+          <span class="material-symbols-outlined">download</span>
+          <span>Teljes csomag letöltése (ZIP)</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- 4. FÜL: TESZTSZERKESZTŐ -->
     <section id="tab-quizzes" class="admin-tab-content" style="display: none;">
       <div class="admin-toolbar">
         <h3>Feladatsorok és Kérdések</h3>
@@ -220,7 +478,7 @@
       </div>
 
       <!-- Tesztek kártyalistája -->
-      <div id="quizzes-list-container" class="channel-selector">
+      <div id="quizzes-list-container" class="quiz-cards-grid">
         <!-- Dinamikus tesztkártyák -->
       </div>
 
@@ -309,19 +567,56 @@
       </div>
     </section>
 
-    <!-- 4. FÜL: BIZTONSÁGI MENTÉS (BACKUP) -->
+    <!-- 4. FÜL: BEÁLLÍTÁSOK ÉS BIZTONSÁGI MENTÉS -->
     <section id="tab-backup" class="admin-tab-content" style="display: none;">
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">💾 Teljes Rendszermentés és Archiválás</h3>
-          <p class="card-subtitle">
-            A gombra kattintva a rendszer az SQLite Backup API segítségével egy konzisztens, teljes ZIP csomagot készít az adatbázisból és a feltöltött képekből.
+      <div class="admin-toolbar">
+        <div>
+          <h2 style="font-size: 1.5rem; font-weight: 800; margin: 0 0 4px 0; color: var(--text-main);">Beállítások és biztonsági mentés</h2>
+          <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
+            Rendszermentés, offline adatvédelem és tantermi osztálynévsorok kezelése.
           </p>
         </div>
-        <div style="padding: 20px 0;">
-          <a href="/api/admin/backup" class="btn btn-primary btn-lg" target="_blank">
-            📦 Teljes Biztonsági Mentés Letöltése (.zip)
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-top: 16px;">
+        <!-- Biztonsági mentés kártya -->
+        <div class="card" style="padding: 24px; border-radius: 16px;">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background-color: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center;">
+              <span class="material-symbols-outlined" style="font-size: 24px;">save</span>
+            </div>
+            <div>
+              <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800; color: var(--text-main);">Teljes rendszermentés</h3>
+              <span style="font-size: 0.8rem; color: var(--text-muted);">Konzisztens offline ZIP adatmentés</span>
+            </div>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 20px;">
+            A gombra kattintva az SQLite Backup API segítségével egy teljes, sértetlen ZIP mentést tölthetsz le a dolgozatokról, diákokról és a feltöltött képekről.
+          </p>
+          <a href="/api/admin/backup" class="btn btn-primary" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 12px 20px; border-radius: 10px;">
+            <span class="material-symbols-outlined">download</span>
+            <span>Biztonsági mentés letöltése (.zip)</span>
           </a>
+        </div>
+
+        <!-- Osztálynévsorok kezelése kártya -->
+        <div class="card" style="padding: 24px; border-radius: 16px;">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background-color: var(--surface-low); color: var(--primary); display: flex; align-items: center; justify-content: center;">
+              <span class="material-symbols-outlined" style="font-size: 24px;">groups</span>
+            </div>
+            <div>
+              <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800; color: var(--text-main);">Hivatalos osztálynévsorok</h3>
+              <span style="font-size: 0.8rem; color: var(--text-muted);">Osztályok és diákok kezelése</span>
+            </div>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 20px;">
+            Itt szerkesztheted az iskola hivatalos osztályait és diákjainak névsorát, vagy új osztályokat vehetsz fel a hibátlan KRÉTA napló-illesztéshez.
+          </p>
+          <button type="button" class="btn btn-secondary" onclick="document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display = 'none'); document.getElementById('tab-roster').style.display = 'block';" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 12px 20px; border-radius: 10px; cursor: pointer;">
+            <span class="material-symbols-outlined">edit</span>
+            <span>Osztálynévsorok megnyitása</span>
+          </button>
         </div>
       </div>
     </section>
@@ -383,10 +678,138 @@
     </div>
   </div>
 
+  <!-- Dolgozat Befejezése / Lezárása Modal -->
+  <div id="modal-confirm-finish" class="modal-backdrop">
+    <div class="modal-window">
+      <div class="card-header">
+        <h3 class="card-title">⏹️ Dolgozat befejezése és lezárása</h3>
+        <p class="card-subtitle">Biztosan befejezed a folyamatban lévő dolgozatot?</p>
+      </div>
+      <div style="padding: 12px 0; color: var(--text-main, #1b1b1e); line-height: 1.6; font-size: 0.95rem;">
+        <p style="margin-bottom: 10px;">
+          A lezárás után a tanulók már <strong>nem küldhetnek be további válaszokat</strong>, és az eredmények véglegessé válnak.
+        </p>
+        <p style="margin-bottom: 0; color: var(--text-muted, #5a4138); font-size: 0.88rem;">
+          Az adatok automatikusan bekerülnek a <em>Reports / Korábbi dolgozatok</em> archívumába, és letölthetők lesznek az <em>Export</em> menüpontban.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-finish')">Mégse</button>
+        <button type="button" id="btn-submit-finish-session" class="btn btn-danger">⏹️ Dolgozat lezárása</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Név Törlése Modal (Téves bejelentkezés korrekciója) -->
+  <div id="modal-confirm-delete-name" class="modal-backdrop">
+    <div class="modal-window">
+      <div class="card-header">
+        <h3 class="card-title">🗑️ Név törlése a dolgozatból</h3>
+        <p class="card-subtitle">Téves névválasztás korrekciója</p>
+      </div>
+      <div style="padding: 12px 0; color: var(--text-main, #1b1b1e); line-height: 1.6; font-size: 0.95rem;">
+        <p style="margin-bottom: 10px;">
+          Biztosan törlöd a(z) <strong id="delete-name-student-name" style="color: var(--danger, #dc2626);">-</strong> nevű tanulót ebből a dolgozatból?
+        </p>
+        <div style="background-color: var(--surface-low, #f5f3f6); padding: 12px 14px; border-radius: 8px; border-left: 3px solid var(--danger, #dc2626); font-size: 0.88rem; color: var(--text-muted, #5a4138);">
+          <strong>Mi történik ilyenkor?</strong><br>
+          Ez a művelet visszavonja a tévesen felvett nevet és annak eddigi válaszait a jelenlegi munkamenetből. A névsor azonnal felszabadul, így a valódi diák tiszta lappal beléphet a saját nevével.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-delete-name')">Mégse</button>
+        <button type="button" id="btn-submit-delete-name" class="btn btn-danger">🗑️ Név törlése</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gép Váltása Modal (Átülés fagyás esetén) -->
+  <div id="modal-confirm-seat-change" class="modal-backdrop">
+    <div class="modal-window">
+      <div class="card-header">
+        <h3 class="card-title">💺 Gépváltás engedélyezése</h3>
+        <p class="card-subtitle">Munkaállomás átvitele adatvesztés nélkül</p>
+      </div>
+      <div style="padding: 12px 0; color: var(--text-main, #1b1b1e); line-height: 1.6; font-size: 0.95rem;">
+        <p style="margin-bottom: 10px;">
+          Engedélyezed az átülést egy másik gépre <strong id="seat-change-student-name" style="color: var(--primary, #0284c7);">-</strong> számára?
+        </p>
+        <div style="background-color: var(--surface-low, #f5f3f6); padding: 12px 14px; border-radius: 8px; border-left: 3px solid var(--primary, #0284c7); font-size: 0.88rem; color: var(--text-muted, #5a4138);">
+          <strong>0 Adatvesztés garancia:</strong><br>
+          A tanuló eddig leadott válaszai, pontjai és hátralévő ideje maradéktalanul megmaradnak. A korábbi (lefagyott) gép munkamenete azonnal érvénytelenné válik, a diák pedig az új munkaállomásán a nevére kattintva zökkenőmentesen folytathatja a feladatsort.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-seat-change')">Mégse</button>
+        <button type="button" id="btn-submit-seat-change" class="btn btn-primary">💺 Gépváltás engedélyezése</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rendszerértesítés Modal (Alert helyett) -->
+  <div id="modal-admin-alert" class="modal-backdrop">
+    <div class="modal-window" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 id="admin-alert-title" class="card-title">Értesítés</h3>
+      </div>
+      <div id="admin-alert-message" style="padding: 14px 0; color: var(--text-main, #1b1b1e); line-height: 1.6; font-size: 0.95rem;">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="closeModal('modal-admin-alert')">Rendben</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dolgozat Törlése Archívumból Modal -->
+  <div id="modal-confirm-delete-session" class="modal-backdrop">
+    <div class="modal-window">
+      <div class="card-header">
+        <h3 class="card-title">🗑️ Dolgozat törlése az archívumból</h3>
+        <p class="card-subtitle">Korábbi vagy próbateszt végleges eltávolítása</p>
+      </div>
+      <div style="padding: 12px 0; color: var(--text-main, #1b1b1e); line-height: 1.6; font-size: 0.95rem;">
+        <p style="margin-bottom: 10px;">
+          Biztosan törlöd a(z) <strong id="delete-session-title" style="color: var(--danger, #dc2626);">-</strong> dolgozatot az archívumból?
+        </p>
+        <div style="background-color: var(--surface-low, #f5f3f6); padding: 12px 14px; border-radius: 8px; border-left: 3px solid var(--danger, #dc2626); font-size: 0.88rem; color: var(--text-muted, #5a4138);">
+          <strong>Végleges művelet:</strong><br>
+          A dolgozathoz kapcsolódó tanulói válaszok, összegyűjtött pontok és statisztikák maradéktalanul kitörlődnek a naplóból. Ez a művelet nem vonható vissza.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-delete-session')">Mégse</button>
+        <button type="button" id="btn-submit-delete-session" class="btn btn-danger">🗑️ Dolgozat végleges törlése</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Teszt Törlése Feladattárból Modal -->
+  <div id="modal-confirm-delete-quiz" class="modal-backdrop">
+    <div class="modal-window">
+      <div class="card-header">
+        <h3 class="card-title">🗑️ Teszt törlése a feladattárból</h3>
+        <p class="card-subtitle">Kvíz-sablon végleges eltávolítása</p>
+      </div>
+      <div style="padding: 12px 0; color: var(--text-main, #1b1b1e); line-height: 1.6; font-size: 0.95rem;">
+        <p style="margin-bottom: 10px;">
+          Biztosan törlöd a(z) <strong id="delete-quiz-title" style="color: var(--danger, #dc2626);">-</strong> feladatsort?
+        </p>
+        <div style="background-color: var(--surface-low, #f5f3f6); padding: 12px 14px; border-radius: 8px; border-left: 3px solid var(--danger, #dc2626); font-size: 0.88rem; color: var(--text-muted, #5a4138);">
+          <strong>Figyelem:</strong><br>
+          A feladatsor összes kérdésével és opciójával együtt véglegesen törlődik a tesztszerkesztőből.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-delete-quiz')">Mégse</button>
+        <button type="button" id="btn-submit-delete-quiz" class="btn btn-danger">🗑️ Teszt törlése</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.11.0"></script>
-  <script src="/js/admin.js?v=1.11.0"></script>
+  <script src="/js/utils.js?v=1.11.4"></script>
+  <script src="/js/admin.js?v=1.11.4"></script>
 </body>
 </html>
 

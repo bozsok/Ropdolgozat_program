@@ -1,5 +1,10 @@
 const fs = require('fs');
 const path = require('path');
+
+// Izolált teszt adatbázis használata az éles ropdolgozat.db védelmében
+process.env.DB_PATH = path.join(__dirname, '..', 'data', 'ropdolgozat_test.db');
+
+const config = require('../config');
 const db = require('../src/db/init');
 const rosterRepo = require('../src/db/rosterRepo');
 const quizRepo = require('../src/db/quizRepo');
@@ -58,21 +63,32 @@ async function runTests() {
   });
   console.log(`✓ Dolgozat sikeresen elindítva! Session ID: ${session.id}, Státusz: ${session.status}`);
 
-  console.log('\n--- 4. Teszt automatikus zárolásának ellenőrzése ---');
+  console.log('\n--- 4. Teszt szabadon szerkeszthetőségének ellenőrzése indítás után ---');
   const lockedState = quizRepo.isQuizLocked(quiz.id);
-  console.log(`✓ Kvíz zárolva lett az indításkor: ${lockedState ? 'IGEN (SIKER!)' : 'NEM (HIBA!)'}`);
-  if (!lockedState) throw new Error('A teszt nem zárolódott le automatikusan!');
+  console.log(`✓ Kvíz zárolás nélküli állapota indítás után: ${!lockedState ? 'SZABADON SZERKESZTHETŐ (SIKER!)' : 'ZÁROLT (HIBA!)'}`);
+  if (lockedState) throw new Error('A teszt feleslegesen zárolódott indításkor!');
 
-  console.log('\n--- 5. Zárolt teszt védelmének tesztelése (kérdés beszúrás tiltása) ---');
-  try {
-    db.prepare(`
-      INSERT INTO questions (quiz_id, question_order, question_type, question_text, correct_answer)
-      VALUES (?, 99, 'ABCD', 'Próba kérdés', 'X')
-    `).run(quiz.id);
-    throw new Error('HIBA: A zárolt teszthez sikerült kérdést adni!');
-  } catch (err) {
-    console.log(`✓ Helyesen elutasítva az adatbázis trigger által: ${err.message}`);
-  }
+  console.log('\n--- 5. Kvíz szerkeszthetőségének tesztelése (új kérdés hozzáadása) ---');
+  const fullQuiz = quizRepo.getQuizById(quiz.id);
+  const updatedQuiz = quizRepo.updateQuiz(quiz.id, {
+    subject_id: fullQuiz.subject_id,
+    title: fullQuiz.title,
+    subject_grade: fullQuiz.subject_grade,
+    default_time_limit_min: fullQuiz.default_time_limit_min,
+    questions: [
+      ...fullQuiz.questions,
+      {
+        question_order: fullQuiz.questions.length + 1,
+        question_type: 'ABCD',
+        question_text: 'Új kérdés a tanár által hozzáadva',
+        options: ['A', 'B', 'C', 'D'],
+        correct_answer: 'A',
+        explanation: 'Teszt magyarázat',
+        points: 1.0
+      }
+    ]
+  });
+  console.log(`✓ Kvíz sikeresen szerkesztve indítás után is! Kérdések száma: ${updatedQuiz.questions.length}`);
 
   console.log('\n--- 6. Zárolt teszt duplikálása (másolat készítése új, szerkeszthető tesztként) ---');
   const duplicated = quizRepo.duplicateQuiz(quiz.id, '6. osztály – Módosított feladatsor');
@@ -163,17 +179,29 @@ async function runTests() {
   const finished = sessionRepo.finishSession(session.id);
   console.log(`✓ Dolgozat lezárva! Státusz: ${finished.status}, Lezárás ideje: ${finished.ended_at}`);
 
-  console.log('\n--- 17. Lezárt dolgozat törlésvédelmének tesztelése ---');
-  try {
-    db.prepare('DELETE FROM sessions WHERE id = ?').run(session.id);
-    throw new Error('HIBA: Lezárt dolgozatot sikerült törölni!');
-  } catch (err) {
-    console.log(`✓ Helyesen megvédve a törlés elleni triggerrel: ${err.message}`);
+  console.log('\n--- 17. Lezárt dolgozat törlése az archívumból (deleteSession) ---');
+  sessionRepo.deleteSession(session.id);
+  const deletedCheck = db.prepare('SELECT id FROM sessions WHERE id = ?').get(session.id);
+  if (!deletedCheck) {
+    console.log('✓ Lezárt dolgozat sikeresen törölve az archívumból a válaszaival és diákjaival együtt!');
+  } else {
+    throw new Error('HIBA: A dolgozat nem törlődött!');
   }
 
   console.log('\n================================================================');
   console.log('🎉 MINDEN TESZT (17-BŐL 17) SIKERESEN ÉS HIBÁTLANUL LEFUTOTT! 🎉');
   console.log('================================================================\n');
+
+  db.close();
+
+  // Teszt adatbázis letakarítása
+  try {
+    if (fs.existsSync(config.dbPath)) fs.unlinkSync(config.dbPath);
+    if (fs.existsSync(config.dbPath + '-wal')) fs.unlinkSync(config.dbPath + '-wal');
+    if (fs.existsSync(config.dbPath + '-shm')) fs.unlinkSync(config.dbPath + '-shm');
+  } catch (e) {
+    // Ignored
+  }
 }
 
 runTests().catch(err => {

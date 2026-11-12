@@ -88,6 +88,23 @@
   const btnDeleteClass = document.getElementById('btn-delete-class');
   let selectedRosterClass = null;
 
+  // Modális jóváhagyások állapotváltozói (Calm Learner UX)
+  let pendingDeleteParticipantId = null;
+  let pendingSeatChangeParticipantId = null;
+  let pendingDeleteSessionId = null;
+  let pendingDeleteQuizId = null;
+
+  /**
+   * Rendszerértesítés megjelenítése elegáns modálban (böngészős alert helyett)
+   */
+  function showAdminAlert(title, message) {
+    const titleEl = document.getElementById('admin-alert-title');
+    const msgEl = document.getElementById('admin-alert-message');
+    if (titleEl) titleEl.textContent = title || 'Értesítés';
+    if (msgEl) msgEl.textContent = message || '';
+    openModal('modal-admin-alert');
+  }
+
   function openLoginModal() {
     openModal('login-modal');
     if (adminMainContainer) adminMainContainer.style.display = 'none';
@@ -152,12 +169,12 @@
         setupSocket();
         await loadInitialData();
       } else {
-        alert(data.message || 'Helytelen tanári jelszó!');
+        showAdminAlert('🔐 Helytelen tanári jelszó', data.message || 'A megadott tanári jelszó érvénytelen!');
         inputPin.value = '';
         inputPin.focus();
       }
     } catch (err) {
-      alert('Hálózati hiba a bejelentkezés során!');
+      showAdminAlert('⚠️ Hálózati hiba', 'Nem sikerült kapcsolatot létesíteni a szerverrel a bejelentkezés során.');
     }
   });
 
@@ -301,8 +318,8 @@
       const isFinished = data.session.status === 'FINISHED';
       if (isFinished) {
         if (sessionBadgeChannel) {
-          sessionBadgeChannel.className = 'live-badge badge-finished';
-          sessionBadgeChannel.textContent = '⏹️ LEZÁRT ARCHÍVUM';
+          sessionBadgeChannel.className = 'admin-session-finished-pill';
+          sessionBadgeChannel.innerHTML = '⏹️ Dolgozat lezárva';
         }
         if (tabBtnLive) {
           tabBtnLive.textContent = '📊 Lezárt Dolgozat (Mátrix)';
@@ -312,34 +329,41 @@
         liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${data.session.mode} | Befejezve: ${endedFormatted}`;
         if (btnFinishSession) btnFinishSession.style.display = 'none';
         if (btnAdminStartRace) btnAdminStartRace.style.display = 'none';
-        if (badgeSessionFinished) badgeSessionFinished.style.display = 'inline-block';
+        if (badgeSessionFinished) badgeSessionFinished.style.display = 'inline-flex';
       } else {
         if (sessionBadgeChannel) {
-          sessionBadgeChannel.className = 'live-badge badge-active';
-          sessionBadgeChannel.textContent = '🟢 ÉLŐ';
+          sessionBadgeChannel.className = 'admin-session-badge';
+          sessionBadgeChannel.innerHTML = '<span class="admin-pulse-dot"></span><span>Kitöltés folyamatban</span>';
         }
         if (tabBtnLive) {
           tabBtnLive.textContent = '📊 Élő Dolgozat (Mátrix)';
         }
         liveSessionTitle.textContent = data.session.quiz_title;
         liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${data.session.mode}`;
-        if (btnFinishSession) btnFinishSession.style.display = 'inline-block';
+        if (btnFinishSession) btnFinishSession.style.display = 'inline-flex';
         if (badgeSessionFinished) badgeSessionFinished.style.display = 'none';
 
         if (btnAdminStartRace) {
           const isSpaceRace = data.session.mode === 'SPACE_RACE';
           const isWaiting = isSpaceRace && (!data.session.current_question_index || data.session.current_question_index === 0);
-          btnAdminStartRace.style.display = isWaiting ? 'inline-block' : 'none';
+          btnAdminStartRace.style.display = isWaiting ? 'inline-flex' : 'none';
         }
       }
 
       // Export linkek beállítása
-      btnExportExcel.href = `/api/admin/export/excel/${sessionId}`;
-      btnExportHtml.href = `/api/admin/export/html/${sessionId}`;
-      btnExportZip.href = `/api/admin/export/zip/${sessionId}`;
-      if (btnExportPrint) {
-        btnExportPrint.href = `/print?sessionId=${sessionId}`;
-      }
+      if (btnExportExcel) btnExportExcel.href = `/api/admin/export/excel/${sessionId}`;
+      if (btnExportHtml) btnExportHtml.href = `/api/admin/export/html/${sessionId}`;
+      if (btnExportZip) btnExportZip.href = `/api/admin/export/zip/${sessionId}`;
+      if (btnExportPrint) btnExportPrint.href = `/print?sessionId=${sessionId}`;
+
+      const exportCenterExcel = document.getElementById('export-center-excel');
+      const exportCenterHtml = document.getElementById('export-center-html');
+      const exportCenterZip = document.getElementById('export-center-zip');
+      const exportCenterPrint = document.getElementById('export-center-print');
+      if (exportCenterExcel) exportCenterExcel.href = `/api/admin/export/excel/${sessionId}`;
+      if (exportCenterHtml) exportCenterHtml.href = `/api/admin/export/html/${sessionId}`;
+      if (exportCenterZip) exportCenterZip.href = `/api/admin/export/zip/${sessionId}`;
+      if (exportCenterPrint) exportCenterPrint.href = `/print?sessionId=${sessionId}`;
 
       renderMatrix(data);
 
@@ -352,7 +376,7 @@
 
   function showNoSessionView() {
     currentSessionId = null;
-    noActiveSessionBox.style.display = 'block';
+    noActiveSessionBox.style.display = 'flex';
     activeSessionPanel.style.display = 'none';
     if (tabBtnLive) {
       tabBtnLive.textContent = '📊 Élő Dolgozat (Mátrix)';
@@ -370,30 +394,178 @@
   }
 
   /**
+   * 4 Kompakt KPI Összegző Kártya Kiszámítása és Megjelenítése
+   */
+  function renderKpiCards(data) {
+    const { questions = [], participants = [], answers = [] } = data;
+
+    const kpiAvgGrade = document.getElementById('kpi-avg-grade');
+    const kpiAvgPercent = document.getElementById('kpi-avg-percent');
+    const kpiAvgDesc = document.getElementById('kpi-avg-desc');
+
+    const kpiCompletedCount = document.getElementById('kpi-completed-count');
+    const kpiCompletedPercent = document.getElementById('kpi-completed-percent');
+    const kpiCompletedDesc = document.getElementById('kpi-completed-desc');
+
+    const kpiHardestTitle = document.getElementById('kpi-hardest-title');
+    const kpiHardestRate = document.getElementById('kpi-hardest-rate');
+
+    const kpiBestTitle = document.getElementById('kpi-best-title');
+    const kpiBestRate = document.getElementById('kpi-best-rate');
+
+    // 1. KÁRTYA: Osztályátlag és százalék
+    if (participants.length > 0) {
+      let sumGrades = 0;
+      let sumPercentages = 0;
+      let validCount = 0;
+
+      participants.forEach(p => {
+        if (p.grade) {
+          sumGrades += Number(p.grade);
+          sumPercentages += Number(p.percentage || 0);
+          validCount++;
+        }
+      });
+
+      if (validCount > 0 && answers.length > 0) {
+        const avgGrade = (sumGrades / validCount).toFixed(1);
+        const avgPct = Math.round(sumPercentages / validCount);
+
+        if (kpiAvgGrade) kpiAvgGrade.textContent = avgGrade;
+        if (kpiAvgPercent) kpiAvgPercent.textContent = `${avgPct}%`;
+
+        if (kpiAvgDesc) {
+          const numAvg = parseFloat(avgGrade);
+          if (numAvg >= 4.5) {
+            kpiAvgDesc.textContent = 'Kiemelkedő felkészültség';
+          } else if (numAvg >= 3.5) {
+            kpiAvgDesc.textContent = 'Stabil, jó felkészültség';
+          } else if (numAvg >= 2.5) {
+            kpiAvgDesc.textContent = 'Közepes szint, gyakorlást igényel';
+          } else {
+            kpiAvgDesc.textContent = 'Alapos átismétlés szükséges';
+          }
+        }
+      } else {
+        if (kpiAvgGrade) kpiAvgGrade.textContent = '–';
+        if (kpiAvgPercent) kpiAvgPercent.textContent = '–%';
+        if (kpiAvgDesc) kpiAvgDesc.textContent = 'Még nincs leadott válasz';
+      }
+    } else {
+      if (kpiAvgGrade) kpiAvgGrade.textContent = '–';
+      if (kpiAvgPercent) kpiAvgPercent.textContent = '–%';
+      if (kpiAvgDesc) kpiAvgDesc.textContent = 'Még nem csatlakozott diák';
+    }
+
+    // 2. KÁRTYA: Leadott dolgozatok
+    const totalStudents = participants.length;
+    const finishedStudents = participants.filter(p => p.is_finished).length;
+    const pendingStudents = totalStudents - finishedStudents;
+    const finishPercent = totalStudents > 0 ? Math.round((finishedStudents / totalStudents) * 100) : 0;
+
+    if (kpiCompletedCount) kpiCompletedCount.textContent = `${finishedStudents} / ${totalStudents}`;
+    if (kpiCompletedPercent) kpiCompletedPercent.textContent = `${finishPercent}%`;
+
+    if (kpiCompletedDesc) {
+      if (totalStudents === 0) {
+        kpiCompletedDesc.textContent = 'Még nem csatlakozott diák';
+      } else if (finishedStudents === totalStudents) {
+        kpiCompletedDesc.textContent = 'Minden tanuló leadta';
+      } else if (pendingStudents === 1) {
+        kpiCompletedDesc.textContent = '1 tanuló még válaszol';
+      } else if (finishedStudents === 0) {
+        kpiCompletedDesc.textContent = `${pendingStudents} tanuló még dolgozik`;
+      } else {
+        kpiCompletedDesc.textContent = `${pendingStudents} tanuló még válaszol`;
+      }
+    }
+
+    // 3. és 4. KÁRTYA: Legnehezebb és legjobb feladat számítása
+    if (questions.length > 0 && answers.length > 0) {
+      const qStats = questions.map((q, idx) => {
+        const qAnswers = answers.filter(a => a.question_id === q.id);
+        if (qAnswers.length === 0) return null;
+
+        const maxPossiblePoints = q.points * qAnswers.length;
+        const totalEarnedPoints = qAnswers.reduce((sum, a) => sum + (Number(a.points_earned) || 0), 0);
+        const rate = maxPossiblePoints > 0 ? Math.round((totalEarnedPoints / maxPossiblePoints) * 100) : 0;
+
+        let title = q.question_text || `K${idx + 1}`;
+        if (title.length > 18) {
+          title = title.substring(0, 16) + '…';
+        }
+
+        return {
+          idx: idx + 1,
+          title: `${idx + 1}. ${title}`,
+          rate,
+          answersCount: qAnswers.length
+        };
+      }).filter(Boolean);
+
+      if (qStats.length > 0) {
+        const sorted = [...qStats].sort((a, b) => a.rate - b.rate);
+        const hardest = sorted[0];
+        const best = sorted[sorted.length - 1];
+
+        if (kpiHardestTitle) kpiHardestTitle.textContent = hardest.title;
+        if (kpiHardestRate) kpiHardestRate.textContent = `${hardest.rate}%`;
+
+        if (kpiBestTitle) kpiBestTitle.textContent = best.title;
+        if (kpiBestRate) kpiBestRate.textContent = `${best.rate}%`;
+      } else {
+        if (kpiHardestTitle) kpiHardestTitle.textContent = '–';
+        if (kpiHardestRate) kpiHardestRate.textContent = '–';
+        if (kpiBestTitle) kpiBestTitle.textContent = '–';
+        if (kpiBestRate) kpiBestRate.textContent = '–';
+      }
+    } else {
+      if (kpiHardestTitle) kpiHardestTitle.textContent = '–';
+      if (kpiHardestRate) kpiHardestRate.textContent = '–';
+      if (kpiBestTitle) kpiBestTitle.textContent = '–';
+      if (kpiBestRate) kpiBestRate.textContent = '–';
+    }
+  }
+
+  /**
+   * Tanuló monogramjának képzése az avatárhoz
+   */
+  function getStudentInitials(name) {
+    if (!name) return '??';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  /**
    * Élő Mátrix Táblázat Kirajzolása
    */
   function renderMatrix(data) {
     const { questions, participants, answers, session } = data;
 
-    // Fejléc sor összeállítása
+    // KPI összegző kártyák azonnali kiszámítása és frissítése
+    renderKpiCards(data);
+
+    // Fejléc sor összeállítása (Calm Learner Mátrix)
     matrixHeadRow.innerHTML = `
-      <th class="col-name">Tanuló neve</th>
-      <th>Gép</th>
+      <th class="col-num">#</th>
+      <th class="col-name">Tanuló neve &amp; Státusz</th>
+      <th style="min-width: 60px;">Gép</th>
     `;
 
     questions.forEach((q, idx) => {
       const th = document.createElement('th');
-      th.innerHTML = `K${idx + 1}<br><span style="font-size: 0.75rem; font-weight: normal;">(${q.points}p)</span>`;
+      th.innerHTML = `K${idx + 1}<br><span style="font-size: 0.72rem; font-weight: normal; opacity: 0.85;">(${q.points}p)</span>`;
       th.title = q.question_text;
       matrixHeadRow.appendChild(th);
     });
 
     matrixHeadRow.innerHTML += `
-      <th>Összpont</th>
-      <th>%</th>
-      <th>Jegy</th>
-      <th>Fókusz</th>
-      <th>Művelet</th>
+      <th style="min-width: 75px;">Összpont</th>
+      <th style="min-width: 65px;">%</th>
+      <th style="min-width: 105px;">Jegy</th>
+      <th style="min-width: 65px;">Fókusz</th>
+      <th style="min-width: 170px;">Műveletek</th>
     `;
 
     // Válaszok indexelése gyors eléréshez: `participant_id:question_id` -> answer
@@ -406,23 +578,46 @@
     matrixBody.innerHTML = '';
     if (participants.length === 0) {
       const emptyRow = document.createElement('tr');
-      emptyRow.innerHTML = `<td colspan="${questions.length + 7}" style="text-align: center; color: var(--text-muted); padding: 24px;">Még nem csatlakozott diák a dolgozathoz.</td>`;
+      emptyRow.innerHTML = `<td colspan="${questions.length + 8}" style="text-align: center; color: var(--text-muted); padding: 36px 20px; font-weight: 600;">Még nem csatlakozott diák a dolgozathoz.</td>`;
       matrixBody.appendChild(emptyRow);
       return;
     }
 
-    participants.forEach(p => {
+    participants.forEach((p, pIdx) => {
       const tr = document.createElement('tr');
 
-      // 1. Név és befejezett állapot
+      // 0. Sorszám
+      const tdNum = document.createElement('td');
+      tdNum.className = 'col-num';
+      tdNum.style.fontWeight = '700';
+      tdNum.style.color = 'var(--text-muted, #5a4138)';
+      tdNum.textContent = String(pIdx + 1);
+      tr.appendChild(tdNum);
+
+      // 1. Név, avatár és befejezett állapot
       const tdName = document.createElement('td');
       tdName.className = 'col-name';
-      tdName.innerHTML = `<strong>${escapeHtml(p.student_name)}</strong> ${p.is_finished ? '✅' : ''}`;
+      const initials = getStudentInitials(p.student_name);
+      const statusHtml = p.is_finished
+        ? `<span class="admin-student-status status-finished"><span class="material-symbols-outlined" style="font-size: 13px;">check_circle</span> Kész</span>`
+        : `<span class="admin-student-status status-working"><span class="material-symbols-outlined" style="font-size: 13px;">edit_note</span> Folyamatban...</span>`;
+
+      tdName.innerHTML = `
+        <div class="admin-student-cell">
+          <div class="admin-student-avatar">${escapeHtml(initials)}</div>
+          <div class="admin-student-info">
+            <span class="admin-student-name">${escapeHtml(p.student_name)}</span>
+            ${statusHtml}
+          </div>
+        </div>
+      `;
       tr.appendChild(tdName);
 
       // 2. Gépszám
       const tdPc = document.createElement('td');
-      tdPc.textContent = p.pc_number ? `${p.pc_number}` : '–';
+      tdPc.innerHTML = p.pc_number
+        ? `<span style="font-weight: 700; color: var(--text-muted); font-size: 0.85rem;">PC-${p.pc_number}</span>`
+        : '<span style="color: #94a3b8;">–</span>';
       tr.appendChild(tdPc);
 
       // 3. Kérdés cellák (1-kattintásos felülbírálás!)
@@ -431,24 +626,28 @@
         const ans = answerMap.get(`${p.id}:${q.id}`);
 
         if (!ans) {
-          tdQ.className = 'matrix-cell cell-empty';
-          tdQ.textContent = '–';
+          tdQ.innerHTML = `<span class="matrix-cell cell-empty">–</span>`;
         } else {
+          let cellClass = 'cell-wrong';
+          let icon = 'close';
+          let text = '0p';
+
           if (ans.eval_status === 'CORRECT') {
-            tdQ.className = 'matrix-cell cell-correct';
-            tdQ.textContent = `${ans.points_earned}p`;
+            cellClass = 'cell-correct';
+            icon = 'check';
+            text = `${ans.points_earned}p`;
           } else if (ans.eval_status === 'PARTIAL') {
-            tdQ.className = 'matrix-cell cell-partial';
-            tdQ.textContent = `${ans.points_earned}p`;
-          } else {
-            tdQ.className = 'matrix-cell cell-wrong';
-            tdQ.textContent = '0p';
+            cellClass = 'cell-partial';
+            icon = 'remove';
+            text = `${ans.points_earned}p`;
           }
 
-          tdQ.title = `Diák válasza: ${ans.submitted_answer} (Kattints a felülbíráláshoz)`;
+          const cellSpan = document.createElement('span');
+          cellSpan.className = `matrix-cell ${cellClass}`;
+          cellSpan.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px; margin-right: 2px;">${icon}</span>${text}`;
+          cellSpan.title = `Diák válasza: ${ans.submitted_answer} (Kattints a felülbíráláshoz)`;
 
-          // 1-kattintásos állapotváltás: CORRECT -> PARTIAL -> WRONG -> CORRECT
-          tdQ.addEventListener('click', async () => {
+          cellSpan.addEventListener('click', async () => {
             let nextStatus = 'CORRECT';
             if (ans.eval_status === 'CORRECT') nextStatus = 'PARTIAL';
             else if (ans.eval_status === 'PARTIAL') nextStatus = 'WRONG';
@@ -456,6 +655,8 @@
 
             await overrideCell(ans.id, nextStatus);
           });
+
+          tdQ.appendChild(cellSpan);
         }
 
         tr.appendChild(tdQ);
@@ -463,17 +664,23 @@
 
       // 4. Összpontszám
       const tdPoints = document.createElement('td');
-      tdPoints.innerHTML = `<strong>${p.total_points}</strong> / ${data.totalMaxPoints}`;
+      tdPoints.innerHTML = `<strong style="font-size: 0.95rem; color: var(--text-main);">${p.total_points}</strong> <span style="font-size: 0.78rem; color: var(--text-muted);">/ ${data.totalMaxPoints}</span>`;
       tr.appendChild(tdPoints);
 
       // 5. Százalék
       const tdPct = document.createElement('td');
-      tdPct.textContent = `${p.percentage}%`;
+      let pctColor = 'var(--text-main)';
+      if (p.percentage >= 85) pctColor = 'var(--success, #16a34a)';
+      else if (p.percentage < 50) pctColor = 'var(--danger, #dc2626)';
+      tdPct.innerHTML = `<strong style="color: ${pctColor}; font-size: 0.92rem;">${p.percentage}%</strong>`;
       tr.appendChild(tdPct);
 
       // 6. KRÉTA érdemjegy
       const tdGrade = document.createElement('td');
-      tdGrade.innerHTML = `<span style="font-size: 1.1rem; font-weight: 700;">${p.grade}</span>`;
+      const gradeNum = parseInt(p.grade, 10) || 1;
+      const gradeLabels = { 5: '5 (Jeles)', 4: '4 (Jó)', 3: '3 (Közepes)', 2: '2 (Elégséges)', 1: '1 (Elégtelen)' };
+      const gradeLabel = gradeLabels[gradeNum] || `${gradeNum}`;
+      tdGrade.innerHTML = `<span class="admin-grade-badge grade-${gradeNum}">${gradeLabel}</span>`;
       tr.appendChild(tdGrade);
 
       // 7. Fókuszvesztések
@@ -481,49 +688,77 @@
       if (p.focus_lost_count > 0) {
         tdFocus.innerHTML = `<span class="focus-alert">⚠️ ${p.focus_lost_count}x</span>`;
       } else {
-        tdFocus.textContent = '0';
+        tdFocus.innerHTML = `<span style="color: #94a3b8; font-size: 0.85rem;">0</span>`;
       }
       tr.appendChild(tdFocus);
 
-      // 8. Diák műveletek: Gépváltás adatvesztés nélkül és Téves névfoglalás törlése (Report 12 / 2.2)
+      // 8. Diák műveletek: Gép váltása és Név törlése (Calm Learner Stílus & Report 12 / 2.2)
       const tdAction = document.createElement('td');
       tdAction.style.whiteSpace = 'nowrap';
 
-      if (!p.is_finished && session && session.status === 'ACTIVE') {
+      const actionWrap = document.createElement('div');
+      actionWrap.style.display = 'inline-flex';
+      actionWrap.style.gap = '6px';
+      actionWrap.style.alignItems = 'center';
+      actionWrap.style.justifyContent = 'center';
+
+      const isSessionActive = session && session.status === 'ACTIVE';
+
+      if (isSessionActive) {
+        // Gép váltása gomb (tantermi munkaállomás átvitele adatvesztés nélkül)
         const btnSeatChange = document.createElement('button');
-        btnSeatChange.className = 'btn btn-secondary';
-        btnSeatChange.style.padding = '4px 6px';
-        btnSeatChange.style.fontSize = '0.78rem';
-        btnSeatChange.style.marginRight = '4px';
-        btnSeatChange.innerHTML = '💺 Gépváltás';
-        btnSeatChange.title = 'Gépváltás engedélyezése adatvesztés nélkül (a korábbi válaszok megmaradnak)';
-        btnSeatChange.addEventListener('click', async () => {
-          if (confirm(`Biztosan engedélyezed a gépváltást ${p.student_name} számára? Az eddigi válaszai megmaradnak, és az új gépéről azonnal folytathatja a dolgozatot.`)) {
-            await authorizeSeatChange(p.id);
-          }
-        });
-        tdAction.appendChild(btnSeatChange);
-      }
+        btnSeatChange.className = 'admin-btn-seat-change';
+        btnSeatChange.type = 'button';
+        btnSeatChange.innerHTML = '<span class="material-symbols-outlined">swap_horiz</span> <span>Gép váltása</span>';
 
-      if (session && session.status === 'ACTIVE') {
+        if (p.is_finished) {
+          btnSeatChange.disabled = true;
+          btnSeatChange.title = 'A tanuló már befejezte a dolgozatot, a gépváltás nem szükséges';
+        } else {
+          btnSeatChange.disabled = false;
+          btnSeatChange.title = 'Gép átvitele fagyás esetén (a tanuló eddigi válaszai megmaradnak)';
+          btnSeatChange.addEventListener('click', () => {
+            pendingSeatChangeParticipantId = p.id;
+            const targetEl = document.getElementById('seat-change-student-name');
+            if (targetEl) targetEl.textContent = p.student_name;
+            openModal('modal-confirm-seat-change');
+          });
+        }
+        actionWrap.appendChild(btnSeatChange);
+
+        // Név törlése gomb (téves névválasztás korrekciójára)
         const btnReset = document.createElement('button');
-        btnReset.className = 'btn btn-secondary';
-        btnReset.style.padding = '4px 6px';
-        btnReset.style.fontSize = '0.78rem';
-        btnReset.innerHTML = '🗑️ Név törlése';
-        btnReset.title = 'Téves névválasztás visszavonása (törli a rekordot és a válaszokat)';
-        btnReset.addEventListener('click', async () => {
-          if (confirm(`FIGYELEM: Biztosan törlöd ${p.student_name} nevét a dolgozatból? Ez törli a tanuló eddigi válaszait téves névválasztás esetén!`)) {
-            await resetParticipant(p.id);
-          }
+        btnReset.className = 'admin-btn-delete-name';
+        btnReset.type = 'button';
+        btnReset.innerHTML = '<span class="material-symbols-outlined">delete</span> <span>Név törlése</span>';
+        btnReset.title = 'Téves névválasztás törlése a dolgozatból (ha a tanuló téves névre kattintott bejelentkezéskor)';
+        btnReset.addEventListener('click', () => {
+          pendingDeleteParticipantId = p.id;
+          const targetEl = document.getElementById('delete-name-student-name');
+          if (targetEl) targetEl.textContent = p.student_name;
+          openModal('modal-confirm-delete-name');
         });
-        tdAction.appendChild(btnReset);
+        actionWrap.appendChild(btnReset);
+      } else {
+        const spanFinished = document.createElement('span');
+        spanFinished.style.color = '#94a3b8';
+        spanFinished.style.fontSize = '0.78rem';
+        spanFinished.style.fontWeight = '600';
+        spanFinished.textContent = 'Dolgozat lezárva';
+        actionWrap.appendChild(spanFinished);
       }
 
+      tdAction.appendChild(actionWrap);
       tr.appendChild(tdAction);
 
       matrixBody.appendChild(tr);
     });
+
+    // Értesítési központ időbélyeg frissítése
+    const notifyTime = document.getElementById('notify-server-time');
+    if (notifyTime) {
+      notifyTime.textContent = 'Rendszeridő: ' + new Date().toLocaleTimeString('hu-HU');
+    }
   }
 
   // 1-kattintásos tanári felülbírálás
@@ -536,7 +771,7 @@
       });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.error || 'Hiba a felülbíráláskor!');
+        showAdminAlert('⚠️ Értékelési hiba', err.error || 'Hiba a felülbíráláskor!');
       }
     } catch (err) {
       console.error('Hiba a felülbíráláskor:', err);
@@ -552,10 +787,11 @@
         if (currentSessionId) switchSession(currentSessionId);
       } else {
         const err = await res.json();
-        alert(err.error || 'Hiba a gépváltás engedélyezésekor!');
+        showAdminAlert('⚠️ Sikertelen gépváltás', err.error || 'Hiba a gépváltás engedélyezésekor!');
       }
     } catch (err) {
       console.error('Hiba a gépváltáskor:', err);
+      showAdminAlert('⚠️ Hálózati hiba', 'Nem sikerült kommunikálni a szerverrel.');
     }
   }
 
@@ -568,16 +804,110 @@
         if (currentSessionId) switchSession(currentSessionId);
       } else {
         const err = await res.json();
-        alert(err.error || 'Hiba a név törlésekor!');
+        showAdminAlert('⚠️ Sikertelen törlés', err.error || 'Hiba a név törlésekor!');
       }
     } catch (err) {
       console.error('Hiba a név törlésekor:', err);
+      showAdminAlert('⚠️ Hálózati hiba', 'Nem sikerült kommunikálni a szerverrel.');
     }
   }
 
   // Kompatibilitási névfeloldó alias
   async function unlockParticipant(participantId) {
     return resetParticipant(participantId);
+  }
+
+  // Modális jóváhagyó gombok eseménykezelői
+  const btnSubmitFinishSession = document.getElementById('btn-submit-finish-session');
+  if (btnSubmitFinishSession) {
+    btnSubmitFinishSession.addEventListener('click', async () => {
+      closeModal('modal-confirm-finish');
+      if (!currentSessionId) return;
+
+      try {
+        const res = await fetch(`/api/admin/sessions/${currentSessionId}/finish`, { method: 'POST' });
+        if (res.ok) {
+          showToast('Dolgozat sikeresen lezárva!', 'success');
+          await loadActiveSessions();
+          await switchSession(currentSessionId);
+        } else {
+          const err = await res.json();
+          showAdminAlert('⚠️ Hiba a lezáráskor', err.error || 'Hiba a dolgozat lezárásakor!');
+        }
+      } catch (err) {
+        console.error('Hiba a dolgozat lezárásakor:', err);
+        showAdminAlert('⚠️ Hálózati hiba', 'Nem sikerült elérni a szervert a lezáráshoz.');
+      }
+    });
+  }
+
+  const btnSubmitDeleteName = document.getElementById('btn-submit-delete-name');
+  if (btnSubmitDeleteName) {
+    btnSubmitDeleteName.addEventListener('click', async () => {
+      closeModal('modal-confirm-delete-name');
+      if (pendingDeleteParticipantId) {
+        await resetParticipant(pendingDeleteParticipantId);
+        pendingDeleteParticipantId = null;
+      }
+    });
+  }
+
+  const btnSubmitSeatChange = document.getElementById('btn-submit-seat-change');
+  if (btnSubmitSeatChange) {
+    btnSubmitSeatChange.addEventListener('click', async () => {
+      closeModal('modal-confirm-seat-change');
+      if (pendingSeatChangeParticipantId) {
+        await authorizeSeatChange(pendingSeatChangeParticipantId);
+        pendingSeatChangeParticipantId = null;
+      }
+    });
+  }
+
+  const btnSubmitDeleteSession = document.getElementById('btn-submit-delete-session');
+  if (btnSubmitDeleteSession) {
+    btnSubmitDeleteSession.addEventListener('click', async () => {
+      closeModal('modal-confirm-delete-session');
+      if (!pendingDeleteSessionId) return;
+
+      try {
+        const res = await fetch(`/api/admin/sessions/${pendingDeleteSessionId}`, { method: 'DELETE' });
+        if (res.ok) {
+          showToast('Dolgozat sikeresen törölve az archívumból!', 'success');
+          if (currentSessionId === pendingDeleteSessionId) {
+            currentSessionId = null;
+            await loadActiveSessions();
+            switchSession(null);
+          } else {
+            await loadActiveSessions();
+          }
+          await loadReports();
+        } else {
+          const err = await res.json();
+          showAdminAlert('⚠️ Törlési hiba', err.error || 'Hiba a dolgozat törlése során!');
+        }
+      } catch (err) {
+        console.error('Hiba a dolgozat törlésekor:', err);
+        showAdminAlert('⚠️ Hálózati hiba', 'Nem sikerült elérni a szervert a törléshez.');
+      } finally {
+        pendingDeleteSessionId = null;
+      }
+    });
+  }
+
+  const btnSubmitDeleteQuiz = document.getElementById('btn-submit-delete-quiz');
+  if (btnSubmitDeleteQuiz) {
+    btnSubmitDeleteQuiz.addEventListener('click', async () => {
+      closeModal('modal-confirm-delete-quiz');
+      if (!pendingDeleteQuizId) return;
+
+      try {
+        await deleteQuiz(pendingDeleteQuizId);
+      } catch (err) {
+        console.error('Hiba a kvíz törlésekor:', err);
+      } finally {
+        pendingDeleteQuizId = null;
+      }
+    });
   }
 
   // Űrhajós verseny indítása (RAJT gomb)
@@ -596,7 +926,7 @@
           btnAdminStartRace.style.display = 'none';
         } else {
           const err = await res.json();
-          alert(err.error || 'Hiba a rajt indításakor!');
+          showAdminAlert('⚠️ Rajt hiba', err.error || 'Hiba a rajt indításakor!');
           btnAdminStartRace.disabled = false;
           btnAdminStartRace.textContent = '🚀 RAJT! Verseny indítása';
         }
@@ -608,26 +938,10 @@
     });
   }
 
-  // Dolgozat befejezése (Finish)
-  btnFinishSession.addEventListener('click', async () => {
+  // Dolgozat befejezése (Finish gomb a jobb felső sarokban)
+  btnFinishSession.addEventListener('click', () => {
     if (!currentSessionId) return;
-    if (!confirm('Biztosan befejezed és lezárod a dolgozatot? A tanulók több választ már nem küldhetnek be.')) {
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/admin/sessions/${currentSessionId}/finish`, { method: 'POST' });
-      if (res.ok) {
-        showToast('Dolgozat sikeresen lezárva!', 'success');
-        await loadActiveSessions();
-        await switchSession(currentSessionId);
-      } else {
-        const err = await res.json();
-        alert(err.error || 'Hiba a dolgozat lezárásakor!');
-      }
-    } catch (err) {
-      console.error('Hiba a dolgozat lezárásakor:', err);
-    }
+    openModal('modal-confirm-finish');
   });
 
   /**
@@ -661,10 +975,10 @@
         await loadActiveSessions();
         switchSession(data.session.id);
       } else {
-        alert(data.error || 'Hiba a dolgozat indításakor!');
+        showAdminAlert('⚠️ Indítási hiba', data.error || 'Hiba a dolgozat indításakor!');
       }
     } catch (err) {
-      alert('Hálózati hiba a dolgozat indításakor!');
+      showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a dolgozat indításakor!');
     }
   });
 
@@ -714,31 +1028,33 @@
         startQuizId.appendChild(opt);
       });
 
-      // Tesztszerkesztő lista kártyái
+      // Tesztszerkesztő lista kártyái (Mindig szabadon szerkeszthető sablonok)
       quizzesListContainer.innerHTML = '';
       quizzesList.forEach(q => {
         const card = document.createElement('div');
-        card.className = 'card';
-        card.style.margin = '0';
+        card.className = 'quiz-card';
 
-        const isLocked = q.locked_at !== null;
         card.innerHTML = `
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
-            <h4 style="font-size: 1.1rem;">${escapeHtml(q.title)}</h4>
-            <span style="font-size: 0.8rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; ${isLocked ? 'background:#fee2e2; color:#991b1b;' : 'background:#dcfce7; color:#166534;'}">
-              ${isLocked ? '🔒 Zárolt' : '🟢 Szerkeszthető'}
+          <div class="quiz-card-header">
+            <h4 class="quiz-card-title">${escapeHtml(q.title)}</h4>
+            <span style="font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; background:#dcfce7; color:#166534; white-space: nowrap;">
+              🟢 Szerkeszthető
             </span>
           </div>
-          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 14px;">
-            Tantárgy: ${escapeHtml(q.subject_name)} | Évfolyam: ${escapeHtml(q.subject_grade)}. évf. | Kérdések: ${q.question_count} db (${q.total_points} pont)
+          <p class="quiz-card-meta">
+            ${escapeHtml(q.subject_name)} &bull; ${escapeHtml(q.subject_grade)}. évfolyam<br>
+            <span style="font-weight: 600;">${q.question_count} kérdés</span> (${q.total_points} pont)
           </p>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            ${isLocked
-              ? `<button class="btn btn-secondary btn-duplicate" data-id="${q.id}">📋 Másolat (Duplikálás)</button>`
-              : `<button class="btn btn-primary btn-edit" data-id="${q.id}">✏️ Szerkesztés</button>
-                 <button class="btn btn-secondary btn-duplicate" data-id="${q.id}">📋 Másolás</button>
-                 <button class="btn btn-danger btn-delete" data-id="${q.id}">🗑️ Törlés</button>`
-            }
+          <div class="quiz-card-actions">
+            <button type="button" class="quiz-btn-icon quiz-btn-edit btn-edit" data-id="${q.id}" title="Teszt szerkesztése">
+              <span class="material-symbols-outlined">edit</span>
+            </button>
+            <button type="button" class="quiz-btn-icon quiz-btn-copy btn-duplicate" data-id="${q.id}" title="Másolat készítése">
+              <span class="material-symbols-outlined">content_copy</span>
+            </button>
+            <button type="button" class="quiz-btn-icon quiz-btn-delete btn-delete" data-id="${q.id}" title="Teszt törlése">
+              <span class="material-symbols-outlined">delete</span>
+            </button>
           </div>
         `;
 
@@ -751,18 +1067,17 @@
         const btnDup = card.querySelector('.btn-duplicate');
         if (btnDup) {
           btnDup.addEventListener('click', async () => {
-            if (confirm(`Készítesz egy független, szerkeszthető másolatot a(z) „${q.title}” tesztből?`)) {
-              await duplicateQuiz(q.id);
-            }
+            await duplicateQuiz(q.id);
           });
         }
 
         const btnDel = card.querySelector('.btn-delete');
         if (btnDel) {
-          btnDel.addEventListener('click', async () => {
-            if (confirm(`Biztosan törlöd a(z) „${q.title}” tesztet?`)) {
-              await deleteQuiz(q.id);
-            }
+          btnDel.addEventListener('click', () => {
+            pendingDeleteQuizId = q.id;
+            const targetEl = document.getElementById('delete-quiz-title');
+            if (targetEl) targetEl.textContent = q.title;
+            openModal('modal-confirm-delete-quiz');
           });
         }
 
@@ -788,10 +1103,10 @@
         await loadQuizzes();
         openQuizEditor(data.quiz.id);
       } else {
-        alert(data.error || 'Hiba a másolás során!');
+        showAdminAlert('⚠️ Másolási hiba', data.error || 'Hiba a másolás során!');
       }
     } catch (err) {
-      alert('Hálózati hiba a másoláskor!');
+      showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a másoláskor!');
     }
   }
 
@@ -804,10 +1119,10 @@
         await loadQuizzes();
       } else {
         const err = await res.json();
-        alert(err.error || 'Hiba a törlés során!');
+        showAdminAlert('⚠️ Törlési hiba', err.error || 'Hiba a törlés során!');
       }
     } catch (err) {
-      alert('Hálózati hiba a törléskor!');
+      showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a törléskor!');
     }
   }
 
@@ -940,7 +1255,7 @@
   btnSaveQuiz.addEventListener('click', async () => {
     const title = editQuizTitle.value.trim();
     if (!title) {
-      alert('A teszt címe kötelező!');
+      showAdminAlert('⚠️ Hiányzó cím', 'A feladatsor címének megadása kötelező!');
       return;
     }
 
@@ -1003,10 +1318,10 @@
         quizEditorCard.style.display = 'none';
         await loadQuizzes();
       } else {
-        alert(data.error || 'Hiba a mentés során!');
+        showAdminAlert('⚠️ Mentési hiba', data.error || 'Hiba a mentés során!');
       }
     } catch (err) {
-      alert('Hálózati hiba a mentéskor!');
+      showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a mentéskor!');
     }
   });
 
@@ -1068,10 +1383,10 @@
       if (res.ok && data.success) {
         showToast('Névsor sikeresen elmentve!', 'success');
       } else {
-        alert(data.error || 'Hiba a névsor mentésekor!');
+        showAdminAlert('⚠️ Névsor hiba', data.error || 'Hiba a névsor mentésekor!');
       }
     } catch (err) {
-      alert('Hálózati hiba a mentés során!');
+      showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a névsor mentése során!');
     }
   });
 
@@ -1102,10 +1417,10 @@
         await loadRosterClasses();
       } else {
         const err = await res.json();
-        alert(err.error || 'Hiba az osztály törlésekor!');
+        showAdminAlert('⚠️ Törlési hiba', err.error || 'Hiba az osztály törlésekor!');
       }
     } catch (err) {
-      alert('Hálózati hiba a törléskor!');
+      showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a törléskor!');
     }
   });
 
@@ -1193,6 +1508,9 @@
             <a href="/print?sessionId=${s.id}" class="btn btn-secondary btn-sm" title="Nyomtatható A4 PDF lapok" target="_blank">
               🖨️ PDF
             </a>
+            <button class="btn btn-danger btn-sm btn-delete-report" data-id="${s.id}" title="Dolgozat végleges törlése az archívumból">
+              🗑️ Törlés
+            </button>
           </div>
         </td>
       `;
@@ -1201,6 +1519,16 @@
       if (btnView) {
         btnView.addEventListener('click', () => {
           switchSession(s.id);
+        });
+      }
+
+      const btnDelReport = tr.querySelector('.btn-delete-report');
+      if (btnDelReport) {
+        btnDelReport.addEventListener('click', () => {
+          pendingDeleteSessionId = s.id;
+          const targetEl = document.getElementById('delete-session-title');
+          if (targetEl) targetEl.textContent = `${s.quiz_title} (${s.subject_name} ${s.grade_level}. évf. ${s.class_name || ''})`;
+          openModal('modal-confirm-delete-session');
         });
       }
 

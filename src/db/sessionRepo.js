@@ -796,6 +796,23 @@ function startRace(sessionId) {
   return { ...session, current_question_index: 1 };
 }
 
+/**
+ * Dolgozat végleges törlése az archívumból (válaszokkal és résztvevőkkel együtt)
+ */
+function deleteSession(sessionId) {
+  const session = db.prepare('SELECT id, status FROM sessions WHERE id = ?').get(sessionId);
+  if (!session) throw new Error('A törlendő dolgozat nem található!');
+
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM answers WHERE session_id = ?').run(sessionId);
+    db.prepare('DELETE FROM participants WHERE session_id = ?').run(sessionId);
+    db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+  });
+
+  tx();
+  return true;
+}
+
 module.exports = {
   getActiveSessions,
   getAllSessions,
@@ -803,6 +820,7 @@ module.exports = {
   getSessionById,
   startSession,
   finishSession,
+  deleteSession,
   startRace,
   joinSession,
   getParticipantByToken,
