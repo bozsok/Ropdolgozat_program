@@ -4,6 +4,36 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.10.0] – 2026-11-12
+
+### Valós idejű ülésfoglalás és jelenlét-kezelés aktív teszt nélküli névvédelemmel, automatikus névsor-kiszürkítés és barátságos Calm figyelmeztető modál
+
+Új memóriabeli tantermi jelenlét- és ülésfoglalás-kezelő motor (`presenceService`), amely valós időben szinkronizálja a tanulók névválasztását: amint egy diák kiválasztja a nevét az osztály névsorából a diákbelépő felületen, a név az összes többi gépen azonnal inaktívvá és szürkévé válik `(már bejelentkezett)` toldalékkal. A névfoglalás tanári dolgozatindítás nélkül („bármikor”) is működik, visszalépéskor, osztályváltáskor, kapcsolatbontáskor vagy böngészőlap bezárásakor pedig azonnal felszabadul. Ezen felül a tanulói felület összes natív böngészős `alert()` ablaka lecserélésre került a rendszer letisztult, modern Calm stílusú, dinamikus állapotjelvénnyel ellátott modál figyelmeztető párbeszédpanelére (`#modal-alert`).
+
+#### Hozzáadva (Added)
+* **Valós idejű ülésfoglalási és jelenléti motor (`presenceService`):**
+  - **Fájlok:** [`src/services/presenceService.js`](file:///d:/dev/Röpdolgozat%20program/src/services/presenceService.js), [`src/sockets/liveHandler.js`](file:///d:/dev/Röpdolgozat%20program/src/sockets/liveHandler.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - Memóriabeli aktív ülésfoglalás-kezelés (`socketSeats`), amely a Socket.io kapcsolatokhoz rendeli a kiválasztott tanulókat (`student:claim_name`).
+  - Azonnali elutasítás és védelem a párhuzamos névütközések ellen: ha egy tanulót már kiválasztottak egy másik gépen, a rendszer visszautasítja a kérést és tájékoztatja a felhasználót.
+  - Automatikus felszabadítás (`student:release_name` és `disconnect`): a tanuló visszalépése, osztályváltása vagy a böngészőlap bezárása / gép kikapcsolása esetén a név azonnal felszabadul a hálózaton.
+  - A tanári kirúgás és gépváltás (`releaseStudent`) szintén azonnal feloldja az érintett tanuló foglalását.
+  - A `/api/classes/:className/students` végpont mostantól kiegészül a dinamikus `is_occupied: true/false` mezővel, így a névsor letöltésekor már a kezdeti állapotban is inaktívként jelennek meg a már foglalt diákok.
+
+* **Barátságos Calm modál figyelmeztető ablak (`#modal-alert`):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Új, stílusban illeszkedő modál komponens a tanulói oldalon: `460px` maximális szélesség, `32px` belső margó, dinamikus ikon-jelvény (figyelmeztetés, hiba, információ, siker), cím, részletes üzenet és hangsúlyos **[ Rendben ]** műveletgomb.
+  - A `showCalmAlert()` és `closeCalmAlert()` függvények segítségével az összes korábbi natív böngészős `alert()` hívás leváltásra került.
+
+#### Módosítva és javítva (Changed and Fixed)
+* **Diák névválasztó dinamikus állapota és inaktív stílusa:**
+  - **Fájlok:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A névsor betöltésekor és a valós idejű `students:occupied_updated` események hatására a foglalt tanulók opciói `disabled = true` állapotba kerülnek, és a nevük mögé automatikusan bekerül a `(már bejelentkezett)` felirat.
+  - A letiltott opciók (`.calm-select option:disabled`) szürke színű (`#94a3b8`), halvány háttérrel (`#f8fafc`) ellátott és dőlt betűs stílust kaptak a könnyű és egyértelmű felismerhetőségért (`!important` nélkül).
+  - A saját gépen éppen kiválasztott tanuló neve nem szürkül ki saját maga előtt.
+  - A belépési kísérlet során történt névütközésnél a felület automatikusan törli a hibás kiválasztást és újratölti az osztály névsorát.
+
+---
+
 ## [1.9.0] – 2026-11-11
 
 ### Szellős és nagyított tesztmegoldó felület, teljes tesztre vetített érdemjegyszámítás és konzisztens modálkezelés

@@ -10,6 +10,7 @@ const grader = require('../services/grader');
 const db = require('../db/init');
 const exporter = require('../services/exporter');
 const backup = require('../services/backup');
+const presenceService = require('../services/presenceService');
 
 const router = express.Router();
 
@@ -91,7 +92,12 @@ router.get('/classes', (req, res) => {
 router.get('/classes/:className/students', (req, res) => {
   try {
     const students = rosterRepo.getStudentsByClass(req.params.className);
-    res.json(students);
+    const occupiedIds = new Set(presenceService.getOccupiedStudentIds(req.params.className));
+    const enriched = students.map(s => ({
+      ...s,
+      is_occupied: occupiedIds.has(String(s.id))
+    }));
+    res.json(enriched);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -383,12 +389,21 @@ router.post('/student/join', (req, res) => {
       session_token: clientToken
     });
 
-    // Értesítés a tanári mátrixnak új csatlakozóról
+    // Értesítés a tanári mátrixnak új csatlakozóról és a diákoknak a foglalt névről
     const io = req.app.get('io');
     if (io) {
       const matrixData = sessionRepo.getLiveMatrixData(session_id);
       io.to(`session_${session_id}`).emit('matrix:updated', matrixData);
       io.emit('badges:updated', sessionRepo.getActiveSessions());
+
+      // Diák osztályának kinyerése a valós idejű jelenlét frissítéséhez
+      const student = rosterRepo.getStudentById(student_id);
+      if (student && student.class_name) {
+        io.emit('students:occupied_updated', {
+          className: student.class_name,
+          occupiedStudentIds: presenceService.getOccupiedStudentIds(student.class_name)
+        });
+      }
     }
 
     res.json({

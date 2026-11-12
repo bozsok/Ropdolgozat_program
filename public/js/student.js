@@ -44,6 +44,16 @@
   const btnConfirmExit = document.getElementById('btn-confirm-exit');
   const btnExitModalClose = document.getElementById('btn-exit-modal-close');
 
+  // Értesítő és figyelmeztető modál elemei (Calm stílus)
+  const modalAlert = document.getElementById('modal-alert');
+  const modalAlertTitle = document.getElementById('modal-alert-title');
+  const modalAlertMessage = document.getElementById('modal-alert-message');
+  const modalAlertIcon = document.getElementById('modal-alert-icon');
+  const modalAlertIconBadge = document.getElementById('modal-alert-icon-badge');
+  const btnModalAlertOk = document.getElementById('btn-modal-alert-ok');
+  const btnModalAlertClose = document.getElementById('btn-modal-alert-close');
+  let modalAlertCloseCallback = null;
+
   // Tanári bejelentkezési elemek
   const btnOpenLogin = document.getElementById('btn-open-login');
   const loginModal = document.getElementById('login-modal');
@@ -74,6 +84,7 @@
 
   // Tanulók gyorsítótára az osztályhoz (id -> student object)
   const studentsMap = new Map();
+  let currentOccupiedStudentIds = new Set();
   const DEFAULT_CLASSES = [
     '3.a', '3.b', '3.c',
     '4.a', '4.b', '4.c',
@@ -179,8 +190,9 @@
 
     socket.on('participant:kicked', (data) => {
       sessionStorage.removeItem('ropdolgozat_token');
-      alert('A tanár feloldotta a munkamenetedet. Az oldal újratöltődik.');
-      window.location.reload();
+      showCalmAlert('A tanár feloldotta a munkamenetedet. Az oldal újratöltődik.', 'Munkamenet feloldva', 'info', () => {
+        window.location.reload();
+      });
     });
 
     // Űrhajós verseny rajtot jelző esemény (Space Race indítása)
@@ -210,6 +222,100 @@
         checkActiveSession();
       }
     });
+
+    // Valós idejű tanulói névfoglalás és jelenlét frissítése (aktív teszt nélkül is)
+    socket.on('students:occupied_updated', (data) => {
+      if (data && selectedClass && String(data.className) === String(selectedClass)) {
+        currentOccupiedStudentIds = new Set((data.occupiedStudentIds || []).map(String));
+        updateStudentOptionsOccupied();
+      }
+    });
+
+    // Újracsatlakozáskor a foglaltsági állapot lekérdezése
+    socket.on('connect', () => {
+      if (selectedClass && loginStep2 && loginStep2.style.display !== 'none') {
+        socket.emit('student:get_occupied', { className: selectedClass });
+      }
+    });
+  }
+
+  /**
+   * Stílusos Calm modál figyelmeztető / tájékoztató ablak megjelenítése
+   * @param {string} message - A megjelenítendő üzenet
+   * @param {string} [title='Figyelmeztetés'] - Az ablak címe
+   * @param {string} [type='warning'] - Típus: 'warning' | 'error' | 'info' | 'success'
+   * @param {Function} [onClose] - Opcionális hívandó függvény a bezáráskor
+   */
+  function showCalmAlert(message, title = 'Figyelmeztetés', type = 'warning', onClose = null) {
+    if (!modalAlert) {
+      alert(message);
+      if (typeof onClose === 'function') onClose();
+      return;
+    }
+
+    modalAlertCloseCallback = onClose;
+    if (modalAlertTitle) modalAlertTitle.textContent = title;
+    if (modalAlertMessage) modalAlertMessage.textContent = message;
+
+    if (modalAlertIcon && modalAlertIconBadge) {
+      if (type === 'error') {
+        modalAlertIcon.textContent = 'error';
+        modalAlertIconBadge.style.backgroundColor = 'var(--danger-bg)';
+        modalAlertIconBadge.style.color = 'var(--danger)';
+      } else if (type === 'info') {
+        modalAlertIcon.textContent = 'info';
+        modalAlertIconBadge.style.backgroundColor = 'var(--surface-high)';
+        modalAlertIconBadge.style.color = 'var(--primary)';
+      } else if (type === 'success') {
+        modalAlertIcon.textContent = 'task_alt';
+        modalAlertIconBadge.style.backgroundColor = 'var(--success-bg)';
+        modalAlertIconBadge.style.color = 'var(--success)';
+      } else {
+        // Alapértelmezett: warning
+        modalAlertIcon.textContent = 'warning';
+        modalAlertIconBadge.style.backgroundColor = 'var(--secondary-fixed)';
+        modalAlertIconBadge.style.color = 'var(--on-secondary-fixed)';
+      }
+    }
+
+    openModal('modal-alert');
+  }
+
+  /**
+   * Calm modál figyelmeztető ablak bezárása és callback végrehajtása
+   */
+  function closeCalmAlert() {
+    closeModal('modal-alert');
+    if (typeof modalAlertCloseCallback === 'function') {
+      const cb = modalAlertCloseCallback;
+      modalAlertCloseCallback = null;
+      cb();
+    }
+  }
+
+  /**
+   * Tanulók lenyíló listájának vizuális frissítése (foglalt nevek kiszürkítése és inaktívvá tétele)
+   */
+  function updateStudentOptionsOccupied() {
+    if (!selectStudent || !selectStudent.options) return;
+
+    for (let i = 1; i < selectStudent.options.length; i++) {
+      const opt = selectStudent.options[i];
+      const stuId = opt.value;
+      const stu = studentsMap.get(stuId);
+      if (!stu) continue;
+
+      const isOccupiedByOther = currentOccupiedStudentIds.has(stuId) &&
+        (!selectedStudent || String(selectedStudent.id) !== stuId);
+
+      if (isOccupiedByOther) {
+        opt.disabled = true;
+        opt.textContent = `${stu.student_name} (már bejelentkezett)`;
+      } else {
+        opt.disabled = false;
+        opt.textContent = stu.student_name;
+      }
+    }
   }
 
   /**
@@ -275,7 +381,7 @@
                 teacherLoginErrorText.textContent = data.message || 'Helytelen tanári jelszó! Próbáld újra.';
               }
             } else {
-              alert(data.message || 'Helytelen tanári jelszó!');
+              showCalmAlert(data.message || 'Helytelen tanári jelszó!', 'Hiba', 'error');
             }
             inputPin.value = '';
             inputPin.focus();
@@ -287,7 +393,7 @@
               teacherLoginErrorText.textContent = 'Hálózati hiba a bejelentkezés során!';
             }
           } else {
-            alert('Hálózati hiba a bejelentkezés során!');
+            showCalmAlert('Hálózati hiba a bejelentkezés során!', 'Hálózati hiba', 'error');
           }
         }
       });
@@ -306,6 +412,10 @@
     // Osztályválasztó lenyíló lista
     if (selectClass) {
       selectClass.addEventListener('change', async () => {
+        if (socket && selectedStudent) {
+          socket.emit('student:release_name');
+        }
+        selectedStudent = null;
         selectedClass = selectClass.value;
         if (loginStep2 && loginStep2.style.display !== 'none') {
           await checkActiveSession();
@@ -332,6 +442,13 @@
     // 2. lépés: Vissza gomb kezelője (visszatérés az 1. fázisra)
     if (btnStep2Back) {
       btnStep2Back.addEventListener('click', () => {
+        if (socket && selectedStudent) {
+          socket.emit('student:release_name');
+        }
+        selectedStudent = null;
+        if (selectStudent) selectStudent.value = '';
+        if (btnJoinSession) btnJoinSession.disabled = true;
+        if (stepTeam) stepTeam.style.display = 'none';
         if (loginStep2) loginStep2.style.display = 'none';
         if (loginStep1) loginStep1.style.display = 'flex';
       });
@@ -343,6 +460,26 @@
         const stuId = selectStudent.value;
         if (stuId && studentsMap.has(stuId)) {
           selectedStudent = studentsMap.get(stuId);
+          if (socket) {
+            socket.emit('student:claim_name', {
+              className: selectedClass,
+              studentId: selectedStudent.id,
+              studentName: selectedStudent.student_name,
+              pcNumber
+            }, (res) => {
+              if (res && !res.success) {
+                showCalmAlert(
+                  res.message || 'Ezt a tanulót már kiválasztották egy másik gépen.',
+                  'A név már foglalt',
+                  'warning'
+                );
+                selectedStudent = null;
+                selectStudent.value = '';
+                if (btnJoinSession) btnJoinSession.disabled = true;
+                if (stepTeam) stepTeam.style.display = 'none';
+              }
+            });
+          }
           if (activeSession) {
             if (activeSession.mode === 'SPACE_RACE') {
               if (stepTeam) stepTeam.style.display = 'block';
@@ -355,6 +492,9 @@
           }
         } else {
           selectedStudent = null;
+          if (socket) {
+            socket.emit('student:release_name');
+          }
           if (btnJoinSession) btnJoinSession.disabled = true;
           if (stepTeam) stepTeam.style.display = 'none';
         }
@@ -391,6 +531,21 @@
       btnConfirmExit.addEventListener('click', () => {
         closeModal('modal-confirm-exit');
         finishQuiz();
+      });
+    }
+
+    // Calm stílusú figyelmeztető és értesítő modál eseménykezelői
+    if (btnModalAlertOk) {
+      btnModalAlertOk.addEventListener('click', closeCalmAlert);
+    }
+    if (btnModalAlertClose) {
+      btnModalAlertClose.addEventListener('click', closeCalmAlert);
+    }
+    if (modalAlert) {
+      modalAlert.addEventListener('click', (e) => {
+        if (e.target === modalAlert) {
+          closeCalmAlert();
+        }
       });
     }
   }
@@ -629,15 +784,31 @@
       defaultOpt.textContent = '-- Válassz a névsorból --';
       selectStudent.appendChild(defaultOpt);
 
+      currentOccupiedStudentIds.clear();
       students.forEach((stu) => {
-        studentsMap.set(String(stu.id), stu);
+        const strId = String(stu.id);
+        studentsMap.set(strId, stu);
+        if (stu.is_occupied) {
+          currentOccupiedStudentIds.add(strId);
+        }
         const opt = document.createElement('option');
-        opt.value = String(stu.id);
-        opt.textContent = stu.student_name;
+        opt.value = strId;
+        const isOccupiedByOther = stu.is_occupied && (!selectedStudent || String(selectedStudent.id) !== strId);
+        if (isOccupiedByOther) {
+          opt.disabled = true;
+          opt.textContent = `${stu.student_name} (már bejelentkezett)`;
+        } else {
+          opt.textContent = stu.student_name;
+        }
         selectStudent.appendChild(opt);
       });
 
       selectStudent.disabled = false;
+
+      // Friss valós idejű foglalási állapot lekérdezése socketen keresztül is
+      if (socket && socket.connected) {
+        socket.emit('student:get_occupied', { className });
+      }
 
     } catch (err) {
       console.error('Hiba a diákok betöltésekor:', err);
@@ -679,7 +850,21 @@
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Hiba történt a belépés során!');
+        const errorMsg = data.error || 'Hiba történt a belépés során!';
+        const isAlreadyJoined = errorMsg.includes('már csatlakozott');
+        showCalmAlert(
+          errorMsg,
+          isAlreadyJoined ? 'A név már foglalt!' : 'Belépési figyelmeztetés',
+          isAlreadyJoined ? 'warning' : 'error'
+        );
+        if (isAlreadyJoined) {
+          selectedStudent = null;
+          if (selectStudent) selectStudent.value = '';
+          if (btnJoinSession) btnJoinSession.disabled = true;
+          if (selectedClass) {
+            loadStudentsForClass(selectedClass);
+          }
+        }
         return;
       }
 
@@ -701,7 +886,7 @@
 
     } catch (err) {
       console.error('Hiba a belépés során:', err);
-      alert('Hálózati hiba a belépéskor!');
+      showCalmAlert('Hálózati hiba a belépéskor! Kérlek, próbáld újra.', 'Hálózati hiba', 'error');
     }
   }
 
@@ -1044,7 +1229,7 @@
 
       const result = await res.json();
       if (!res.ok) {
-        alert(result.error || 'Hiba a válasz mentésekor!');
+        showCalmAlert(result.error || 'Hiba a válasz mentésekor!', 'Hiba a mentéskor', 'error');
         btnSubmitAnswer.disabled = false;
         return;
       }
@@ -1067,7 +1252,7 @@
 
     } catch (err) {
       console.error('Hiba a válasz beküldésekor:', err);
-      alert('Hálózati hiba a beküldéskor!');
+      showCalmAlert('Hálózati hiba a válasz beküldésekor! Kérlek, próbáld újra.', 'Hálózati hiba', 'error');
       btnSubmitAnswer.disabled = false;
     }
   }
@@ -1209,8 +1394,9 @@
 
       if (remainingSec <= 0) {
         clearInterval(timerInterval);
-        alert('Az időkorlát lejárt! A dolgozat automatikusan lezárásra kerül.');
-        finishQuiz();
+        showCalmAlert('Az időkorlát lejárt! A dolgozat automatikusan lezárásra kerül.', 'Időkorlát lejárt', 'warning', () => {
+          finishQuiz();
+        });
       }
     }
 

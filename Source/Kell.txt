@@ -1,0 +1,2 @@
+1. exportálni a Socrative-ból a teszteket és létrehozni a saját webalkalmazásban azokat
+2. exportálni KRÉTA rendszerből a tanulói névsort, osztályokat és importálhatóvá tenni a saját webalkalmazásban

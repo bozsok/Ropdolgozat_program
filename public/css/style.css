@@ -1205,6 +1205,12 @@ h5 {
   cursor: not-allowed;
 }
 
+.calm-select option:disabled {
+  color: #94a3b8;
+  background-color: #f8fafc;
+  font-style: italic;
+}
+
 /* Elsődleges belépés gomb */
 .calm-btn-primary {
   width: 100%;

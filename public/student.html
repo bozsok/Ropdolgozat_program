@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.9.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.10.0">
 </head>
 <body style="background-color: #ffffff;">
 
@@ -79,6 +79,30 @@
         </button>
         <button type="button" id="btn-confirm-exit" class="calm-modal-btn-cancel">
           Kilépés és beadás
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rendszerértesítések és figyelmeztetések párbeszédpanelje (Calm stílusban) -->
+  <div id="modal-alert" class="calm-modal-backdrop">
+    <div class="calm-modal-card">
+      <div class="calm-modal-header">
+        <div class="calm-modal-title-wrap">
+          <div id="modal-alert-icon-badge" class="calm-modal-icon-badge" style="background-color: var(--secondary-fixed); color: var(--on-secondary-fixed);">
+            <span id="modal-alert-icon" class="material-symbols-outlined">warning</span>
+          </div>
+          <h3 id="modal-alert-title" class="calm-modal-title">Figyelmeztetés</h3>
+        </div>
+        <button type="button" id="btn-modal-alert-close" class="calm-modal-close-btn" title="Bezárás">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <p id="modal-alert-message" class="calm-modal-desc"></p>
+      <div class="calm-modal-actions">
+        <button type="button" id="btn-modal-alert-ok" class="calm-modal-btn-submit">
+          <span>Rendben</span>
+          <span class="material-symbols-outlined">check</span>
         </button>
       </div>
     </div>
@@ -425,7 +449,7 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.9.0"></script>
-  <script src="/js/student.js?v=1.9.0"></script>
+  <script src="/js/utils.js?v=1.10.0"></script>
+  <script src="/js/student.js?v=1.10.0"></script>
 </body>
 </html>
