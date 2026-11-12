@@ -652,6 +652,10 @@ function overrideAnswer({
 
   if (!answer) throw new Error('A válasz nem található!');
 
+  if (answer.session_status === 'FINISHED') {
+    throw new Error('Lezárt dolgozatban a válaszok és pontszámok utólag nem módosíthatók!');
+  }
+
   // Pontszám kiszámítása a státusz alapján (ha nincs egyedi pont megadva)
   let newPoints = 0.0;
   let isCorrect = 0;
@@ -712,12 +716,25 @@ function getLiveMatrixData(sessionId) {
   const thresholds = JSON.parse(session.grade_thresholds_json || '{"2":30,"3":55,"4":75,"5":90}');
 
   // Teszt kérdései
-  const questions = db.prepare(`
-    SELECT id, question_order, question_type, question_text, options_json, correct_answer, explanation, points
+  const rawQuestions = db.prepare(`
+    SELECT id, question_order, question_type, question_text, options_json, correct_answer, explanation, points, image_path
     FROM questions
     WHERE quiz_id = ?
     ORDER BY question_order ASC
   `).all(session.quiz_id);
+
+  const questions = rawQuestions.map(q => {
+    let options = [];
+    try {
+      options = JSON.parse(q.options_json || '[]');
+    } catch {
+      options = [];
+    }
+    return {
+      ...q,
+      options
+    };
+  });
 
   const totalMaxPoints = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
 

@@ -41,6 +41,24 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
   - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
   - A felesleges export doboz helyett megvalósult a terv szerinti 2 oszlopos rács: *Jelmagyarázat és értékelési küszöbök* (színes kártyákkal), valamint az *Értesítési központ* élő szerveridővel.
 
+* **Kérdés részletező modális ablak (`#modal-question-detail`) és számozott Mátrix fejlécek:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - A korábbi zsúfolt `K1 (1P)`, `K2 (1P)` fejléc helyett kizárólag a letisztult kérdésszám (`1`, `2`, `3`...) jelenik meg interaktív, kiemelhető oszlopfejlécként (`.matrix-q-col`).
+  - A kérdésszámra kattintva Calm Learner modális ablak nyílik meg a feltett kérdés formázott szövegével, ábrájával, a válaszopciókkal és a zöld pipával kiemelt helyes megoldással, valamint a tanulói válaszok összesített táblázatával és statisztikájával.
+  - Eseménydelegáció (`matrixHeadRow.onclick`) garantálja a golyóálló működést újrarenderelés után is.
+
+* **Lezárt dolgozatok végleges és megváltoztathatatlan pontszám-védelme:**
+  - **Fájlok:** [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A tanári felülbírálás (pl. elgépelés vagy rövid szöveges válasz méltányossági pontozása) kizárólag a folyamatban lévő, aktív dolgozat ideje alatt engedélyezett.
+  - A tanár általi lezárás (`status = 'FINISHED'`) pillanatában a pontszámok és jegyek véglegesen megváltoztathatatlanná válnak:
+    1. A kliensoldali Mátrixban a cellák zárolt állapotba kerülnek (`.cell-locked`, `pointer-events: none;`, kattintási eseménykezelő nélkül).
+    2. A szerveroldali `overrideAnswer` azonnal hibát dob lezárt munkamenet esetén.
+    3. Adatbázisszintű integritási trigger (`trg_prevent_answer_update_when_session_finished`) védi az adatokat a közvetlen SQL módosításokkal szemben is.
+
+* **Dupla „Dolgozat lezárva” jelvénykapszula megszüntetése:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A redundáns `#badge-session-finished` elem eltávolításra került a munkamenet eszköztárból; a dolgozat állapota egységesen, mindig pontosan egyetlen jelvénnyel (`#session-badge-channel`) jelenik meg (aktívnál zöld *„Kitöltés folyamatban”*, lezártnál piros *„⏹️ Dolgozat lezárva”*).
+
 #### Javítva (Fixed)
 * **Gépváltás gomb folyamatos láthatósága:** A gomb lezárt diák esetén sem tűnik el a DOM-ból, hanem diszkréten tiltott (`disabled`) állapotba kerül, megelőzve az ugráló felületet.
 * **Éles adatbázis kitakarítása és tesztizoláció:** A 104 db automatikusan felhalmozódott tesztkvíz eltávolításra került az éles adatbázisból, az `npm test` pedig elkülönített, önmegsemmisítő teszt-adatbázison (`data/ropdolgozat_test.db`) fut.

@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.11.4">
+  <link rel="stylesheet" href="/css/style.css?v=1.12.0">
   <style>
     /* Admin specifikus elrendezés (Tilos az !important) */
     .admin-container {
@@ -138,9 +138,6 @@
               <span id="session-badge-channel" class="admin-session-badge">
                 <span class="admin-pulse-dot"></span>
                 <span>Kitöltés folyamatban</span>
-              </span>
-              <span id="badge-session-finished" class="admin-session-finished-pill" style="display: none;">
-                ⏹️ Dolgozat lezárva
               </span>
             </div>
             <p id="live-session-info" class="admin-session-meta">
@@ -806,10 +803,77 @@
     </div>
   </div>
 
+  <!-- Kérdés és Diákválaszok Részletei Modal -->
+  <div id="modal-question-detail" class="modal-backdrop">
+    <div class="modal-window modal-window-lg">
+      <div class="card-header">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+          <div>
+            <h3 id="qd-modal-title" class="card-title">❓ 1. kérdés részletei</h3>
+            <p id="qd-modal-subtitle" class="card-subtitle">Feleletválasztó (ABCD) • 1 pont</p>
+          </div>
+          <button type="button" class="calm-modal-close-btn" onclick="closeModal('modal-question-detail')" title="Bezárás">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="qd-modal-body">
+        <!-- 1. Kérdés adatai -->
+        <div class="qd-section-card">
+          <div class="qd-section-label">A feltett kérdés szövege:</div>
+          <div id="qd-modal-text" class="qd-question-text"></div>
+          
+          <div id="qd-modal-image-box" class="qd-image-box" style="display: none;">
+            <img id="qd-modal-image" src="" alt="Kérdéshez tartozó ábra" class="qd-image">
+          </div>
+
+          <!-- Válaszlehetőségek és helyes megoldás -->
+          <div id="qd-modal-options-wrap" class="qd-options-wrap"></div>
+
+          <!-- Tanári magyarázat (ha meg van adva) -->
+          <div id="qd-modal-explanation-box" class="qd-explanation-box" style="display: none;">
+            <div class="qd-explanation-label">💡 Tanári magyarázat:</div>
+            <div id="qd-modal-explanation" class="qd-explanation-text"></div>
+          </div>
+        </div>
+
+        <!-- 2. Tanulói válaszok áttekintése -->
+        <div class="qd-section-card">
+          <div class="qd-responses-header">
+            <div class="qd-section-label" style="margin-bottom: 0;">Tanulói válaszok a dolgozatban:</div>
+            <div id="qd-modal-stats-badge" class="qd-stats-badge">0 / 0 válaszolt</div>
+          </div>
+
+          <div class="qd-table-wrap">
+            <table class="qd-table">
+              <thead>
+                <tr>
+                  <th style="width: 44px; text-align: center;">#</th>
+                  <th style="text-align: left;">Tanuló</th>
+                  <th style="text-align: left;">Leadott válasz</th>
+                  <th style="width: 80px; text-align: center;">Idő</th>
+                  <th style="width: 110px; text-align: center;">Értékelés</th>
+                </tr>
+              </thead>
+              <tbody id="qd-modal-answers-body">
+                <!-- Dinamikusan renderelt diákválaszok -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="margin-top: 18px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-question-detail')">Bezárás</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.11.4"></script>
-  <script src="/js/admin.js?v=1.11.4"></script>
+  <script src="/js/utils.js?v=1.12.0"></script>
+  <script src="/js/admin.js?v=1.12.0"></script>
 </body>
 </html>
 

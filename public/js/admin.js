@@ -329,7 +329,6 @@
         liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${data.session.mode} | Befejezve: ${endedFormatted}`;
         if (btnFinishSession) btnFinishSession.style.display = 'none';
         if (btnAdminStartRace) btnAdminStartRace.style.display = 'none';
-        if (badgeSessionFinished) badgeSessionFinished.style.display = 'inline-flex';
       } else {
         if (sessionBadgeChannel) {
           sessionBadgeChannel.className = 'admin-session-badge';
@@ -341,7 +340,6 @@
         liveSessionTitle.textContent = data.session.quiz_title;
         liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${data.session.mode}`;
         if (btnFinishSession) btnFinishSession.style.display = 'inline-flex';
-        if (badgeSessionFinished) badgeSessionFinished.style.display = 'none';
 
         if (btnAdminStartRace) {
           const isSpaceRace = data.session.mode === 'SPACE_RACE';
@@ -547,26 +545,31 @@
     renderKpiCards(data);
 
     // Fejléc sor összeállítása (Calm Learner Mátrix)
+    const qColsHtml = questions.map((q, idx) => `
+      <th class="matrix-q-col" data-q-idx="${idx}" title="${idx + 1}. kérdés és tanulói válaszok részletei (kattints a megtekintéshez!)">${idx + 1}</th>
+    `).join('');
+
     matrixHeadRow.innerHTML = `
       <th class="col-num">#</th>
       <th class="col-name">Tanuló neve &amp; Státusz</th>
       <th style="min-width: 60px;">Gép</th>
-    `;
-
-    questions.forEach((q, idx) => {
-      const th = document.createElement('th');
-      th.innerHTML = `K${idx + 1}<br><span style="font-size: 0.72rem; font-weight: normal; opacity: 0.85;">(${q.points}p)</span>`;
-      th.title = q.question_text;
-      matrixHeadRow.appendChild(th);
-    });
-
-    matrixHeadRow.innerHTML += `
+      ${qColsHtml}
       <th style="min-width: 75px;">Összpont</th>
       <th style="min-width: 65px;">%</th>
       <th style="min-width: 105px;">Jegy</th>
       <th style="min-width: 65px;">Fókusz</th>
       <th style="min-width: 170px;">Műveletek</th>
     `;
+
+    // Eseménydelegáció a fejléc sorra (Best Practice - soha nem vész el)
+    matrixHeadRow.onclick = (e) => {
+      const qCol = e.target.closest('.matrix-q-col');
+      if (!qCol) return;
+      const qIdx = parseInt(qCol.dataset.qIdx, 10);
+      if (!isNaN(qIdx) && questions[qIdx]) {
+        openQuestionDetailModal(questions[qIdx], qIdx + 1, data);
+      }
+    };
 
     // Válaszok indexelése gyors eléréshez: `participant_id:question_id` -> answer
     const answerMap = new Map();
@@ -620,7 +623,9 @@
         : '<span style="color: #94a3b8;">–</span>';
       tr.appendChild(tdPc);
 
-      // 3. Kérdés cellák (1-kattintásos felülbírálás!)
+      // 3. Kérdés cellák (1-kattintásos felülbírálás kizárólag aktív dolgozatban!)
+      const isSessionActive = session && session.status === 'ACTIVE';
+
       questions.forEach(q => {
         const tdQ = document.createElement('td');
         const ans = answerMap.get(`${p.id}:${q.id}`);
@@ -643,18 +648,24 @@
           }
 
           const cellSpan = document.createElement('span');
-          cellSpan.className = `matrix-cell ${cellClass}`;
           cellSpan.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px; margin-right: 2px;">${icon}</span>${text}`;
-          cellSpan.title = `Diák válasza: ${ans.submitted_answer} (Kattints a felülbíráláshoz)`;
 
-          cellSpan.addEventListener('click', async () => {
-            let nextStatus = 'CORRECT';
-            if (ans.eval_status === 'CORRECT') nextStatus = 'PARTIAL';
-            else if (ans.eval_status === 'PARTIAL') nextStatus = 'WRONG';
-            else nextStatus = 'CORRECT';
+          if (isSessionActive) {
+            cellSpan.className = `matrix-cell ${cellClass}`;
+            cellSpan.title = `Diák válasza: ${ans.submitted_answer} (Kattints a felülbíráláshoz)`;
 
-            await overrideCell(ans.id, nextStatus);
-          });
+            cellSpan.addEventListener('click', async () => {
+              let nextStatus = 'CORRECT';
+              if (ans.eval_status === 'CORRECT') nextStatus = 'PARTIAL';
+              else if (ans.eval_status === 'PARTIAL') nextStatus = 'WRONG';
+              else nextStatus = 'CORRECT';
+
+              await overrideCell(ans.id, nextStatus);
+            });
+          } else {
+            cellSpan.className = `matrix-cell ${cellClass} cell-locked`;
+            cellSpan.title = `Diák válasza: ${ans.submitted_answer} (Lezárt dolgozat – a pontszám végleges)`;
+          }
 
           tdQ.appendChild(cellSpan);
         }
@@ -701,8 +712,6 @@
       actionWrap.style.gap = '6px';
       actionWrap.style.alignItems = 'center';
       actionWrap.style.justifyContent = 'center';
-
-      const isSessionActive = session && session.status === 'ACTIVE';
 
       if (isSessionActive) {
         // Gép váltása gomb (tantermi munkaállomás átvitele adatvesztés nélkül)
@@ -760,6 +769,221 @@
       notifyTime.textContent = 'Rendszeridő: ' + new Date().toLocaleTimeString('hu-HU');
     }
   }
+
+  /**
+   * Kérdés és Tanulói Válaszok Részletező Modál Megnyitása
+   */
+  function openQuestionDetailModal(q, qNum, matrixData) {
+    if (!q) return;
+
+    // 1. Cím és típus / pontszám
+    const titleEl = document.getElementById('qd-modal-title');
+    const subtitleEl = document.getElementById('qd-modal-subtitle');
+    if (titleEl) titleEl.textContent = `❓ ${qNum}. kérdés részletei`;
+
+    const typeNames = {
+      'ABCD': 'Feleletválasztó (ABCD)',
+      'TF': 'Igaz / Hamis (TF)',
+      'SHORT': 'Rövid szöveges válasz'
+    };
+    const typeLabel = typeNames[q.question_type] || q.question_type;
+    if (subtitleEl) subtitleEl.textContent = `${typeLabel} • ${q.points} pont`;
+
+    // 2. Kérdés szövege és formázása
+    const textEl = document.getElementById('qd-modal-text');
+    if (textEl) textEl.innerHTML = formatCode(q.question_text || '');
+
+    // 3. Kép megjelenítése (ha van)
+    const imageBox = document.getElementById('qd-modal-image-box');
+    const imageEl = document.getElementById('qd-modal-image');
+    if (imageBox && imageEl) {
+      if (q.image_path) {
+        imageEl.src = q.image_path;
+        imageBox.style.display = 'block';
+      } else {
+        imageBox.style.display = 'none';
+        imageEl.src = '';
+      }
+    }
+
+    // 4. Helyes válaszok és opciók felépítése
+    const optionsWrap = document.getElementById('qd-modal-options-wrap');
+    if (optionsWrap) {
+      optionsWrap.innerHTML = '';
+
+      let acceptedAnswers = [];
+      try {
+        const parsed = JSON.parse(q.correct_answer);
+        if (Array.isArray(parsed)) {
+          acceptedAnswers = parsed.map(a => String(a).trim());
+        } else {
+          acceptedAnswers = [String(q.correct_answer).trim()];
+        }
+      } catch {
+        if (q.question_type === 'SHORT' && q.correct_answer && q.correct_answer.includes('|')) {
+          acceptedAnswers = q.correct_answer.split('|').map(s => s.trim());
+        } else if (q.question_type === 'SHORT' && q.correct_answer && q.correct_answer.includes(';')) {
+          acceptedAnswers = q.correct_answer.split(';').map(s => s.trim());
+        } else {
+          acceptedAnswers = [String(q.correct_answer || '').trim()];
+        }
+      }
+
+      if (q.question_type === 'ABCD') {
+        const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+        let opts = [];
+        if (Array.isArray(q.options) && q.options.length > 0) {
+          opts = q.options;
+        } else if (typeof q.options_json === 'string') {
+          try {
+            opts = JSON.parse(q.options_json || '[]');
+          } catch {
+            opts = [];
+          }
+        }
+
+        opts.forEach((optText, optIdx) => {
+          const letter = letters[optIdx] || String(optIdx + 1);
+          const optRow = document.createElement('div');
+
+          const isCorrectOpt = acceptedAnswers.some(ans =>
+            ans.toLowerCase() === letter.toLowerCase() ||
+            ans.toLowerCase() === String(optText).trim().toLowerCase()
+          );
+
+          optRow.className = `qd-option-row ${isCorrectOpt ? 'is-correct' : ''}`;
+          optRow.innerHTML = `
+            <span class="qd-option-badge">${letter}</span>
+            <span class="qd-option-text">${formatCode(optText)}</span>
+            ${isCorrectOpt ? '<span class="qd-option-tag"><span class="material-symbols-outlined" style="font-size: 14px;">check</span> Helyes megoldás</span>' : ''}
+          `;
+          optionsWrap.appendChild(optRow);
+        });
+
+      } else if (q.question_type === 'TF') {
+        const tfOptions = [
+          { label: 'Igaz', val: 'Igaz', badge: 'I' },
+          { label: 'Hamis', val: 'Hamis', badge: 'H' }
+        ];
+
+        tfOptions.forEach(opt => {
+          const optRow = document.createElement('div');
+          const isCorrectOpt = acceptedAnswers.some(ans => {
+            const n = ans.toLowerCase();
+            if (opt.val === 'Igaz') return ['igaz', 'true', 'i', 't', '1'].includes(n);
+            if (opt.val === 'Hamis') return ['hamis', 'false', 'h', 'f', '0'].includes(n);
+            return false;
+          });
+
+          optRow.className = `qd-option-row ${isCorrectOpt ? 'is-correct' : ''}`;
+          optRow.innerHTML = `
+            <span class="qd-option-badge">${opt.badge}</span>
+            <span class="qd-option-text"><strong>${opt.label}</strong></span>
+            ${isCorrectOpt ? '<span class="qd-option-tag"><span class="material-symbols-outlined" style="font-size: 14px;">check</span> Helyes megoldás</span>' : ''}
+          `;
+          optionsWrap.appendChild(optRow);
+        });
+
+      } else if (q.question_type === 'SHORT') {
+        const shortRow = document.createElement('div');
+        shortRow.className = 'qd-option-row is-correct';
+        shortRow.innerHTML = `
+          <span class="qd-option-badge"><span class="material-symbols-outlined" style="font-size: 16px;">edit_note</span></span>
+          <div class="qd-option-text">
+            <div style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--success, #16a34a); font-weight: 800; margin-bottom: 2px;">Elfogadott helyes válasz(ok):</div>
+            <div>${acceptedAnswers.map(a => `<code>${escapeHtml(a)}</code>`).join(' <span style="color: var(--text-muted); font-weight: 600;">vagy</span> ')}</div>
+          </div>
+        `;
+        optionsWrap.appendChild(shortRow);
+      }
+    }
+
+    // 5. Tanári magyarázat (ha van)
+    const expBox = document.getElementById('qd-modal-explanation-box');
+    const expEl = document.getElementById('qd-modal-explanation');
+    if (expBox && expEl) {
+      if (q.explanation && q.explanation.trim()) {
+        expEl.innerHTML = formatCode(q.explanation);
+        expBox.style.display = 'block';
+      } else {
+        expBox.style.display = 'none';
+        expEl.innerHTML = '';
+      }
+    }
+
+    // 6. Tanulói válaszok táblázat feltöltése és statisztikák
+    const answersBody = document.getElementById('qd-modal-answers-body');
+    if (answersBody) {
+      answersBody.innerHTML = '';
+
+      const participants = matrixData.participants || [];
+      const answers = matrixData.answers || [];
+
+      let answeredCount = 0;
+      let correctCount = 0;
+      let partialCount = 0;
+      let wrongCount = 0;
+
+      if (participants.length === 0) {
+        const emptyRow = document.createElement('tr');
+        emptyRow.innerHTML = `<td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px; font-weight: 600;">Még nem csatlakozott tanuló a dolgozathoz.</td>`;
+        answersBody.appendChild(emptyRow);
+      } else {
+        participants.forEach((p, pIdx) => {
+          const tr = document.createElement('tr');
+          const ans = answers.find(a => String(a.participant_id) === String(p.id) && String(a.question_id) === String(q.id));
+
+          let answerHtml = '<span style="color: var(--text-muted); font-style: italic;">Még nem válaszolt</span>';
+          let timeText = '–';
+          let evalBadge = '<span class="qd-eval-badge qd-eval-none">–</span>';
+
+          if (ans) {
+            answeredCount++;
+            answerHtml = formatCode(ans.submitted_answer || '–');
+            if (ans.time_spent_sec) {
+              timeText = `${ans.time_spent_sec} mp`;
+            }
+
+            if (ans.eval_status === 'CORRECT') {
+              correctCount++;
+              evalBadge = `<span class="qd-eval-badge qd-eval-correct"><span class="material-symbols-outlined" style="font-size: 13px;">check</span> ${ans.points_earned}p</span>`;
+            } else if (ans.eval_status === 'PARTIAL') {
+              partialCount++;
+              evalBadge = `<span class="qd-eval-badge qd-eval-partial"><span class="material-symbols-outlined" style="font-size: 13px;">remove</span> ${ans.points_earned}p</span>`;
+            } else {
+              wrongCount++;
+              evalBadge = `<span class="qd-eval-badge qd-eval-wrong"><span class="material-symbols-outlined" style="font-size: 13px;">close</span> 0p</span>`;
+            }
+          }
+
+          tr.innerHTML = `
+            <td style="text-align: center; font-weight: 700; color: var(--text-muted);">${pIdx + 1}</td>
+            <td>
+              <div style="font-weight: 700; color: var(--text-main);">${escapeHtml(p.student_name)}</div>
+            </td>
+            <td>${answerHtml}</td>
+            <td style="text-align: center; color: var(--text-muted); font-size: 0.85rem;">${timeText}</td>
+            <td style="text-align: center;">${evalBadge}</td>
+          `;
+          answersBody.appendChild(tr);
+        });
+      }
+
+      const statsBadge = document.getElementById('qd-modal-stats-badge');
+      if (statsBadge) {
+        if (participants.length === 0) {
+          statsBadge.textContent = 'Még nem csatlakozott tanuló';
+        } else {
+          statsBadge.textContent = `${answeredCount} / ${participants.length} tanuló válaszolt • ${correctCount} helyes, ${wrongCount} hibás`;
+        }
+      }
+    }
+
+    openModal('modal-question-detail');
+  }
+
+  // Globálisan is elérhetővé tesszük a konzolos diagnosztikához és teszteléshez
+  window.openQuestionDetailModal = openQuestionDetailModal;
 
   // 1-kattintásos tanári felülbírálás
   async function overrideCell(answerId, nextStatus) {

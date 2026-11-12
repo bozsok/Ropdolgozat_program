@@ -284,6 +284,38 @@ if (checkConn1.ended_at === finish1.ended_at && checkConn2.ended_at === finish1.
   process.exit(1);
 }
 
+// --- 5. TESZT: Lezárt dolgozatban a válaszok és pontszámok utólagos módosítása tiltott ---
+console.log('\n--- 5. TESZT: Lezárt dolgozatban a válaszok és pontszámok utólagos módosítása tiltott ---');
+try {
+  sessionRepo.overrideAnswer({
+    answer_id: ans1.answer.id,
+    eval_status: 'WRONG'
+  });
+  console.error('❌ HIBA: A rendszer engedélyezte egy lezárt dolgozat pontszámának felülbírálását!');
+  process.exit(1);
+} catch (err) {
+  if (err.message.includes('Lezárt dolgozatban a válaszok és pontszámok')) {
+    console.log(`✓ SIKER: A JS réteg azonnal elutasította a lezárt dolgozat felülbírálását: "${err.message}"`);
+  } else {
+    console.error('❌ VÁRATLAN HIBA:', err.message);
+    process.exit(1);
+  }
+}
+
+// Közvetlen SQL UPDATE próbálkozás (trigger ellenőrzés)
+try {
+  db.prepare('UPDATE answers SET points_earned = 0 WHERE id = ?').run(ans1.answer.id);
+  console.error('❌ HIBA: Az adatbázis trigger nem védte meg a lezárt dolgozat válaszát a közvetlen SQL UPDATE ellen!');
+  process.exit(1);
+} catch (err) {
+  if (err.message.includes('Lezárt dolgozatban a válaszok és pontszámok utólag nem módosíthatók!')) {
+    console.log(`✓ SIKER: Az adatbázis trigger megvédte a lezárt dolgozatot a közvetlen SQL módosítástól: "${err.message}"`);
+  } else {
+    console.error('❌ VÁRATLAN TRIGGER HIBA:', err.message);
+    process.exit(1);
+  }
+}
+
 conn2.close();
 db.close();
 

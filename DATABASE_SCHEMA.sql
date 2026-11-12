@@ -283,3 +283,11 @@ BEGIN
     END;
 END;
 
+-- 8.23. Lezárt dolgozatban a válaszok és pontszámok utólagos módosítása tiltott
+CREATE TRIGGER IF NOT EXISTS trg_prevent_answer_update_when_session_finished
+BEFORE UPDATE ON answers
+WHEN (SELECT status FROM sessions WHERE id = OLD.session_id) = 'FINISHED'
+BEGIN
+    SELECT RAISE(ABORT, 'Lezárt dolgozatban a válaszok és pontszámok utólag nem módosíthatók!');
+END;
+
