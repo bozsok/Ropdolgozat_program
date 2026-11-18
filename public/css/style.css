@@ -340,19 +340,27 @@ h5 {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 9px 18px;
+  height: 42px;
+  box-sizing: border-box;
+  padding: 0 18px;
   font-size: 0.92rem;
   font-weight: 700;
+  font-family: inherit;
   border-radius: var(--radius-md, 10px);
   border: 1px solid transparent;
   cursor: pointer;
   text-decoration: none;
-  line-height: 1.3;
+  line-height: 1;
   transition: all 0.15s ease;
 }
 
+.btn .material-symbols-outlined {
+  font-size: 20px;
+  line-height: 1;
+}
+
 .btn:active {
-  transform: translateY(1px);
+  opacity: 0.92;
 }
 
 .btn-primary {
@@ -1345,7 +1353,6 @@ h5 {
 
 .admin-export-master-btn:hover {
   background-color: var(--primary-hover, #c2410c);
-  transform: translateY(-1px);
 }
 
 @media (max-width: 900px) {
@@ -1559,12 +1566,12 @@ h5 {
   flex-direction: column;
   height: 100%;
   box-sizing: border-box;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .quiz-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .quiz-card-header {
@@ -1781,13 +1788,12 @@ h5 {
   height: 100%;
   box-sizing: border-box;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   position: relative;
 }
 
 .folder-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 14px rgba(217, 119, 6, 0.14);
+  box-shadow: 0 3px 8px rgba(217, 119, 6, 0.12);
   border-color: #f59e0b;
 }
 
@@ -2397,27 +2403,31 @@ h5 {
 .admin-empty-btn-start {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 22px;
+  height: 42px;
+  box-sizing: border-box;
+  padding: 0 18px;
   background-color: var(--primary, #ea580c);
   color: #ffffff;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 700;
+  font-family: inherit;
+  line-height: 1;
   border-radius: var(--radius-md, 10px);
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.28);
+  transition: background-color 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .admin-empty-btn-start:hover {
   background-color: #c2410c;
-  box-shadow: 0 6px 18px rgba(234, 88, 12, 0.38);
-  transform: translateY(-1px);
 }
 
 .admin-empty-btn-start .material-symbols-outlined {
-  font-size: 22px;
+  font-size: 20px;
+  line-height: 1;
 }
 
 /* ==========================================================================
@@ -2516,39 +2526,52 @@ h5 {
 .admin-toolbar-btn-danger {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 18px;
+  height: 42px;
+  box-sizing: border-box;
+  padding: 0 18px;
   border-radius: var(--radius-md, 10px);
   background-color: var(--danger, #dc2626);
   color: #ffffff;
-  border: none;
-  font-size: 0.9rem;
+  border: 1px solid transparent;
+  font-size: 0.92rem;
   font-weight: 700;
+  font-family: inherit;
+  line-height: 1;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.2);
+  transition: background-color 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .admin-toolbar-btn-danger:hover {
   background-color: #b91c1c;
-  box-shadow: 0 4px 10px rgba(220, 38, 38, 0.3);
-  transform: translateY(-1px);
+}
+
+.admin-toolbar-btn-danger .material-symbols-outlined {
+  font-size: 20px;
+  line-height: 1;
 }
 
 .admin-toolbar-btn-secondary {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 18px;
+  height: 42px;
+  box-sizing: border-box;
+  padding: 0 18px;
   border-radius: var(--radius-md, 10px);
   background-color: #ffffff;
   color: var(--text-main, #1b1b1e);
   border: 1px solid var(--border-color, #e4e1e5);
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-family: inherit;
+  line-height: 1;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .admin-toolbar-btn-secondary:hover {
@@ -2562,25 +2585,39 @@ h5 {
   border-color: #fdba74;
 }
 
+.admin-toolbar-btn-secondary .material-symbols-outlined {
+  font-size: 20px;
+  line-height: 1;
+}
+
 .admin-toolbar-btn-race {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 20px;
+  height: 42px;
+  box-sizing: border-box;
+  padding: 0 18px;
   border-radius: var(--radius-md, 10px);
   background-color: var(--primary, #ea580c);
   color: #ffffff;
-  border: none;
-  font-size: 0.9rem;
-  font-weight: 800;
+  border: 1px solid transparent;
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-family: inherit;
+  line-height: 1;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.35);
-  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.15s ease;
 }
 
 .admin-toolbar-btn-race:hover {
   background-color: var(--primary-hover, #c2410c);
-  transform: translateY(-1px);
+}
+
+.admin-toolbar-btn-race .material-symbols-outlined {
+  font-size: 20px;
+  line-height: 1;
 }
 
 .admin-session-finished-pill {
@@ -3204,19 +3241,17 @@ body.modal-open {
   justify-content: center;
   gap: 12px;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.28);
-  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.15s ease;
   margin-top: 24px;
 }
 
 .calm-btn-primary:hover:not(:disabled) {
   background-color: var(--primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(234, 88, 12, 0.38);
 }
 
 .calm-btn-primary:active:not(:disabled) {
-  transform: scale(0.99);
+  opacity: 0.92;
 }
 
 .calm-btn-primary:disabled {
@@ -3265,7 +3300,6 @@ body.modal-open {
 .calm-btn-secondary:hover {
   background-color: var(--surface-highest, #e2e8f0);
   border-color: var(--border-dark, #cbd5e1);
-  transform: translateY(-1px);
 }
 
 .calm-btn-secondary:active {
@@ -3369,7 +3403,7 @@ body.modal-open {
 }
 
 .calm-color-card:hover {
-  transform: translateY(-2px);
+  opacity: 0.92;
 }
 
 .calm-color-card.selected {
@@ -3781,21 +3815,68 @@ body.modal-open {
   font-weight: 700;
 }
 
-.quiz-metric-score {
-  background-color: var(--secondary-fixed);
-  color: var(--on-secondary-fixed);
-}
-
 .quiz-metric-grade {
   background-color: var(--surface-low);
   color: var(--primary);
   border: 1px solid var(--border-color);
+  padding: 3px 4px 3px 12px;
+  gap: 6px;
 }
 
 .quiz-metric-grade-label {
   color: var(--text-muted);
   font-weight: 500;
   font-size: 0.9rem;
+}
+
+#quiz-metric-grade-val {
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.quiz-metric-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  background-color: var(--surface-highest, #e2e8f0);
+  color: #475569;
+  font-size: 0.88rem;
+  font-weight: 800;
+  margin-left: 2px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.quiz-metric-score .material-symbols-outlined {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Érdemjegyhez igazodó lágy pasztell kapszula színek (nem erős zöld és nem erős piros) */
+.quiz-metric-score.grade-5 {
+  background-color: var(--success-bg, #dcfce7);
+  color: #14532d;
+}
+
+.quiz-metric-score.grade-4 {
+  background-color: #e0f2f1;
+  color: #00695c;
+}
+
+.quiz-metric-score.grade-3 {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.quiz-metric-score.grade-2 {
+  background-color: #ffedd5;
+  color: #9a3412;
+}
+
+.quiz-metric-score.grade-1 {
+  background-color: #fce8e6;
+  color: #a51d24;
 }
 
 .quiz-progress-track {
@@ -4091,7 +4172,6 @@ body.modal-open {
 
 .quiz-tf-tile:hover {
   background-color: var(--surface-high);
-  transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
@@ -4099,7 +4179,6 @@ body.modal-open {
   background-color: #fff7ed;
   border-color: var(--primary);
   box-shadow: 0 4px 14px rgba(234, 88, 12, 0.18);
-  transform: translateY(-2px);
 }
 
 .quiz-tf-name {
@@ -4251,18 +4330,16 @@ body.modal-open {
   font-weight: 800;
   font-family: inherit;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.2);
-  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.15s ease;
 }
 
 .quiz-btn-submit:hover:not(:disabled) {
   background-color: var(--primary-hover);
-  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3);
-  transform: translateY(-1px);
 }
 
 .quiz-btn-submit:active:not(:disabled) {
-  transform: scale(0.98);
+  opacity: 0.92;
 }
 
 .quiz-btn-submit:disabled {
@@ -4351,18 +4428,16 @@ body.modal-open {
   font-family: inherit;
   cursor: pointer;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.2);
-  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.15s ease;
 }
 
 .quiz-btn-next-compact:hover {
   background-color: var(--primary-hover);
-  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3);
-  transform: translateY(-1px);
 }
 
 .quiz-btn-next-compact:active {
-  transform: scale(0.98);
+  opacity: 0.92;
 }
 
 /* Kompakt megnyugtató alsó tipp sáv (1 soros) */
@@ -4461,18 +4536,16 @@ body.modal-open {
   font-weight: 800;
   font-family: inherit;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.2);
-  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.15s ease;
 }
 
 .quiz-btn-next:hover {
   background-color: var(--primary-hover);
-  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3);
-  transform: translateY(-1px);
 }
 
 .quiz-btn-next:active {
-  transform: scale(0.98);
+  opacity: 0.92;
 }
 
 .quiz-feedback-correct {
@@ -4973,14 +5046,16 @@ body.modal-open {
   border-radius: 12px;
   border: none;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.15s ease;
 }
 
 .calm-summary-btn-finish:hover {
-  background-color: #c2410c;
-  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3);
-  transform: translateY(-1px);
+  background-color: var(--primary-hover);
+}
+
+.calm-summary-btn-finish:active {
+  opacity: 0.92;
 }
 
 .calm-summary-btn-finish .material-symbols-outlined {
@@ -5288,7 +5363,6 @@ body.modal-open {
 .qtype-picker-card:hover {
   background-color: var(--surface-low);
   border-color: var(--primary);
-  transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(234, 88, 12, 0.1);
 }
 

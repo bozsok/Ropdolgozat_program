@@ -4,6 +4,43 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.17.0] – 2026-11-18
+
+### Diákfelületi beágyazott élő érdemjegy és százalék kapszula érdemjegyhez igazodó Calm színskálával, teljes körű gomb- és dobozmodell-konzisztencia, elmozdulásmentes interakciók és egységes modális ablakok
+
+Tantermi ergonómiai és vizuális konzisztenciát biztosító kiadás: a tanulói tesztkitöltési felület élő metrikája kompakt beágyazott kapszulát kapott, amelyben az érdemjegy szöveges minősítése helyett tiszta számmal jelenik meg, közvetlenül mellette pedig a százalékérték a tanuló érdemjegyéhez dinamikusan igazodó lágy pasztell színt vesz fel (a 90–100%-os sávban a helyes válasz hivatalos világoszöldjével). Az egész alkalmazás felületén megszüntetésre került az összes felesleges és inkonzisztens narancssárga neon `box-shadow` árnyék, a hover alatti ugrálás (`translateY`) és a kattintáskori torzítás (`scale`), valamint teljes mértékben egységesítésre kerültek az adminisztrációs eszköztár gombjai és a dolgozatindítási, lezárási modális párbeszédpanelek.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Beágyazott élő metrika kapszula a diákfelületen:**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A korábbi két különálló chip helyett a százalékos érték (`.quiz-metric-score`) közvetlenül a szürke érdemjegy kapszula (`.quiz-metric-grade`) belsejébe költözött az érdemjegy száma mellé.
+  - Az érdemjegy kiírásából törlésre került a felesleges szöveges minősítés (pl. `(elégséges)`), kizárólag a számérték jelenik meg (`Érdemjegy: 2`, kitöltés előtt `Érdemjegy: –`).
+
+* **Dinamikus, Calm pasztell színskála a százalékos kapszulán:**
+  - **Fájlok:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A százalékértéket mutató al-kapszula háttérszíne és szövegszíne a tanuló aktuális érdemjegyének megfelelően lágy pasztell átmenettel változik:
+    - **Kezdéskor (0 megválaszolt kérdés):** semleges szürke (`#e2e8f0` háttér, `#475569` szöveg és ikon), megelőzve a tanulói szorongást az 1. kérdés megnyitásakor.
+    - **5-ös (90–100%):** hivatalos helyes válasz zöld háttér (`var(--success-bg, #dcfce7)`) mély erdőzöld szöveggel (`#14532d`).
+    - **4-es (75–89%):** lágy mentazöld (`#e0f2f1` háttér, `#00695c` tengerzöld szöveg).
+    - **3-as (55–74%):** lágy borostyánsárga (`#fef3c7` háttér, `#92400e` sötétbarna szöveg).
+    - **2-es (30–54%):** lágy barackos tónus (`#ffedd5` háttér, `#9a3412` terrakotta szöveg).
+    - **1-es (0–29%):** finom púder-rózsás háttér (`#fce8e6` háttér, `#a51d24` mályvás-bordó szöveg – nem riasztó, nem agresszív piros).
+
+#### Javítva (Fixed)
+* **Diákfelületi narancssárga gombok árnyékmentesítése és egységesítése:**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A tanulói felület narancssárga gombjairól (`.quiz-btn-submit`, `.quiz-btn-next-compact`, `.quiz-btn-next`, `.calm-summary-btn-finish`, `.calm-btn-primary`) maradéktalanul eltávolításra került a korábbi harsány narancssárga neon `box-shadow` és a hover alatti árnyéknövekedés. Helyükre a rendszer egységes, diszkrét `box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);` stílusa került.
+  - Az aktív kattintási állapotból törlésre került a méretváltoztató `scale(0.98)`, helyette elmozdulásmentes `opacity: 0.92;` biztosítja a visszacsatolást.
+
+* **Adminisztrációs eszköztár és modális ablakok stílusharmonizációja:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Az adminisztrációs felületen a korábbi *„Újabb indítása”* gomb neve hivatalosan **`Új dolgozat indítása`** lett, pixelpontosan azonos dobozmodellt és stílust kapva (`height: 42px; padding: 0 18px; font-size: 0.92rem; font-weight: 700; border-radius: 10px`).
+  - Az eszköztár összes gombja (`.admin-toolbar-btn-secondary`, `.admin-empty-btn-start`, `.admin-toolbar-btn-danger`, `.admin-toolbar-btn-race`) egységes 42px magasságot és 20px ikont kapott.
+  - A dolgozatindítási (`#modal-start-session`) és dolgozatbefejezési (`#modal-confirm-finish`) modális ablakok felülete egységesült: modern, kerek ikonjelvény (rakéta és hivatalos lakat ikon), jobb felső X bezáró gomb, tiszta gombhierarchia.
+  - Megszűnt az összes Y irányú lebegés és elmozdulás (`translateY`) a gombokon, a Tesztszerkesztő mappakártyáin (`.folder-card`) és dolgozatkártyáin (`.quiz-card`).
+
+---
+
 ## [1.16.0] – 2026-11-18
 
 ### Hivatalos osztálynévsorok KRÉTA import/exportja, vízszintes osztályválasztó és 2 oszlopos számozott nézet, lezárt dolgozatok archívum-függetlensége (`ON DELETE SET NULL`) és a diákfelület gombkonzisztenciája

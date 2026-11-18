@@ -105,6 +105,7 @@
   const questionProgress = document.getElementById('question-progress');
   const questionTypeBadge = document.getElementById('question-type-badge');
   const quizMetricScoreVal = document.getElementById('quiz-metric-score-val');
+  const quizMetricScoreChip = document.getElementById('quiz-metric-score-chip');
   const quizMetricGradeVal = document.getElementById('quiz-metric-grade-val');
   const quizProgressBarFill = document.getElementById('quiz-progress-bar-fill');
   const progressTextDone = document.getElementById('progress-text-done');
@@ -573,6 +574,9 @@
     if (answeredCount === 0) {
       if (quizMetricScoreVal) quizMetricScoreVal.textContent = '–';
       if (quizMetricGradeVal) quizMetricGradeVal.textContent = '–';
+      if (quizMetricScoreChip) {
+        quizMetricScoreChip.classList.remove('grade-1', 'grade-2', 'grade-3', 'grade-4', 'grade-5');
+      }
       return;
     }
 
@@ -588,10 +592,13 @@
 
     const percentage = Math.min(100, Math.round((earnedPoints / totalMaxPoints) * 100));
     const grade = calculateKRÉTAGrade(percentage, sessionThresholds);
-    const gradeText = getKRÉTAGradeText(grade);
 
     if (quizMetricScoreVal) quizMetricScoreVal.textContent = `${percentage}%`;
-    if (quizMetricGradeVal) quizMetricGradeVal.textContent = `${grade} (${gradeText})`;
+    if (quizMetricGradeVal) quizMetricGradeVal.textContent = `${grade}`;
+    if (quizMetricScoreChip) {
+      quizMetricScoreChip.classList.remove('grade-1', 'grade-2', 'grade-3', 'grade-4', 'grade-5');
+      quizMetricScoreChip.classList.add(`grade-${grade}`);
+    }
   }
 
   /**
