@@ -1,5 +1,3 @@
 1. exportálni a Socrative-ból a teszteket és létrehozni a saját webalkalmazásban azokat
 2. exportálni KRÉTA rendszerből a tanulói névsort, osztályokat és importálhatóvá tenni a saját webalkalmazásban
-3. a kérdés számára a kérdés jelenjen meg tooltipként, ne a mostani '1. kérdés és tanulói válaszok részletei'
-4. Nem kell a nevek elé a színes korong a név kezdőbetűivel
-5. Jelmagyarázat és értékelési küszöbök esetén a Narancs sznínél nincsen színes keret és színes háttér, sőt az ikonja nem harmonizál a meglévőkkel. A meglévők mindegyike egy kör és benne valamilyne jel, pl. pipa, x, üres. A narancs esetében egy - jel kell a körbe.
+3. Ha rákattintok eg ykérdés számára, akkor megjelenik modal ablakban az adott kérdés és kapott válaszok. Ám mellé görgetve a hátsó tartalom görgetődik. ez nem jó. Modal ablak esetében csak a modal ablaknak szabad görgetődnie, ha elviszem az egérkurzort róla, akkor a háttér tartalma ne görgetődjön.

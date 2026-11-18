@@ -1130,6 +1130,7 @@
     shortAnswerContainer.style.display = 'none';
     shortAnswerInput.value = '';
     shortAnswerInput.disabled = false;
+    shortAnswerInput.classList.remove('input-correct', 'input-wrong');
 
     // 5. Kérdéstípus szerinti megjelenítés
     if (q.question_type === 'ABCD') {
@@ -1276,29 +1277,103 @@
   }
 
   /**
-   * Azonnali Socrative Visszajelzés (Kompakt 1 soros sáv, nulla görgetés)
+   * Azonnali Socrative Visszajelzés (Csempeszínezés + Semleges alsó sáv)
    */
   function showFeedback(result) {
     feedbackCard.style.display = 'flex';
 
-    if (result.is_correct === 1) {
+    const q = currentQuestions[currentQuestionIndex];
+    const isCorrect = (result.is_correct === 1);
+
+    // 1. Csempék megjelölése (ABCD és TF)
+    if (q && q.question_type === 'ABCD') {
+      let accepted = [];
+      try {
+        const parsed = JSON.parse(result.correctAnswer);
+        if (Array.isArray(parsed)) {
+          accepted = parsed.map(s => String(s).trim().toLowerCase());
+        } else {
+          accepted = [String(result.correctAnswer).trim().toLowerCase()];
+        }
+      } catch {
+        accepted = [String(result.correctAnswer).trim().toLowerCase()];
+      }
+
+      document.querySelectorAll('.quiz-option-tile').forEach(tile => {
+        const val = (tile.dataset.value || '').trim().toLowerCase();
+        const isThisCorrect = accepted.includes(val);
+        const isSelected = tile.classList.contains('selected');
+
+        if (isThisCorrect) {
+          tile.classList.add('tile-correct');
+          const checkIcon = tile.querySelector('.quiz-option-check');
+          if (checkIcon) checkIcon.textContent = 'check';
+        } else if (isSelected && !isCorrect) {
+          tile.classList.add('tile-wrong');
+          const checkIcon = tile.querySelector('.quiz-option-check');
+          if (checkIcon) checkIcon.textContent = 'close';
+        }
+      });
+
+    } else if (q && q.question_type === 'TF') {
+      const normCorrect = String(result.correctAnswer || '').trim().toLowerCase();
+      const isTrueCorrect = ['igaz', 'true', 'i', 't', '1'].includes(normCorrect);
+      const isFalseCorrect = ['hamis', 'false', 'h', 'f', '0'].includes(normCorrect);
+
+      document.querySelectorAll('.quiz-tf-tile').forEach(tile => {
+        const val = (tile.dataset.value || '').trim().toLowerCase();
+        let isThisCorrect = false;
+        if (val === 'igaz' && isTrueCorrect) isThisCorrect = true;
+        if (val === 'hamis' && isFalseCorrect) isThisCorrect = true;
+
+        const isSelected = tile.classList.contains('selected');
+
+        if (isThisCorrect) {
+          tile.classList.add('tile-correct');
+        } else if (isSelected && !isCorrect) {
+          tile.classList.add('tile-wrong');
+        }
+      });
+
+    } else if (q && q.question_type === 'SHORT') {
+      if (isCorrect) {
+        shortAnswerInput.classList.add('input-correct');
+      } else {
+        shortAnswerInput.classList.add('input-wrong');
+      }
+    }
+
+    // 2. Alsó visszajelző sáv (Semleges háttér, 2 soros szöveg)
+    let displayCorrectAnswer = result.correctAnswer;
+    if (q && q.question_type === 'TF') {
+      const norm = String(result.correctAnswer || '').trim().toLowerCase();
+      if (['igaz', 'true', 'i', 't', '1'].includes(norm)) displayCorrectAnswer = 'Igaz';
+      else if (['hamis', 'false', 'h', 'f', '0'].includes(norm)) displayCorrectAnswer = 'Hamis';
+    } else if (q && q.question_type === 'ABCD') {
+      try {
+        const parsed = JSON.parse(result.correctAnswer);
+        if (Array.isArray(parsed)) displayCorrectAnswer = parsed.join(', ');
+      } catch {
+        // maradhat az eredeti result.correctAnswer
+      }
+    }
+
+    if (isCorrect) {
       feedbackCard.className = 'quiz-feedback-strip quiz-feedback-strip-correct';
       if (feedbackIcon) feedbackIcon.textContent = 'task_alt';
-      feedbackTitle.innerHTML = `🎉 Helyes válasz! (+${result.points_earned} pont)`;
-      if (result.explanation) {
-        feedbackBody.innerHTML = ` · <em>Magyarázat: ${formatCode(result.explanation)}</em>`;
-      } else {
-        feedbackBody.innerHTML = '';
-      }
+      feedbackTitle.innerHTML = `Helyes válasz! (+${result.points_earned} pont)`;
     } else {
       feedbackCard.className = 'quiz-feedback-strip quiz-feedback-strip-wrong';
       if (feedbackIcon) feedbackIcon.textContent = 'cancel';
-      feedbackTitle.innerHTML = `❌ Helyes megoldás: <strong>${formatCode(result.correctAnswer)}</strong>`;
-      if (result.explanation) {
-        feedbackBody.innerHTML = ` · <em>${formatCode(result.explanation)}</em>`;
-      } else {
-        feedbackBody.innerHTML = '';
-      }
+      feedbackTitle.innerHTML = `Helyes megoldás: <strong>${formatCode(displayCorrectAnswer)}</strong>`;
+    }
+
+    if (result.explanation) {
+      feedbackBody.innerHTML = `<em>${formatCode(result.explanation)}</em>`;
+      feedbackBody.style.display = 'block';
+    } else {
+      feedbackBody.innerHTML = '';
+      feedbackBody.style.display = 'none';
     }
 
     const isLast = (currentQuestionIndex + 1 >= currentQuestions.length) || result.isFinished;

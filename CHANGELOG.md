@@ -17,6 +17,12 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
   - Helyüket két nagy méretű, tiszta, középre zárt és modern gombkártya vette át, kizárólag a lényeggel: **IGAZ** és **HAMIS**. Kiválasztáskor a kártya elegáns narancssárga kiemelést és finom árnyékot kap.
 
 #### Javítva (Fixed)
+* **Diákoldali válasz-kiértékelés megújítása (közvetlen csempeszínezés és semleges, két soros visszajelző sáv):**
+  - **Fájlok:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html)
+  - **Közvetlen csempeszínezés:** Válaszbeküldéskor hibás válasz esetén a tanuló által megjelölt válaszcsempe halvány pirosas hátteret és diszkrét piros keretet kap (`.tile-wrong`, feleletválasztónál piros X ikonnal a rádiógombban), a helyes megoldás csempéje pedig egyidejűleg zöld kiemelést kap (`.tile-correct`, zöld pipa ikonnal). Helyes válasz esetén a megjelölt csempe zöld kiemelést kap. Rövid szöveges válasznál a beviteli mező színesedik a helyességnek megfelelően (`.input-correct`, `.input-wrong`).
+  - **Semleges és rendezett alsó sáv:** A *„Következő”* gomb sora megszűnt harsányan elszíneződni; semleges, világos háttérszínt és szürke keretet kapott.
+  - **Két soros szövegtördelés:** A helyes megoldás szövege és az esetleges tanári magyarázat rugalmasan két sorba tördelődik, így hosszabb válaszok esetén sem fedi el a *„Következő”* gombot, és nem lóg ki a képernyőről.
+
 * **Tesztszerkesztő relációbiztos mentése (FOREIGN KEY hiba megszűntetése):**
   - **Fájlok:** [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
   - Megszűnt a tesztek szerkesztésekor és a *„Feladatsor mentése”* gomb megnyomásakor jelentkező `Mentési hiba: FOREIGN KEY constraint failed` hiba.

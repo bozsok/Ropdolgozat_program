@@ -410,12 +410,14 @@
               </button>
             </div>
 
-            <!-- Kompakt azonnali Socrative visszajelző sáv (1 soros Zöld / Piros) -->
+            <!-- Kompakt azonnali visszajelző sáv (Semleges háttér, 2 soros szöveg, Következő gomb) -->
             <div id="feedback-card" class="quiz-feedback-strip" style="display: none;">
               <div class="quiz-feedback-strip-info">
                 <span id="feedback-icon" class="material-symbols-outlined quiz-feedback-strip-icon">task_alt</span>
-                <span id="feedback-title" class="quiz-feedback-strip-title">Helyes válasz!</span>
-                <span id="feedback-body" class="quiz-feedback-strip-body"></span>
+                <div class="quiz-feedback-strip-text">
+                  <span id="feedback-title" class="quiz-feedback-strip-title">Helyes válasz!</span>
+                  <span id="feedback-body" class="quiz-feedback-strip-body"></span>
+                </div>
               </div>
               <button id="btn-next-question" class="quiz-btn-next-compact" type="button">
                 <span>Következő</span>

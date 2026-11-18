@@ -3414,6 +3414,57 @@ h5 {
   color: #ffffff;
 }
 
+/* Kérdés kiértékelési állapotok csempékhez (ABCD) */
+.quiz-option-tile.tile-correct {
+  background-color: var(--success-bg);
+  border-color: var(--success);
+  box-shadow: 0 2px 10px rgba(22, 163, 74, 0.15);
+}
+
+.quiz-option-tile.tile-correct .quiz-option-badge {
+  background-color: var(--success);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
+}
+
+.quiz-option-tile.tile-correct .quiz-option-text {
+  font-weight: 800;
+  color: #14532d;
+}
+
+.quiz-option-tile.tile-correct .quiz-option-radio {
+  background-color: var(--success);
+}
+
+.quiz-option-tile.tile-correct .quiz-option-check {
+  color: #ffffff;
+}
+
+.quiz-option-tile.tile-wrong {
+  background-color: var(--danger-bg);
+  border-color: var(--danger);
+  box-shadow: 0 2px 10px rgba(220, 38, 38, 0.15);
+}
+
+.quiz-option-tile.tile-wrong .quiz-option-badge {
+  background-color: var(--danger);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.35);
+}
+
+.quiz-option-tile.tile-wrong .quiz-option-text {
+  font-weight: 800;
+  color: #7f1d1d;
+}
+
+.quiz-option-tile.tile-wrong .quiz-option-radio {
+  background-color: var(--danger);
+}
+
+.quiz-option-tile.tile-wrong .quiz-option-check {
+  color: #ffffff;
+}
+
 /* Igaz / Hamis (TF) kártyák 2 oszlopos rácsa */
 .quiz-tf-grid {
   display: grid;
@@ -3468,6 +3519,27 @@ h5 {
   color: var(--primary);
 }
 
+/* Kérdés kiértékelési állapotok TF csempékhez */
+.quiz-tf-tile.tile-correct {
+  background-color: var(--success-bg);
+  border-color: var(--success);
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.18);
+}
+
+.quiz-tf-tile.tile-correct .quiz-tf-name {
+  color: #14532d;
+}
+
+.quiz-tf-tile.tile-wrong {
+  background-color: var(--danger-bg);
+  border-color: var(--danger);
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.18);
+}
+
+.quiz-tf-tile.tile-wrong .quiz-tf-name {
+  color: #7f1d1d;
+}
+
 /* SHORT kérdés mező */
 .quiz-short-wrap {
   margin-bottom: 16px;
@@ -3504,6 +3576,18 @@ h5 {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
+}
+
+.quiz-short-input.input-correct {
+  background-color: var(--success-bg);
+  border-color: var(--success);
+  color: #14532d;
+}
+
+.quiz-short-input.input-wrong {
+  background-color: var(--danger-bg);
+  border-color: var(--danger);
+  color: #7f1d1d;
 }
 
 /* Alsó rögzített lábléc zóna (stabil magasság, nincs ugrálás) */
@@ -3592,7 +3676,7 @@ h5 {
   box-shadow: none;
 }
 
-/* Kompakt 1 soros azonnali Socrative visszajelző sáv (Szellős, jól látható) */
+/* Kompakt azonnali Socrative visszajelző sáv (Semleges háttér, 2 soros szöveg, nincs harsány elszíneződés) */
 .quiz-feedback-strip {
   display: flex;
   align-items: center;
@@ -3603,49 +3687,52 @@ h5 {
   border-radius: 12px;
   min-height: 52px;
   box-sizing: border-box;
+  background-color: var(--surface-low);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
 }
 
 .quiz-feedback-strip-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex: 1;
   min-width: 0;
   font-size: 1.05rem;
 }
 
 .quiz-feedback-strip-icon {
-  font-size: 24px;
+  font-size: 26px;
   flex-shrink: 0;
+}
+
+.quiz-feedback-strip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
 }
 
 .quiz-feedback-strip-title {
   font-weight: 800;
-  font-size: 1.1rem;
-  white-space: nowrap;
+  font-size: 1.05rem;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+  color: var(--text-main);
 }
 
 .quiz-feedback-strip-body {
-  font-size: 1rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.quiz-feedback-strip-correct {
-  background-color: var(--success-bg);
-  border: 1px solid var(--success-border);
-  color: #14532d;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+  white-space: normal;
+  word-break: break-word;
 }
 
 .quiz-feedback-strip-correct .quiz-feedback-strip-icon {
   color: var(--success);
-}
-
-.quiz-feedback-strip-wrong {
-  background-color: var(--danger-bg);
-  border: 1px solid var(--danger-border);
-  color: #7f1d1d;
 }
 
 .quiz-feedback-strip-wrong .quiz-feedback-strip-icon {
