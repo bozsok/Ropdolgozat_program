@@ -75,12 +75,25 @@ function showToast(message, type = 'info') {
 }
 
 /**
+ * Aktív modális ablakok ellenőrzése és a háttérgörgetés zárolása/feloldása
+ */
+function syncBodyScrollLock() {
+  const hasActiveModal = document.querySelector('.modal-backdrop.active, .calm-modal-backdrop.active') !== null;
+  if (hasActiveModal) {
+    document.body.classList.add('modal-open');
+  } else {
+    document.body.classList.remove('modal-open');
+  }
+}
+
+/**
  * Modal ablak megnyitása
  */
 function openModal(modalId) {
   const modal = document.getElementById(modalId);
   if (modal) {
     modal.classList.add('active');
+    syncBodyScrollLock();
   }
 }
 
@@ -91,6 +104,7 @@ function closeModal(modalId) {
   const modal = document.getElementById(modalId);
   if (modal) {
     modal.classList.remove('active');
+    syncBodyScrollLock();
   }
 }
 
@@ -100,6 +114,7 @@ window.addEventListener('click', (e) => {
     // Az admin felületen (admin.html) a login-modal kötelező hitelesítési kapu, ott tilos bezárni mellékattintással
     if (e.target.id === 'login-modal' && e.target.classList.contains('modal-backdrop')) return;
     e.target.classList.remove('active');
+    syncBodyScrollLock();
   }
 });
 

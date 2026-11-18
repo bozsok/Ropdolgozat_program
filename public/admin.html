@@ -520,6 +520,14 @@
               <h4>Kérdések a feladatsorban:</h4>
               <button id="btn-add-question" type="button" class="btn btn-secondary">➕ Kérdés hozzáadása</button>
             </div>
+            <div id="q-insert-top-zone" class="q-insert-divider q-insert-top" style="display: none;">
+              <div class="q-insert-line"></div>
+              <button type="button" class="q-insert-btn" id="btn-insert-top" title="Kérdés beszúrása a feladatsor legelejére">
+                <span class="material-symbols-outlined">add</span>
+                <span class="q-insert-btn-label">Beszúrás a legelejére</span>
+              </button>
+              <div class="q-insert-line"></div>
+            </div>
             <div id="editor-questions-list">
               <!-- Dinamikus kérdésblokkok -->
             </div>
@@ -804,6 +812,68 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-delete-quiz')">Mégse</button>
         <button type="button" id="btn-submit-delete-quiz" class="btn btn-danger">🗑️ Teszt törlése</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kérdéstípus Kiválasztása Modal (Új kérdés létrehozásához vagy beszúrásához) -->
+  <div id="modal-qtype-picker" class="modal-backdrop">
+    <div class="modal-window" style="max-width: 520px;">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="calm-modal-icon-badge">
+            <span class="material-symbols-outlined">add_circle</span>
+          </div>
+          <div>
+            <h3 class="card-title" style="margin: 0; font-size: 1.25rem;">Új kérdés hozzáadása</h3>
+            <p style="margin: 0; font-size: 0.88rem; color: var(--text-muted);">Válaszd ki a létrehozandó kérdés típusát!</p>
+          </div>
+        </div>
+        <button type="button" class="calm-modal-close-btn" onclick="closeModal('modal-qtype-picker')" title="Bezárás">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <div class="qtype-picker-grid">
+        <!-- 1. Feleletválasztó (ABCD) -->
+        <button type="button" class="qtype-picker-card" data-type="ABCD">
+          <div class="qtype-card-icon-box qtype-icon-abcd">
+            <span class="material-symbols-outlined">format_list_bulleted</span>
+          </div>
+          <div class="qtype-card-content">
+            <h4 class="qtype-card-title">Feleletválasztós (ABCD)</h4>
+            <p class="qtype-card-desc">4 válaszlehetőség megadása, 1 megjelölhető helyes válasszal.</p>
+          </div>
+          <span class="material-symbols-outlined qtype-arrow-icon">arrow_forward</span>
+        </button>
+
+        <!-- 2. Igaz / Hamis (TF) -->
+        <button type="button" class="qtype-picker-card" data-type="TF">
+          <div class="qtype-card-icon-box qtype-icon-tf">
+            <span class="material-symbols-outlined">flaky</span>
+          </div>
+          <div class="qtype-card-content">
+            <h4 class="qtype-card-title">Igaz / Hamis (TF)</h4>
+            <p class="qtype-card-desc">Egyszerű kétállapotú eldöntendő kérdés egy állítás igazságtartalmáról.</p>
+          </div>
+          <span class="material-symbols-outlined qtype-arrow-icon">arrow_forward</span>
+        </button>
+
+        <!-- 3. Rövid válasz (SHORT) -->
+        <button type="button" class="qtype-picker-card" data-type="SHORT">
+          <div class="qtype-card-icon-box qtype-icon-short">
+            <span class="material-symbols-outlined">edit_note</span>
+          </div>
+          <div class="qtype-card-content">
+            <h4 class="qtype-card-title">Rövid válasz (SHORT)</h4>
+            <p class="qtype-card-desc">A diák által manuálisan begépelt szöveges vagy számszerű válasz.</p>
+          </div>
+          <span class="material-symbols-outlined qtype-arrow-icon">arrow_forward</span>
+        </button>
+      </div>
+
+      <div class="modal-footer" style="margin-top: 18px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-qtype-picker')">Mégse</button>
       </div>
     </div>
   </div>

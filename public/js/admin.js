@@ -1395,6 +1395,7 @@
       editTimeLimit.value = '10';
       editorQuestionsList.innerHTML = '';
       addQuestionBlock(); // 1 üres kérdés alapból
+      renumberQuestions();
       return;
     }
 
@@ -1413,6 +1414,7 @@
       quiz.questions.forEach(q => {
         addQuestionBlock(q);
       });
+      renumberQuestions();
     } catch (err) {
       console.error('Hiba a teszt betöltésekor:', err);
     }
@@ -1423,94 +1425,307 @@
     quizEditorCard.style.display = 'none';
   });
 
-  // Kérdés blokk hozzáadása a szerkesztőhöz
-  btnAddQuestion.addEventListener('click', () => addQuestionBlock());
+  // Tesztszerkesztő in-line beszúrás, modális választó és Drag & Drop állapotok
+  const btnInsertTop = document.getElementById('btn-insert-top');
+  const qInsertTopZone = document.getElementById('q-insert-top-zone');
+  let draggedEditorItem = null;
+  let isDraggingAny = false;
+  let pendingInsertBeforeItem = null;
 
-  function addQuestionBlock(existing = null) {
-    const qIndex = editorQuestionsList.children.length + 1;
-    const block = document.createElement('div');
-    block.className = 'card';
-    block.style.padding = '16px';
-    block.style.marginBottom = '16px';
-    block.style.backgroundColor = '#f8fafc';
+  /**
+   * Kérdésszámok és beszúrózónák dinamikus újrasorszámozása
+   */
+  function renumberQuestions() {
+    const items = editorQuestionsList.querySelectorAll('.q-editor-item');
+    if (qInsertTopZone) {
+      qInsertTopZone.style.display = items.length > 0 ? 'flex' : 'none';
+    }
+    items.forEach((item, idx) => {
+      const numEl = item.querySelector('.q-card-number');
+      if (numEl) numEl.textContent = `${idx + 1}. kérdés`;
+    });
+  }
+
+  /**
+   * Kérdéstípus-választó modális ablak megnyitása
+   * @param {HTMLElement|null} targetItem - Az az elem, amely ELÉ be kell szúrni; ha null, a lista végére kerül
+   */
+  function openQuestionTypePicker(targetItem = null) {
+    pendingInsertBeforeItem = targetItem;
+    openModal('modal-qtype-picker');
+  }
+
+  // Modális típusválasztó kártyák eseménykezelői
+  document.querySelectorAll('#modal-qtype-picker .qtype-picker-card').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const chosenType = btn.dataset.type || 'ABCD';
+      closeModal('modal-qtype-picker');
+
+      const target = pendingInsertBeforeItem;
+      pendingInsertBeforeItem = null;
+
+      const newBlock = addQuestionBlock({ question_type: chosenType }, target);
+      renumberQuestions();
+
+      if (newBlock) {
+        const textInput = newBlock.querySelector('.q-text');
+        if (textInput) textInput.focus();
+        newBlock.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  });
+
+  // Felső Kérdés hozzáadása és Legelejére beszúrás gombok
+  btnAddQuestion.addEventListener('click', () => openQuestionTypePicker(null));
+  if (btnInsertTop) {
+    btnInsertTop.addEventListener('click', () => {
+      const firstItem = editorQuestionsList.querySelector('.q-editor-item');
+      openQuestionTypePicker(firstItem);
+    });
+  }
+
+  // Lista-szintű Drag & Drop kezelés (valós idejű átrendezés)
+  editorQuestionsList.addEventListener('dragover', (e) => {
+    if (!draggedEditorItem) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const targetItem = e.target.closest('.q-editor-item');
+    if (!targetItem || targetItem === draggedEditorItem) return;
+
+    const rect = targetItem.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    if (e.clientY < midpoint) {
+      editorQuestionsList.insertBefore(draggedEditorItem, targetItem);
+    } else {
+      editorQuestionsList.insertBefore(draggedEditorItem, targetItem.nextElementSibling);
+    }
+  });
+
+  editorQuestionsList.addEventListener('drop', (e) => {
+    if (!draggedEditorItem) return;
+    e.preventDefault();
+    renumberQuestions();
+  });
+
+  /**
+   * Kérdésblokk létrehozása és beillesztése a szerkesztőhöz
+   * @param {Object|null} existing - Meglévő kérdés adatai
+   * @param {HTMLElement|null} insertBeforeItem - Beszúrási célpont
+   */
+  function addQuestionBlock(existing = null, insertBeforeItem = null) {
+    const item = document.createElement('div');
+    item.className = 'q-editor-item';
+    item.draggable = false;
     if (existing && existing.id) {
-      block.dataset.questionId = existing.id;
+      item.dataset.questionId = existing.id;
     }
 
     const qType = existing ? existing.question_type : 'ABCD';
     const qText = existing ? existing.question_text : '';
     const qPoints = existing ? existing.points : 1.0;
-    const qCorrect = existing ? existing.correct_answer : '';
+    const qCorrect = existing ? String(existing.correct_answer || '').trim() : '';
     const qExpl = existing ? existing.explanation : '';
     const qOptions = existing && Array.isArray(existing.options) ? existing.options : ['', '', '', ''];
 
-    block.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h5>${qIndex}. kérdés</h5>
-        <button type="button" class="btn btn-secondary btn-remove-q" style="padding: 4px 8px; font-size: 0.8rem;">❌ Eltávolítás</button>
+    // Meglévő helyes válasz indexének azonosítása ABCD esetén
+    let correctOptionIndex = -1;
+    if (qType === 'ABCD' && qCorrect) {
+      const letterIndexMap = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 };
+      if (letterIndexMap[qCorrect.toUpperCase()] !== undefined) {
+        correctOptionIndex = letterIndexMap[qCorrect.toUpperCase()];
+      } else {
+        correctOptionIndex = qOptions.findIndex(opt => String(opt).trim().toLowerCase() === qCorrect.toLowerCase());
+      }
+    }
+
+    // Meglévő helyes válasz azonosítása TF esetén
+    let tfCorrectVal = '';
+    if (qType === 'TF' && qCorrect) {
+      const norm = qCorrect.toLowerCase();
+      if (['igaz', 'true', '1', 't', 'i'].includes(norm)) tfCorrectVal = 'Igaz';
+      else if (['hamis', 'false', '0', 'f', 'h'].includes(norm)) tfCorrectVal = 'Hamis';
+    }
+
+    item.innerHTML = `
+      <div class="card q-editor-card">
+        <div class="q-card-header">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="q-drag-handle" title="Húzd a kérdés átrendezéséhez">
+              <span class="material-symbols-outlined">drag_indicator</span>
+            </div>
+            <h5 class="q-card-number">Kérdés</h5>
+          </div>
+          <button type="button" class="btn btn-secondary btn-remove-q" style="padding: 4px 8px; font-size: 0.8rem;">❌ Eltávolítás</button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 200px 100px 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label class="form-label">Típus:</label>
+            <select class="form-control q-type-select">
+              <option value="ABCD" ${qType === 'ABCD' ? 'selected' : ''}>Feleletválasztós (ABCD)</option>
+              <option value="TF" ${qType === 'TF' ? 'selected' : ''}>Igaz / Hamis (TF)</option>
+              <option value="SHORT" ${qType === 'SHORT' ? 'selected' : ''}>Rövid válasz (SHORT)</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Pont:</label>
+            <input type="number" step="0.5" min="0.5" class="form-control q-points" value="${qPoints}">
+          </div>
+          <div>
+            <label class="form-label">Kérdés szövege (használd a \`kód\` jelölést!):</label>
+            <input type="text" class="form-control q-text" value="${escapeHtml(qText)}" placeholder="pl. Melyik képlet számol összeget?">
+          </div>
+        </div>
+
+        <!-- 1. Válaszlehetőségek szerkesztése ABCD esetén (Számozott gombokra kattintva kizöldül a helyes) -->
+        <div class="q-options-box" style="${qType === 'ABCD' ? '' : 'display:none;'} margin-bottom: 12px;">
+          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>A helyes válasz megadásához kattints a kérdés számára!</span>
+            <span style="font-size: 0.82rem; font-weight: normal; color: var(--text-muted);">🟢 1 kötelezően kijelölendő</span>
+          </label>
+          <div class="q-opt-grid">
+            ${[0, 1, 2, 3].map(i => `
+              <div class="q-opt-row ${correctOptionIndex === i ? 'is-correct' : ''}">
+                <button type="button" class="q-opt-correct-toggle ${correctOptionIndex === i ? 'is-correct' : ''}" data-opt-index="${i}" title="Kattints ide a helyes válasz kizöldítéséhez!">
+                  <span class="q-opt-num">${i + 1}</span>
+                  <span class="material-symbols-outlined q-opt-check">check</span>
+                </button>
+                <input type="text" class="form-control q-opt-input q-opt-${i}" placeholder="${i + 1}. válaszlehetőség" value="${escapeHtml(qOptions[i] || '')}">
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- 2. Igaz / Hamis (TF) esetén kizöldíthető gombok -->
+        <div class="q-tf-box" style="${qType === 'TF' ? '' : 'display:none;'} margin-bottom: 12px;">
+          <label class="form-label">A helyes állítás megadásához kattints az állításra!</label>
+          <div class="q-tf-select-wrap">
+            <button type="button" class="btn-tf-pick ${tfCorrectVal === 'Igaz' ? 'is-correct' : ''}" data-value="Igaz">
+              <span class="material-symbols-outlined tf-pick-icon">check_circle</span>
+              <span>IGAZ</span>
+            </button>
+            <button type="button" class="btn-tf-pick ${tfCorrectVal === 'Hamis' ? 'is-correct' : ''}" data-value="Hamis">
+              <span class="material-symbols-outlined tf-pick-icon">check_circle</span>
+              <span>HAMIS</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. Rövid válasz (SHORT) esetén elfogadott szövegmező -->
+        <div class="q-short-box" style="${qType === 'SHORT' ? '' : 'display:none;'} margin-bottom: 12px;">
+          <label class="form-label">Elfogadott helyes válasz (amit a diáknak pontosan be kell gépelnie):</label>
+          <input type="text" class="form-control q-short-input-val" value="${escapeHtml(qCorrect)}" placeholder="pl. =SZUM(A1:A10) vagy RAM">
+        </div>
+
+        <!-- Magyarázat sor (mindhárom típusnál tiszta és egységes) -->
+        <div style="margin-top: 10px;">
+          <label class="form-label">Magyarázat (opcionális tanári indoklás a diák visszajelzéséhez):</label>
+          <input type="text" class="form-control q-explanation" value="${escapeHtml(qExpl)}" placeholder="A megoldás magyarázata a diák képernyőjén megjelenő visszajelzéshez...">
+        </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 200px 100px 1fr; gap: 12px; margin-bottom: 12px;">
-        <div>
-          <label class="form-label">Típus:</label>
-          <select class="form-control q-type-select">
-            <option value="ABCD" ${qType === 'ABCD' ? 'selected' : ''}>Feleletválasztós (ABCD)</option>
-            <option value="TF" ${qType === 'TF' ? 'selected' : ''}>Igaz / Hamis (TF)</option>
-            <option value="SHORT" ${qType === 'SHORT' ? 'selected' : ''}>Rövid válasz (SHORT)</option>
-          </select>
-        </div>
-        <div>
-          <label class="form-label">Pont:</label>
-          <input type="number" step="0.5" min="0.5" class="form-control q-points" value="${qPoints}">
-        </div>
-        <div>
-          <label class="form-label">Kérdés szövege (használd a \`kód\` jelölést!):</label>
-          <input type="text" class="form-control q-text" value="${escapeHtml(qText)}" placeholder="pl. Melyik képlet számol összeget?">
-        </div>
-      </div>
-
-      <!-- Válaszlehetőségek szerkesztése ABCD esetén -->
-      <div class="q-options-box" style="${qType === 'ABCD' ? '' : 'display:none;'} margin-bottom: 12px;">
-        <label class="form-label">Válaszopciók és helyes válasz:</label>
-        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-          <input type="text" class="form-control q-opt-0" placeholder="A válasz" value="${escapeHtml(qOptions[0] || '')}">
-          <input type="text" class="form-control q-opt-1" placeholder="B válasz" value="${escapeHtml(qOptions[1] || '')}">
-          <input type="text" class="form-control q-opt-2" placeholder="C válasz" value="${escapeHtml(qOptions[2] || '')}">
-          <input type="text" class="form-control q-opt-3" placeholder="D válasz" value="${escapeHtml(qOptions[3] || '')}">
-        </div>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-        <div>
-          <label class="form-label">Helyes válasz pontos értéke:</label>
-          <input type="text" class="form-control q-correct" value="${escapeHtml(qCorrect)}" placeholder="pl. =SZUM(A1:A10)">
-        </div>
-        <div>
-          <label class="form-label">Magyarázat (visszajelzéshez):</label>
-          <input type="text" class="form-control q-explanation" value="${escapeHtml(qExpl)}" placeholder="A megoldás magyarázata...">
-        </div>
+      <!-- In-line lebegő kérdésbeszúró sáv közvetlenül a kérdés alatt -->
+      <div class="q-insert-divider">
+        <div class="q-insert-line"></div>
+        <button type="button" class="q-insert-btn" title="Új kérdés beszúrása ide">
+          <span class="material-symbols-outlined">add</span>
+          <span class="q-insert-btn-label">Kérdés beszúrása</span>
+        </button>
+        <div class="q-insert-line"></div>
       </div>
     `;
 
     // Típusváltás figyelése
-    const typeSelect = block.querySelector('.q-type-select');
-    const optBox = block.querySelector('.q-options-box');
+    const typeSelect = item.querySelector('.q-type-select');
+    const optBox = item.querySelector('.q-options-box');
+    const tfBox = item.querySelector('.q-tf-box');
+    const shortBox = item.querySelector('.q-short-box');
+
     typeSelect.addEventListener('change', () => {
       optBox.style.display = typeSelect.value === 'ABCD' ? 'block' : 'none';
-      if (typeSelect.value === 'TF') {
-        block.querySelector('.q-correct').placeholder = 'Igaz vagy Hamis';
-      }
+      tfBox.style.display = typeSelect.value === 'TF' ? 'block' : 'none';
+      shortBox.style.display = typeSelect.value === 'SHORT' ? 'block' : 'none';
+    });
+
+    // ABCD opciók kizöldítése számozott gombra kattintva
+    const optRows = item.querySelectorAll('.q-opt-row');
+    const optToggles = item.querySelectorAll('.q-opt-correct-toggle');
+    optToggles.forEach(toggle => {
+      toggle.addEventListener('click', () => {
+        const isAlreadyCorrect = toggle.classList.contains('is-correct');
+        optRows.forEach(r => r.classList.remove('is-correct'));
+        optToggles.forEach(t => t.classList.remove('is-correct'));
+        if (!isAlreadyCorrect) {
+          toggle.classList.add('is-correct');
+          toggle.closest('.q-opt-row').classList.add('is-correct');
+        }
+      });
+    });
+
+    // TF gombok kizöldítése kattintásra
+    const tfButtons = item.querySelectorAll('.btn-tf-pick');
+    tfButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const isAlreadyCorrect = btn.classList.contains('is-correct');
+        tfButtons.forEach(b => b.classList.remove('is-correct'));
+        if (!isAlreadyCorrect) {
+          btn.classList.add('is-correct');
+        }
+      });
     });
 
     // Eltávolítás
-    block.querySelector('.btn-remove-q').addEventListener('click', () => {
-      block.remove();
+    item.querySelector('.btn-remove-q').addEventListener('click', () => {
+      item.remove();
+      renumberQuestions();
     });
 
-    editorQuestionsList.appendChild(block);
+    // In-line beszúró gomb (ez az elem mögé = a következő elé szúr be)
+    item.querySelector('.q-insert-btn').addEventListener('click', () => {
+      openQuestionTypePicker(item.nextElementSibling);
+    });
+
+    // Drag Handle aktiválás
+    const dragHandle = item.querySelector('.q-drag-handle');
+    dragHandle.addEventListener('mouseenter', () => {
+      if (!isDraggingAny) item.draggable = true;
+    });
+    dragHandle.addEventListener('mouseleave', () => {
+      if (!isDraggingAny) item.draggable = false;
+    });
+    dragHandle.addEventListener('mousedown', () => {
+      item.draggable = true;
+    });
+
+    // Item szintű Drag események
+    item.addEventListener('dragstart', (e) => {
+      isDraggingAny = true;
+      draggedEditorItem = item;
+      item.classList.add('is-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', '');
+    });
+
+    item.addEventListener('dragend', () => {
+      isDraggingAny = false;
+      item.draggable = false;
+      item.classList.remove('is-dragging');
+      draggedEditorItem = null;
+      renumberQuestions();
+    });
+
+    // Beillesztés a listába a megadott helyre
+    if (insertBeforeItem && insertBeforeItem.parentNode === editorQuestionsList) {
+      editorQuestionsList.insertBefore(item, insertBeforeItem);
+    } else {
+      editorQuestionsList.appendChild(item);
+    }
+
+    return item;
   }
 
-  // Teszt mentése
+  // Teszt mentése validációval
   btnSaveQuiz.addEventListener('click', async () => {
     const title = editQuizTitle.value.trim();
     if (!title) {
@@ -1521,31 +1736,81 @@
     const quizId = editQuizId.value;
     const questions = [];
 
-    const blocks = editorQuestionsList.children;
-    for (let i = 0; i < blocks.length; i++) {
-      const b = blocks[i];
+    const items = editorQuestionsList.querySelectorAll('.q-editor-item');
+    if (items.length === 0) {
+      showAdminAlert('⚠️ Nincsenek kérdések', 'A feladatsorban legalább 1 kérdésnek szerepelnie kell!');
+      return;
+    }
+
+    for (let i = 0; i < items.length; i++) {
+      const b = items[i];
+      const qNum = i + 1;
       const type = b.querySelector('.q-type-select').value;
       const text = b.querySelector('.q-text').value.trim();
       const points = parseFloat(b.querySelector('.q-points').value) || 1.0;
-      const correct = b.querySelector('.q-correct').value.trim();
       const explanation = b.querySelector('.q-explanation').value.trim();
 
+      if (!text) {
+        showAdminAlert('⚠️ Hiányzó kérdésszöveg', `A(z) ${qNum}. kérdés szövegének megadása kötelező!`);
+        return;
+      }
+
+      let correct = '';
       let options = [];
+
       if (type === 'ABCD') {
-        options = [
-          b.querySelector('.q-opt-0').value.trim(),
-          b.querySelector('.q-opt-1').value.trim(),
-          b.querySelector('.q-opt-2').value.trim(),
-          b.querySelector('.q-opt-3').value.trim()
-        ].filter(Boolean);
+        const selectedToggle = b.querySelector('.q-opt-correct-toggle.is-correct');
+        if (!selectedToggle) {
+          showAdminAlert('⚠️ Helyes válasz nincs kijelölve', `A(z) ${qNum}. feleletválasztós kérdésnél nem jelölted meg a helyes választ!\n\nKérlek, kattints a helyes válasz számozott körére (1–4).`);
+          return;
+        }
+
+        const selIdx = parseInt(selectedToggle.dataset.optIndex, 10);
+        const selInput = b.querySelector(`.q-opt-${selIdx}`);
+        const correctVal = selInput ? selInput.value.trim() : '';
+
+        if (!correctVal) {
+          showAdminAlert('⚠️ Üres a helyes válasz', `A(z) ${qNum}. kérdésnél a helyesnek jelölt (${selIdx + 1}.) válaszlehetőség szövege nem lehet üres!`);
+          return;
+        }
+
+        const opt0 = b.querySelector('.q-opt-0').value.trim();
+        const opt1 = b.querySelector('.q-opt-1').value.trim();
+        const opt2 = b.querySelector('.q-opt-2').value.trim();
+        const opt3 = b.querySelector('.q-opt-3').value.trim();
+        const filledOpts = [opt0, opt1, opt2, opt3].filter(Boolean);
+
+        if (filledOpts.length < 2) {
+          showAdminAlert('⚠️ Kevés válaszlehetőség', `A(z) ${qNum}. feleletválasztós kérdésnél legalább 2 válaszlehetőség kitöltése kötelező!`);
+          return;
+        }
+
+        options = [opt0, opt1, opt2, opt3].filter(Boolean);
+        correct = correctVal;
+
       } else if (type === 'TF') {
+        const selectedTf = b.querySelector('.btn-tf-pick.is-correct');
+        if (!selectedTf) {
+          showAdminAlert('⚠️ Helyes válasz nincs kijelölve', `A(z) ${qNum}. Igaz / Hamis kérdésnél nem választottad ki a helyes állítást!\n\nKérlek, kattints az IGAZ vagy a HAMIS gombra a kizöldítéshez.`);
+          return;
+        }
+        correct = selectedTf.dataset.value;
         options = ['Igaz', 'Hamis'];
+
+      } else if (type === 'SHORT') {
+        const shortVal = b.querySelector('.q-short-input-val').value.trim();
+        if (!shortVal) {
+          showAdminAlert('⚠️ Helyes válasz hiányzik', `A(z) ${qNum}. rövid válaszos kérdésnél kötelező megadni az elfogadott helyes választ!`);
+          return;
+        }
+        correct = shortVal;
+        options = [];
       }
 
       const qId = b.dataset.questionId ? parseInt(b.dataset.questionId, 10) : undefined;
       questions.push({
         id: qId,
-        question_order: i + 1,
+        question_order: qNum,
         question_type: type,
         question_text: text,
         points,
@@ -1715,7 +1980,7 @@
 
     let filtered = allReports;
     if (query) {
-      filtered = allReports.filter(s => 
+      filtered = allReports.filter(s =>
         (s.quiz_title && s.quiz_title.toLowerCase().includes(query)) ||
         (s.subject_name && s.subject_name.toLowerCase().includes(query)) ||
         (s.class_name && s.class_name.toLowerCase().includes(query)) ||

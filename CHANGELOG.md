@@ -11,12 +11,32 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 Átfogó diákoldali, tanári és adatintegritási stabilitási kiadás: az alsó tagozatos (3. osztályos) tanulók számára letisztultak az Igaz–Hamis kérdéskártyák a zavaró feliratoktól. A Tesztszerkesztő mentése relációbiztossá vált (in-place Smart Sync), megszüntetve az SQLite FOREIGN KEY hibákat. A tanári Mátrix nézetben végérvényesen megszűnt a táblázat és az eszköztár ugrálása a fix cellageometriának és az egységes 24 px-es státuszkapszuláknak köszönhetően. A 4 KPI mutatókártya összecsukhatóvá vált egyetlen kattintással a felső eszköztárból, a működési módok egységes magyar elnevezést kaptak, a rendszer felületei pedig teljes körű revízión estek át az MTA 12. kiadásának helyesírási szabályai szerint.
 
 #### Hozzáadva és megújítva (Added and Redesigned)
+* **Tesztszerkesztő Socrative-stílusú számozott helyes válasz kizöldítés és mentési validáció:**
+  - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - **Redundancia és elgépelés felszámolása:** A korábbi, felesleges dupla munkát és elgépelési kockázatot hordozó *„Helyes válasz pontos értéke”* kézi másolómező maradéktalanul megszűnt.
+  - **Számozott helyes válasz kizöldítés (ABCD):** A 4 válaszopció előtt 1, 2, 3, 4 számozású kör található. A tanár a helyes válasz számára kattintva zöldre váltja a kört (fehér pipával), a hozzá tartozó mező pedig diszkrét zöld kiemelést kap. A kizöldített opció értéke automatikusan a helyes válasz lesz.
+  - **Igaz / Hamis (TF) egykattintásos kizöldítés:** Szöveges beírás helyett két tiszta gomb (*IGAZ* és *HAMIS*) jelenik meg, amelyekre rákattintva az adott állítás zölddé válik.
+  - **Mentési integritás-validáció:** A rendszer határozottan blokkolja a feladatsor mentését és figyelmeztetést jelenít meg, ha bármelyik kérdésnél nincs megjelölve helyes válasz, ha a kijelölt opció mezője üres, vagy ha nincs legalább 2 kitöltött válaszlehetőség.
+
+* **Tesztszerkesztő in-line kérdésbeszúrás, típusválasztó modál és Drag & Drop átrendezés:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - **In-line lebegő beszúró sáv:** Megszűnt a sok kérdés esetén fellépő kényelmetlen le- és felgörgetési kényszer: a kérdések között az egérmutató odavitelére megjelenik egy finom elválasztó vonal és egy kör alakú `+` gomb, amely pontosan az adott kérdések közé szúrja be az új feladatot. A feladatsor legelejére is egyetlen kattintással beszúrható új kérdés.
+  - **Kérdéstípus-választó modális ablak:** A `+` jelre kattintva egy barátságos, tiszta modális ablak jelenik meg, ahol 3 nagy kártyával (Feleletválasztós, Igaz / Hamis, Rövid válasz) választható ki a kívánt kérdéstípus, és a kártya előre felparaméterezve közvetlenül a kívánt helyre illeszkedik be.
+  - **Húzással történő átrendezés (Drag & Drop):** Minden kérdéskártya fejlécében 6 pontos fogantyú (`drag_indicator`) található, amellyel a kérdések sorrendje szabadon, valós időben átrendezhető 100% offline natív HTML5 eseményekkel.
+  - **Azonnali automatikus újrasorszámozás:** Bármilyen átrendezés, beszúrás vagy törlés után a kérdések fejléce (`1. kérdés`, `2. kérdés`...) azonnal és hibátlanul frissül.
+
 * **Diákoldali Igaz–Hamis (TF) gombok letisztítása az általános iskolai 3–8. osztály számára:**
   - **Fájlok:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html)
   - A harmadikos kisdiákokat megzavaró felesleges feliratok (A/B betűjelvények, „VÁLASZLEHETŐSÉG” címkék, rádiógomb-ikonok, like/dislike hüvelykujjak és a másodlagos „Az állítás igaz/hamis” leírások) maradéktalanul eltávolításra kerültek.
   - Helyüket két nagy méretű, tiszta, középre zárt és modern gombkártya vette át, kizárólag a lényeggel: **IGAZ** és **HAMIS**. Kiválasztáskor a kártya elegáns narancssárga kiemelést és finom árnyékot kap.
 
 #### Javítva (Fixed)
+* **Háttérgörgetés blokkolása és görgetési láncolás (Scroll Chaining) elleni védelem modális ablakoknál:**
+  - **Fájlok:** [`public/js/utils.js`](file:///d:/dev/Röpdolgozat%20program/public/js/utils.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Megszűnt az a zavaró jelenség, hogy felugró modális ablakok (pl. az új kérdés típusválasztója, kérdésrészletező vagy megerősítő párbeszédpanelek) alatt az egérrel a háttérben elhelyezkedő fő tartalom görgethető maradt.
+  - Bármely modális ablak megnyitásakor a háttér azonnal és automatikusan zárolja a görgetést (`.modal-open`, `overflow: hidden;`), a modálok bezáródásakor pedig feloldja azt.
+  - A modális kártyák megkapták a modern `overscroll-behavior: contain;` védelmet is, amely garantálja, hogy a modál belsejében történő görgetés nem csap át a mögöttes tartalomra. A korábban beállított `scrollbar-gutter: stable;` révén a görgetősáv zárolásakor az oldal egyetlen képpontot sem mozdul el oldalirányba.
+
 * **Diákoldali válasz-kiértékelés megújítása (közvetlen csempeszínezés és semleges, két soros visszajelző sáv):**
   - **Fájlok:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html)
   - **Közvetlen csempeszínezés:** Válaszbeküldéskor hibás válasz esetén a tanuló által megjelölt válaszcsempe halvány pirosas hátteret és diszkrét piros keretet kap (`.tile-wrong`, feleletválasztónál piros X ikonnal a rádiógombban), a helyes megoldás csempéje pedig egyidejűleg zöld kiemelést kap (`.tile-correct`, zöld pipa ikonnal). Helyes válasz esetén a megjelölt csempe zöld kiemelést kap. Rövid szöveges válasznál a beviteli mező színesedik a helyességnek megfelelően (`.input-correct`, `.input-wrong`).
