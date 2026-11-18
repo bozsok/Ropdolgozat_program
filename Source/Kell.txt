@@ -1,4 +1,5 @@
 1. exportálni a Socrative-ból a teszteket és létrehozni a saját webalkalmazásban azokat
-2. exportálni KRÉTA rendszerből a tanulói névsort, osztályokat és importálhatóvá tenni a saját webalkalmazásban
-3. A Beállítások és mentés menüpontban, ha rákattintottunk az Osztálynévsorok megnyitása gombra, akkor nincsen visszanyíl arra, hogy kiugorjak a Hivatalos osztálynévsorok fleületről, újra meg kell nyomni a Beállítások és mentés menüpontot. Ez nem logikus. Itt is kellen morzsaútvonal szerintem.
-
+2. teljes rendszermentés kártyára kell a 'Biztonségi mentés feltöltése' gomb a mechanizmussal
+3. a tanulói teszt kitöltésekor kell kép is, jó lenne, ha kétoszlopos lenne a tesztkitöltés, baloldalon nagy kép, jobb oldalon a teszt.
+4. Az eredménytábla menü felületén megjelenő 'Újabb indítása' gomb neve legyen 'Új dolgozat indítása' és kapja meg azt a stílust, mint amikor nincs folyamatban lévő dolgozat és azon is szerepel az 'Új dolgozat indítása' gomb.
+5. Az 'Új dolgozat indítása' gombra megjelenő modal ablak stílusa teljesen eltér a meglévő más modal ablakok stílusaitól. Ez nem jó.

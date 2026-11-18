@@ -122,7 +122,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_active_session_channel ON sessions(subject
 CREATE TABLE IF NOT EXISTS participants (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL,
-    student_id INTEGER NOT NULL,                -- Belső stabil azonosító a students táblából
+    student_id INTEGER DEFAULT NULL,            -- Belső stabil azonosító a students táblából (törölt tanuló esetén NULL)
     pc_number INTEGER DEFAULT NULL CHECK(pc_number IS NULL OR (pc_number >= 1 AND pc_number <= 42)), -- Kliensgép száma (1-42)
     student_name TEXT NOT NULL,                 -- A diák neve (történeti pillanatfelvétel a dolgozat idején)
     session_token TEXT NOT NULL,                -- Kriptográfiailag biztonságos token a helyreállításhoz
@@ -134,8 +134,7 @@ CREATE TABLE IF NOT EXISTS participants (
     deadline_at DATETIME DEFAULT NULL,          -- Szerveroldali számított határidő (joined_at + time_limit_min)
     finished_at DATETIME DEFAULT NULL,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
-    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT,
-    UNIQUE(session_id, student_id),             -- Egy dolgozatban egy diák csak egyszer szerepelhet
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL,
     UNIQUE(session_id, student_name),
     UNIQUE(id, session_id)                      -- Összetett idegen kulcs támogatása az answers táblához
 );
@@ -235,7 +234,7 @@ WHEN OLD.status = 'FINISHED'
   OR NEW.shuffle_options IS NOT OLD.shuffle_options
   OR NEW.mode IS NOT OLD.mode
   OR NEW.time_limit_min IS NOT OLD.time_limit_min
-  OR NEW.class_name IS NOT OLD.class_name
+  OR (NEW.class_name IS NOT OLD.class_name AND OLD.class_name IS NOT NULL AND OLD.class_name != '')
   OR NEW.subject_id IS NOT OLD.subject_id
   OR NEW.grade_level IS NOT OLD.grade_level
   OR NEW.started_at IS NOT OLD.started_at
@@ -250,7 +249,7 @@ BEFORE UPDATE ON participants
 WHEN (SELECT status FROM sessions WHERE id = OLD.session_id) = 'FINISHED'
  AND (
      NEW.student_name IS NOT OLD.student_name
-  OR NEW.student_id IS NOT OLD.student_id
+  OR (NEW.student_id IS NOT OLD.student_id AND NEW.student_id IS NOT NULL)
   OR NEW.pc_number IS NOT OLD.pc_number
   OR NEW.session_token IS NOT OLD.session_token
   OR NEW.question_order_json IS NOT OLD.question_order_json

@@ -593,43 +593,75 @@
             Iskolai osztályok és tanulói névsorok karbantartása a hibátlan naplózáshoz.
           </p>
         </div>
-        <button id="btn-new-class" class="btn btn-primary" type="button" style="display: inline-flex; align-items: center; gap: 8px;">
-          <span class="material-symbols-outlined" style="font-size: 19px;">add_circle</span>
-          <span>Új osztály rögzítése</span>
-        </button>
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <button id="btn-export-roster" class="btn btn-secondary" type="button" title="Az összes osztály és tanuló letöltése KRÉTA Excel (.xlsx) fájlban">
+            <span class="material-symbols-outlined" style="font-size: 19px;">download</span>
+            <span>Export</span>
+          </button>
+          <button id="btn-import-roster" class="btn btn-secondary" type="button" title="Osztályok és tanulók importálása KRÉTA Excel (.xlsx) vagy CSV fájlból">
+            <span class="material-symbols-outlined" style="font-size: 19px;">upload_file</span>
+            <span>Import</span>
+          </button>
+          <button id="btn-new-class" class="btn btn-primary" type="button">
+            <span class="material-symbols-outlined" style="font-size: 19px;">add_circle</span>
+            <span>Új osztály rögzítése</span>
+          </button>
+        </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 280px 1fr; gap: 20px;">
-        <!-- Osztályok bal oldali listája -->
-        <div class="card" style="padding: 16px;">
-          <h4 style="margin-bottom: 12px;">Osztályok:</h4>
-          <div id="admin-roster-class-list" class="options-list">
-            <!-- Dinamikusan töltődik -->
+      <!-- Vízszintes Osztályválasztó Sáv -->
+      <div class="card" style="padding: 16px 20px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="material-symbols-outlined" style="color: var(--primary, #ea580c); font-size: 20px;">school</span>
+            <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-main);">Válassz osztályt:</h4>
           </div>
+          <span id="roster-class-count-badge" class="badge" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 9999px; background-color: var(--surface-low, #f1f5f9); color: var(--text-muted, #64748b); font-weight: 700;">
+            0 osztály
+          </span>
         </div>
+        <div id="admin-roster-class-list" class="roster-class-chips-bar">
+          <!-- Dinamikusan töltődik vízszintes chip gombokként -->
+        </div>
+      </div>
 
-        <!-- Jobb oldali névsor szerkesztő -->
-        <div class="card" id="roster-editor-box" style="display: none;">
-          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-            <h4 id="roster-class-title">Osztály névsora</h4>
+      <!-- Kiválasztott Osztály Névsor Doboza -->
+      <div class="card" id="roster-editor-box" style="display: none; padding: 24px;">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color, #e2e8f0); flex-wrap: wrap; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <h3 id="roster-class-title" style="margin: 0; font-size: 1.25rem; font-weight: 800; color: var(--text-main);">Osztály névsora</h3>
+            <span id="roster-student-count-pill" class="badge" style="font-size: 0.85rem; padding: 4px 10px; border-radius: 9999px; background-color: var(--primary-light, #ffedd5); color: var(--primary, #ea580c); font-weight: 700;">
+              0 tanuló
+            </span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <button id="btn-toggle-roster-mode" class="btn btn-secondary" type="button" title="Váltás a számozott áttekintés és a KRÉTA szöveges szerkesztő között">
+              <span class="material-symbols-outlined" style="font-size: 18px;">edit_note</span>
+              <span id="btn-toggle-roster-mode-text">Szöveges szerkesztés</span>
+            </button>
+            <button id="btn-save-roster" class="btn btn-soft-success" type="button" style="display: none;">
+              <span class="material-symbols-outlined" style="font-size: 19px;">save</span>
+              <span>Névsor mentése</span>
+            </button>
             <button id="btn-delete-class" class="btn btn-soft-danger" type="button">
               <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
               <span>Osztály törlése</span>
             </button>
           </div>
+        </div>
 
-          <div class="form-group">
+        <!-- 1. NÉZET: Számozott, 2 oszlopos áttekintő nézet (Görgetésmentes) -->
+        <div id="roster-columns-view" class="roster-columns-grid">
+          <!-- Dinamikusan generált számozott sorok: 01. Név, 02. Név... -->
+        </div>
+
+        <!-- 2. NÉZET: Szöveges szerkesztő (KRÉTA beillesztéshez) -->
+        <div id="roster-raw-edit-view" style="display: none;">
+          <div class="form-group" style="margin-bottom: 0;">
             <label class="form-label" for="roster-names-textarea">
               Tanulók nevei (soronként 1 név – KRÉTA-ból közvetlenül kimásolható és beilleszthető):
             </label>
-            <textarea id="roster-names-textarea" class="form-control" rows="16" placeholder="Kovács Péter&#10;Nagy Anna&#10;Szabó Bence..."></textarea>
-          </div>
-
-          <div style="text-align: right;">
-            <button id="btn-save-roster" class="btn btn-soft-success btn-lg" type="button">
-              <span class="material-symbols-outlined" style="font-size: 20px;">save</span>
-              <span>Névsor mentése</span>
-            </button>
+            <textarea id="roster-names-textarea" class="form-control" rows="14" placeholder="Kovács Péter&#10;Nagy Anna&#10;Szabó Bence..."></textarea>
           </div>
         </div>
       </div>
@@ -661,8 +693,8 @@
           <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 20px;">
             A gombra kattintva az SQLite Backup API segítségével egy teljes, sértetlen ZIP mentést tölthetsz le a dolgozatokról, diákokról és a feltöltött képekről.
           </p>
-          <a href="/api/admin/backup" class="btn btn-primary" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 12px 20px; border-radius: 10px;">
-            <span class="material-symbols-outlined">download</span>
+          <a href="/api/admin/backup" class="btn btn-primary" target="_blank">
+            <span class="material-symbols-outlined" style="font-size: 19px;">download</span>
             <span>Biztonsági mentés letöltése (.zip)</span>
           </a>
         </div>
@@ -681,8 +713,8 @@
           <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 20px;">
             Itt szerkesztheted az iskola hivatalos osztályait és diákjainak névsorát, vagy új osztályokat vehetsz fel a hibátlan KRÉTA napló-illesztéshez.
           </p>
-          <button type="button" id="btn-open-roster-manager" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 12px 20px; border-radius: 10px; cursor: pointer;">
-            <span class="material-symbols-outlined">edit</span>
+          <button type="button" id="btn-open-roster-manager" class="btn btn-secondary">
+            <span class="material-symbols-outlined" style="font-size: 19px;">edit</span>
             <span>Osztálynévsorok megnyitása</span>
           </button>
         </div>
@@ -913,6 +945,62 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-delete-class')">Mégse</button>
         <button type="button" id="btn-submit-delete-class" class="btn btn-danger">🗑️ Osztály törlése</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hivatalos Osztálynévsorok Importálása Modal -->
+  <div id="modal-import-roster" class="modal-backdrop">
+    <div class="modal-window" style="max-width: 540px;">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h3 class="card-title" style="margin: 0; font-size: 1.15rem; font-weight: 800;">Névsorok importálása</h3>
+          <p class="card-subtitle" style="margin: 2px 0 0 0; font-size: 0.85rem; color: var(--text-muted);">
+            KRÉTA Excel (.xlsx) vagy CSV névsorok beolvasása
+          </p>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-import-roster')" title="Bezárás">
+          <span class="material-symbols-outlined" style="font-size: 18px;">close</span>
+        </button>
+      </div>
+
+      <div style="padding: 16px 0;">
+        <!-- KRÉTA Útmutató Doboz (export.txt szövege) -->
+        <div style="background-color: var(--surface-low, #f8fafc); border: 1px solid var(--border-color, #e2e8f0); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; font-size: 0.86rem; line-height: 1.45; color: var(--text-main, #334155);">
+          <div style="display: flex; gap: 8px; align-items: flex-start;">
+            <span class="material-symbols-outlined" style="font-size: 20px; color: var(--primary, #ea580c); flex-shrink: 0; margin-top: 1px;">help_outline</span>
+            <div>
+              <strong style="color: var(--text-main, #0f172a); display: block; margin-bottom: 2px;">Hogyan töltsd le a névsort a KRÉTA-ból?</strong>
+              KRÉTA admin felületén a <strong>Nyilvántartás ➔ Tanulók</strong> menüpontban a kék színű <strong>Export</strong> gombra kattintva az <strong>Export</strong> paranccsal tölthető le az <code>.xlsx</code> fájl.
+            </div>
+          </div>
+        </div>
+
+        <!-- Fájl kiválasztó / Dropzone -->
+        <div id="roster-dropzone" style="border: 2px dashed var(--border-color, #cbd5e1); border-radius: 12px; padding: 24px 16px; text-align: center; cursor: pointer; transition: all 0.2s ease; background-color: #ffffff;">
+          <input type="file" id="input-roster-file" accept=".xlsx, .xls, .csv, .txt" style="display: none;">
+          <span class="material-symbols-outlined" style="font-size: 40px; color: var(--primary, #ea580c); display: block; margin-bottom: 8px;">upload_file</span>
+          <p style="margin: 0; font-weight: 700; font-size: 0.95rem; color: var(--text-main, #1e293b);">
+            Húzd ide a letöltött KRÉTA fájlt, vagy kattints a tallózáshoz!
+          </p>
+          <span style="font-size: 0.8rem; color: var(--text-muted, #64748b); display: block; margin-top: 4px;">
+            Támogatott formátumok: .xlsx, .xls, .csv (1. oszlop: név, 7. oszlop: osztály)
+          </span>
+          <div id="roster-selected-file-info" style="display: none; margin-top: 12px; padding: 8px 12px; background-color: var(--surface-low, #f1f5f9); border-radius: 8px; font-weight: 600; font-size: 0.88rem; color: var(--text-main, #0f172a);">
+            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; color: var(--success, #16a34a); margin-right: 4px;">check_circle</span>
+            <span id="roster-selected-file-name">fajl.xlsx</span>
+          </div>
+        </div>
+
+        <div id="roster-import-status" style="display: none; margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-size: 0.88rem; font-weight: 600;"></div>
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-import-roster')">Mégse</button>
+        <button type="button" id="btn-submit-import-roster" class="btn btn-primary" disabled>
+          <span class="material-symbols-outlined" style="font-size: 19px;">upload</span>
+          <span>Névsorok importálása</span>
+        </button>
       </div>
     </div>
   </div>

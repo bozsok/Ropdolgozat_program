@@ -50,7 +50,95 @@ function initializeDatabase() {
     console.error('Hiba a quizzes.folder_id migrációjakor:', err);
   }
 
-  // 2. Séma futtatása (táblák, indexek, triggerek)
+  // 3. Participants tábla migrációja: student_id NULL engedélyezése és ON DELETE SET NULL, hogy a lezárt archívum független legyen a névsortörléstől
+  try {
+    const partTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='participants'").get();
+    if (partTable) {
+      const partCols = db.prepare('PRAGMA table_info(participants)').all();
+      const studentIdCol = partCols.find(c => c.name === 'student_id');
+      if (studentIdCol && studentIdCol.notnull === 1) {
+        db.pragma('foreign_keys = OFF');
+        db.exec(`
+          DROP TRIGGER IF EXISTS trg_prevent_finished_participant_update;
+
+          CREATE TABLE participants_migrated (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              session_id INTEGER NOT NULL,
+              student_id INTEGER DEFAULT NULL,
+              pc_number INTEGER DEFAULT NULL CHECK(pc_number IS NULL OR (pc_number >= 1 AND pc_number <= 42)),
+              student_name TEXT NOT NULL,
+              session_token TEXT NOT NULL,
+              question_order_json TEXT DEFAULT '[]',
+              team_color TEXT DEFAULT NULL,
+              focus_lost_count INTEGER DEFAULT 0 CHECK(focus_lost_count >= 0),
+              is_finished INTEGER DEFAULT 0 CHECK(is_finished IN (0, 1)),
+              joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              deadline_at DATETIME DEFAULT NULL,
+              finished_at DATETIME DEFAULT NULL,
+              FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+              FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL,
+              UNIQUE(session_id, student_name),
+              UNIQUE(id, session_id)
+          );
+
+          INSERT INTO participants_migrated (
+              id, session_id, student_id, pc_number, student_name, session_token,
+              question_order_json, team_color, focus_lost_count, is_finished,
+              joined_at, deadline_at, finished_at
+          )
+          SELECT 
+              id, session_id, student_id, pc_number, student_name, session_token,
+              question_order_json, team_color, focus_lost_count, is_finished,
+              joined_at, deadline_at, finished_at
+          FROM participants;
+
+          DROP TABLE participants;
+          ALTER TABLE participants_migrated RENAME TO participants;
+
+          CREATE INDEX IF NOT EXISTS idx_participants_session ON participants(session_id);
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_token ON participants(session_token);
+        `);
+        db.pragma('foreign_keys = ON');
+      }
+    }
+  } catch (err) {
+    console.error('Hiba a participants tábla migrációjakor:', err);
+  }
+
+  // Korábbi triggerek eldobása a migrációhoz és frissítéshez
+  try {
+    db.exec('DROP TRIGGER IF EXISTS trg_prevent_finished_participant_update;');
+    db.exec('DROP TRIGGER IF EXISTS trg_prevent_finished_session_update;');
+  } catch {
+    // Ha nem létezik, folytatás
+  }
+
+  // Történeti lezárt dolgozatok osztálynevének (sessions.class_name) beégetése és függetlenítése a névsortól
+  try {
+    const sessionTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'").get();
+    if (sessionTable) {
+      db.prepare(`
+        UPDATE sessions 
+        SET class_name = (
+          SELECT GROUP_CONCAT(DISTINCT st.class_name) 
+          FROM participants p2 
+          JOIN students st ON st.id = p2.student_id 
+          WHERE p2.session_id = sessions.id
+        )
+        WHERE (class_name IS NULL OR class_name = '') 
+          AND EXISTS (
+            SELECT 1 
+            FROM participants p3 
+            JOIN students st2 ON st2.id = p3.student_id 
+            WHERE p3.session_id = sessions.id
+          )
+      `).run();
+    }
+  } catch (err) {
+    console.error('Hiba a sessions.class_name migrációjakor:', err);
+  }
+
+  // 4. Séma futtatása (táblák, indexek, frissített triggerek)
   db.exec(schemaSql);
 
   // Mintaadatok feltöltése tranzakcióban (ha még üres az adatbázis)
@@ -138,74 +226,6 @@ function initializeDatabase() {
         explanation: 'A `Ctrl + C` a másolás (Copy), a `Ctrl + V` a beillesztés, a `Ctrl + X` a kivágás, a `Ctrl + Z` a visszavonás parancsa.',
         points: 1.0
       });
-    }
-
-    // 2. Minta osztálynévsor (6.a osztály) ellenőrzése és beszúrása
-    const studentCount = db.prepare("SELECT COUNT(*) as count FROM students WHERE class_name = '6.a'").get().count;
-    if (studentCount === 0) {
-      const insertStudent = db.prepare(`
-        INSERT OR IGNORE INTO students (class_name, student_name)
-        VALUES (@class_name, @student_name)
-      `);
-
-      const sampleRoster = [
-        'Balogh Ádám',
-        'Budai Dániel',
-        'Fekete Emma',
-        'Horváth Bence',
-        'Kiss Hanna',
-        'Kovács Péter',
-        'Lakatos Zoé',
-        'Molnár Márk',
-        'Nagy Lili',
-        'Németh Dóra',
-        'Papp Tamás',
-        'Szabó Anna',
-        'Tóth Balázs',
-        'Varga Zsófia',
-        'Vitéz Máté'
-      ];
-
-      for (const name of sampleRoster) {
-        insertStudent.run({
-          class_name: '6.a',
-          student_name: name
-        });
-      }
-    }
-
-    // 3. Minta osztálynévsor (3.a osztály - alapértelmezett osztály a főoldalon)
-    const studentCount3a = db.prepare("SELECT COUNT(*) as count FROM students WHERE class_name = '3.a'").get().count;
-    if (studentCount3a === 0) {
-      const insertStudent = db.prepare(`
-        INSERT OR IGNORE INTO students (class_name, student_name)
-        VALUES (@class_name, @student_name)
-      `);
-
-      const sampleRoster3a = [
-        'Balogh Bence',
-        'Farkas Emma',
-        'Fehér Ádám',
-        'Gulyás Lili',
-        'Kiss Zsófia',
-        'Kovács Dániel',
-        'Lakatos Hanna',
-        'Molnár Olivér',
-        'Nagy Csilla',
-        'Németh Kristóf',
-        'Papp Jázmin',
-        'Szabó Máté',
-        'Takács Fanni',
-        'Tóth Nóra',
-        'Varga Gergő'
-      ];
-
-      for (const name of sampleRoster3a) {
-        insertStudent.run({
-          class_name: '3.a',
-          student_name: name
-        });
-      }
     }
   });
 

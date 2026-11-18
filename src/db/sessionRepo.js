@@ -276,13 +276,21 @@ function finishSession(sessionId) {
       WHERE session_id = ? AND is_finished = 0
     `).run(sessionId);
 
-    // 2. Session státusz végleges lezárása (FINISHED)
+    // 2. Session státusz végleges lezárása (FINISHED) és osztálynév beégetése történeti archívumként
     const updateSessionStmt = db.prepare(`
       UPDATE sessions 
-      SET status = 'FINISHED', ended_at = CURRENT_TIMESTAMP
+      SET status = 'FINISHED', 
+          ended_at = CURRENT_TIMESTAMP,
+          class_name = CASE 
+            WHEN class_name IS NOT NULL AND class_name != '' THEN class_name
+            ELSE COALESCE(
+              (SELECT GROUP_CONCAT(DISTINCT st.class_name) FROM participants p2 JOIN students st ON st.id = p2.student_id WHERE p2.session_id = ?),
+              ''
+            )
+          END
       WHERE id = ? AND status = 'ACTIVE'
     `);
-    const sessionRes = updateSessionStmt.run(sessionId);
+    const sessionRes = updateSessionStmt.run(sessionId, sessionId);
     if (sessionRes.changes === 0) {
       throw new Error('A dolgozat nem található vagy már le van zárva!');
     }

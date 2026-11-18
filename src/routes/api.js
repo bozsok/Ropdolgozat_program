@@ -13,6 +13,12 @@ const backup = require('../services/backup');
 const presenceService = require('../services/presenceService');
 
 const router = express.Router();
+const ExcelJS = require('exceljs');
+
+const uploadMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 } // max 15 MB
+});
 
 // Multer feltöltési konfiguráció (kérdés-képekhez)
 const storage = multer.diskStorage({
@@ -122,6 +128,148 @@ router.delete('/admin/classes/:className', requireAdminAuth, (req, res) => {
     res.json({ success: true, deletedCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Hivatalos osztálynévsorok exportálása (.xlsx munkafüzet - KRÉTA kompatibilis)
+ */
+router.get('/admin/roster/export', requireAdminAuth, async (req, res) => {
+  try {
+    const students = rosterRepo.getAllStudentsWithClass();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Okoskodó Röpdolgozat Rendszer';
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet('Tanulók listája');
+
+    // Fejlécek (KRÉTA export kompatibilis: 1. oszlop: Neve, 7. oszlop: Osztály)
+    ws.columns = [
+      { header: 'Neve', key: 'name', width: 32 },
+      { header: 'Oktatási azonosító', key: 'edu_id', width: 20 },
+      { header: 'Anyja születési neve', key: 'mother_name', width: 26 },
+      { header: 'Születési hely', key: 'birth_place', width: 22 },
+      { header: 'Születési idő', key: 'birth_date', width: 16 },
+      { header: 'Tankötelezett', key: 'compulsory', width: 16 },
+      { header: 'Osztály', key: 'class_name', width: 14 }
+    ];
+
+    const headerRow = ws.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1E293B' }
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'left' };
+    headerRow.height = 24;
+
+    students.forEach(s => {
+      ws.addRow({
+        name: s.student_name,
+        edu_id: '',
+        mother_name: '',
+        birth_place: '',
+        birth_date: '',
+        compulsory: '',
+        class_name: s.class_name
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="tanulok_KRETA.xlsx"');
+
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Hivatalos osztálynévsorok importálása (.xlsx vagy .csv KRÉTA fájlból)
+ */
+router.post('/admin/roster/import', requireAdminAuth, uploadMemory.single('file'), async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ error: 'Nincs feltöltött fájl!' });
+    }
+
+    const studentsToImport = [];
+    const fileName = (req.file.originalname || '').toLowerCase();
+
+    if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(req.file.buffer);
+      const ws = wb.worksheets[0];
+      if (!ws) {
+        return res.status(400).json({ error: 'Az Excel fájl nem tartalmaz munkalapot!' });
+      }
+
+      // Szigorúan az A oszlop (1. oszlop = Tanuló neve) és G oszlop (7. oszlop = Osztály) a KRÉTA fájl alapján
+      const nameColIndex = 1;
+      const classColIndex = 7;
+
+      ws.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // Fejléc kihagyása
+        const studentName = String(row.getCell(nameColIndex).text || '').trim();
+        const className = String(row.getCell(classColIndex).text || '').trim();
+        if (studentName && className) {
+          studentsToImport.push({
+            student_name: studentName,
+            class_name: className
+          });
+        }
+      });
+    } else {
+      // CSV vagy szöveges formátum
+      const content = req.file.buffer.toString('utf-8');
+      const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+      let isFirst = true;
+      for (const line of lines) {
+        const parts = line.split(/[;\t,]/).map(p => p.trim());
+        if (isFirst && (line.toLowerCase().includes('osztály') || line.toLowerCase().includes('név'))) {
+          isFirst = false;
+          continue;
+        }
+        isFirst = false;
+
+        if (parts.length >= 7) {
+          // Teljes KRÉTA CSV: A (0.) a tanuló neve, G (6.) az osztály
+          const name = parts[0];
+          const cls = parts[6];
+          if (name && cls) {
+            studentsToImport.push({ student_name: name, class_name: cls });
+          }
+        } else if (parts.length >= 2) {
+          let name = parts[0];
+          let cls = parts[1];
+          if (/^\d+\.?[a-z]?$/i.test(parts[0])) {
+            cls = parts[0];
+            name = parts[1];
+          }
+          if (name && cls) {
+            studentsToImport.push({ student_name: name, class_name: cls });
+          }
+        }
+      }
+    }
+
+    if (studentsToImport.length === 0) {
+      return res.status(400).json({ error: 'A fájl nem tartalmaz feldolgozható tanulói adatokat! Ellenőrizd, hogy az 1. oszlop a nevet, a 7. oszlop az osztályt tartalmazza-e!' });
+    }
+
+    const result = rosterRepo.importRosterStudents(studentsToImport);
+    res.json({
+      success: true,
+      totalParsed: studentsToImport.length,
+      insertedCount: result.insertedCount,
+      classesCount: result.classesCount,
+      classes: result.classes
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Hiba a névsor importálása közben: ' + err.message });
   }
 });
 

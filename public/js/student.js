@@ -90,7 +90,8 @@
     '4.a', '4.b', '4.c',
     '5.a', '5.b', '5.c',
     '6.a', '6.b', '6.c',
-    '7.a', '7.b', '7.c'
+    '7.a', '7.b', '7.c',
+    '8.a', '8.b', '8.c'
   ];
 
   const quizContainer = document.getElementById('quiz-container');
@@ -689,8 +690,12 @@
         // fallback az alapértelmezett standard osztályokra
       }
 
-      // 15 standard osztály (3.a–7.c) + bármilyen adatbázisban felvett egyéb osztály
-      const allClasses = Array.from(new Set([...DEFAULT_CLASSES, ...(Array.isArray(dbClasses) ? dbClasses : [])]));
+      // 3–8. évfolyamos osztályok (az 1–2. évfolyam még nem tanul digitális kultúrát)
+      const rawClasses = Array.from(new Set([...DEFAULT_CLASSES, ...(Array.isArray(dbClasses) ? dbClasses : [])]));
+      const allClasses = rawClasses.filter(cls => {
+        const m = String(cls).match(/^(\d+)/);
+        return !m || parseInt(m[1], 10) >= 3;
+      });
       selectClass.innerHTML = '';
 
       allClasses.forEach((cls) => {

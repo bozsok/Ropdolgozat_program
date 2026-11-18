@@ -16,9 +16,12 @@ async function runTests() {
   console.log('--- 1. Osztályok és diákok ellenőrzése ---');
   const classes = rosterRepo.getClasses();
   console.log('✓ Osztályok:', classes);
-  const students = rosterRepo.getStudentsByClass('6.a');
+  let students = rosterRepo.getStudentsByClass('6.a');
+  if (students.length === 0) {
+    rosterRepo.saveClassRoster('6.a', ['Balogh Ádám', 'Budai Dániel', 'Fekete Emma', 'Kovács Péter', 'Nagy Lili']);
+    students = rosterRepo.getStudentsByClass('6.a');
+  }
   console.log(`✓ 6.a diákok száma: ${students.length}`);
-  if (students.length === 0) throw new Error('Nincs diák a 6.a-ban!');
 
   console.log('\n--- 2. Tesztek ellenőrzése ---');
   const quizzes = quizRepo.getQuizzes();
@@ -187,6 +190,8 @@ async function runTests() {
   } else {
     throw new Error('HIBA: A dolgozat nem törlődött!');
   }
+
+  rosterRepo.deleteClass('6.a');
 
   console.log('\n================================================================');
   console.log('🎉 MINDEN TESZT (17-BŐL 17) SIKERESEN ÉS HIBÁTLANUL LEFUTOTT! 🎉');

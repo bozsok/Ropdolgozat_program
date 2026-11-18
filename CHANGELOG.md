@@ -4,6 +4,51 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.16.0] – 2026-11-18
+
+### Hivatalos osztálynévsorok KRÉTA import/exportja, vízszintes osztályválasztó és 2 oszlopos számozott nézet, lezárt dolgozatok archívum-függetlensége (`ON DELETE SET NULL`) és a diákfelület gombkonzisztenciája
+
+Jelentős stabilitási, adatkezelési és tantermi felületi kiadás: megvalósult a hivatalos osztálynévsorok 1-kattintásos KRÉTA kompatibilis (.xlsx) exportja és importja, drag & drop feltöltéssel és részletes beépített útmutatóval. Az osztálynévsorok kezelőfelülete ergonomikus, nulla görgetéses vízszintes osztályválasztó sávot és 2 oszlopos, hivatalos KRÉTA sorszámozású névsort kapott, elrejtve a Digitális kultúrát még nem tanuló 1–2. évfolyamokat. Az adatbázis sémában a résztvevők hivatkozása `ON DELETE SET NULL` szabályt kapott, megszüntetve a lezárt dolgozatok névsorkötöttségét és feloldva a `FOREIGN KEY constraint failed` törlési akadályt. A diákfelületen a tesztkitöltés „Következő” és „Ellenőrzés” gombjai pixelpontosan megegyező méretet és ugrásmentes igazítást kaptak, az `init.js` indulási kódjából pedig véglegesen törlésre került a fiktív diákok automatikus újragenerálása.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **KRÉTA kompatibilis osztálynévsor export és import:**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`src/db/rosterRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/rosterRepo.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - `GET /api/admin/roster/export`: 1-kattintásos letöltés `.xlsx` fájlformátumban (A oszlop = Név, G oszlop = Osztály).
+  - `POST /api/admin/roster/import`: Drag & Drop fájlfeltöltő modális ablak beépített KRÉTA útmutatóval, szigorúan az A oszlopot (tanuló neve) és G oszlopot (osztály) feldolgozva.
+  - Az importálás tranzakcióban szinkronizálja az adott osztályok névsorát a KRÉTA fájl tartalmával.
+
+* **Vízszintes osztályválasztó és 2 oszlopos számozott névsor:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Az osztályok a felület tetején vízszintes gombokként (`.roster-class-chip`) jelennek meg évfolyam-elválasztókkal (`.roster-grade-separator`), görgetés nélkül elérhetővé téve mind a 18 osztályt.
+  - A tanulók névsora alapértelmezetten egy 2 oszlopos, számozott rácsban (`01.`, `02.` ...) tekinthető át a magyar ábécé szabályai (`localeCompare('hu')`) szerint.
+  - A *„Szöveges szerkesztés”* gombbal bármikor megnyitható a vágólapos többsoros beillesztő mező, mentés után azonnal visszaváltva a számozott nézetre.
+
+* **1–2. évfolyam intelligens elrejtése:**
+  - **Fájlok:** [`src/db/rosterRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/rosterRepo.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A Digitális kultúra tantárgy 3. osztályos indulásához igazodva a rendszer automatikusan elrejti az 1–2. évfolyamos osztályokat mind a tanári adminisztrációban, mind a diák belépési legördülőjében.
+
+* **Egységes 10px gombméret és lekerekítés a felületen:**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A Tesztszerkesztő eszköztár gombjai (*„Új mappa”*, *„Új teszt létrehozása”*), az üres állapot *„Új dolgozat indítása”* gombja és az adminisztrációs gombok megkapták az egységes `10px` (`var(--radius-md)`) lekerekítést és egységes magasságot.
+
+#### Javítva (Fixed)
+* **Lezárt dolgozatok archívum-függetlensége és a FOREIGN KEY hiba felszámolása:**
+  - **Fájlok:** [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql), [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js), [`src/db/rosterRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/rosterRepo.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - A `participants.student_id` mező idegen kulcs szabálya `ON DELETE RESTRICT`-ről `ON DELETE SET NULL`-ra módosult, a lezárt résztvevőket védő trigger pedig felkészítésre került a törölt tanulók leválasztására.
+  - A dolgozat osztálymegjelölése (`sessions.class_name`) lezáráskor közvetlenül beég az archívumba, így a lezárt dolgozatok eredményei, résztvevői és exportjai 100%-ban épek és önállóak maradnak akkor is, ha egy tanuló távozik az iskolából, vagy a tanár törli az osztályt a tiszta újraimportálás előtt.
+
+* **Fiktív diákok automatikus újragenerálásának (seed) végleges törlése:**
+  - **Fájlok:** [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js)
+  - Törlésre került az a beépített indító kód, amely a szerver újraindulásakor a tanár tudta nélkül automatikusan újragenerálta a kitörölt 3.a és 6.a fiktív diákokat.
+
+* **Tesztkitöltési gombok konzisztenciája és ugrásmentes elrendezése a diákfelületen:**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A teszt kitöltése közben megjelenő „Következő” gomb (`.quiz-btn-next-compact`) pixelpontosan megegyezik az „Ellenőrzés” gomb méreteivel (`height: 52px; min-width: 170px; padding: 0 28px; font-size: 1.2rem; border-radius: 10px`).
+  - A visszajelző sáv transzparens, 0 paddingű konténerré alakult, így a „Következő” gomb közvetlenül a jobb szélre illeszkedik: megszűnt a korábbi 16px-es vízszintes és 10px-es függőleges ugrás az Ellenőrzés gombhoz képest.
+  - A bal oldali visszajelző szövegről eltávolításra került a nem kívánt háttérszínezés és keret, így a státusz közvetlenül és tisztán jelenik meg.
+
+---
+
 ## [1.15.0] – 2026-11-18
 
 ### Eredménytábla és Korábbi dolgozatok Calm Learner kártyás megújítása, valós KRÉTA osztályátlag, diszkrét gombszínek és tantermi morzsamenü navigáció

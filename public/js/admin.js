@@ -128,6 +128,12 @@
 
   // Névsor elemek
   const adminRosterClassList = document.getElementById('admin-roster-class-list');
+  const rosterClassCountBadge = document.getElementById('roster-class-count-badge');
+  const rosterStudentCountPill = document.getElementById('roster-student-count-pill');
+  const btnToggleRosterMode = document.getElementById('btn-toggle-roster-mode');
+  const btnToggleRosterModeText = document.getElementById('btn-toggle-roster-mode-text');
+  const rosterColumnsView = document.getElementById('roster-columns-view');
+  const rosterRawEditView = document.getElementById('roster-raw-edit-view');
   const rosterEditorBox = document.getElementById('roster-editor-box');
   const rosterClassTitle = document.getElementById('roster-class-title');
   const rosterNamesTextarea = document.getElementById('roster-names-textarea');
@@ -135,6 +141,7 @@
   const btnNewClass = document.getElementById('btn-new-class');
   const btnDeleteClass = document.getElementById('btn-delete-class');
   let selectedRosterClass = null;
+  let isRosterRawEditMode = false;
 
   // Modális jóváhagyások állapotváltozói (Calm Learner UX)
   let pendingDeleteParticipantId = null;
@@ -2576,25 +2583,79 @@
   /**
    * Osztálynévsorok Kezelése
    */
+  function renderRosterColumns(names) {
+    if (!rosterColumnsView) return;
+    if (!names || names.length === 0) {
+      rosterColumnsView.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 32px 16px; color: var(--text-muted); background-color: var(--surface-low); border-radius: 12px; border: 1px dashed var(--border-color);">
+          <span class="material-symbols-outlined" style="font-size: 32px; color: #94a3b8; display: block; margin-bottom: 6px;">person_off</span>
+          <strong>Még nincsenek tanulók ebben az osztályban.</strong>
+          <p style="margin: 4px 0 0 0; font-size: 0.85rem;">Kattints a fenti „Szöveges szerkesztés” gombra a nevek beillesztéséhez!</p>
+        </div>
+      `;
+      return;
+    }
+
+    rosterColumnsView.innerHTML = names.map((name, idx) => `
+      <div class="roster-student-item">
+        <span class="roster-student-num">${String(idx + 1).padStart(2, '0')}.</span>
+        <span class="roster-student-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+      </div>
+    `).join('');
+  }
+
   async function loadRosterClasses() {
     try {
       const res = await fetch('/api/classes');
       const classes = await res.json();
       adminRosterClassList.innerHTML = '';
 
-      classes.forEach(cls => {
-        const btn = document.createElement('div');
-        btn.className = `option-btn ${cls === selectedRosterClass ? 'selected' : ''}`;
-        btn.textContent = cls;
+      if (rosterClassCountBadge) {
+        rosterClassCountBadge.textContent = `${classes.length} osztály`;
+      }
 
-        btn.addEventListener('click', () => {
-          document.querySelectorAll('#admin-roster-class-list .option-btn').forEach(b => b.classList.remove('selected'));
-          btn.classList.add('selected');
+      if (classes.length === 0) {
+        adminRosterClassList.innerHTML = `<span style="color: var(--text-muted); font-size: 0.9rem;">Még nincs rögzített osztály. Kattints az „Új osztály rögzítése” vagy az „Import” gombra!</span>`;
+        if (rosterEditorBox) rosterEditorBox.style.display = 'none';
+        return;
+      }
+
+      let lastGrade = null;
+      classes.forEach((cls) => {
+        const gradeMatch = String(cls).match(/^(\d+)/);
+        const curGrade = gradeMatch ? gradeMatch[1] : null;
+
+        // Évfolyamok közötti diszkrét elválasztó
+        if (lastGrade !== null && curGrade !== null && curGrade !== lastGrade) {
+          const sep = document.createElement('span');
+          sep.className = 'roster-grade-separator';
+          adminRosterClassList.appendChild(sep);
+        }
+        lastGrade = curGrade;
+
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = `roster-class-chip ${cls === selectedRosterClass ? 'selected' : ''}`;
+        chip.textContent = `${cls} osztály`;
+
+        chip.addEventListener('click', () => {
+          document.querySelectorAll('.roster-class-chip').forEach(b => b.classList.remove('selected'));
+          chip.classList.add('selected');
           selectRosterClass(cls);
         });
 
-        adminRosterClassList.appendChild(btn);
+        adminRosterClassList.appendChild(chip);
       });
+
+      // Ha még nincs kiválasztott osztály vagy a korábbi már nem létezik, automatikusan nyissuk meg az elsőt!
+      if (!selectedRosterClass || !classes.includes(selectedRosterClass)) {
+        selectedRosterClass = classes[0];
+        const firstChip = adminRosterClassList.querySelector('.roster-class-chip');
+        if (firstChip) firstChip.classList.add('selected');
+        await selectRosterClass(selectedRosterClass);
+      } else {
+        await selectRosterClass(selectedRosterClass);
+      }
     } catch (err) {
       console.error('Hiba az osztályok betöltésekor:', err);
     }
@@ -2602,16 +2663,65 @@
 
   async function selectRosterClass(className) {
     selectedRosterClass = className;
-    rosterClassTitle.textContent = `${className} osztály névsora`;
-    rosterEditorBox.style.display = 'block';
+    if (rosterClassTitle) rosterClassTitle.textContent = `${className} osztály névsora`;
+    if (rosterEditorBox) rosterEditorBox.style.display = 'block';
+
+    // Alapértelmezetten a rendezett, számozott nézet jelenik meg
+    isRosterRawEditMode = false;
+    if (rosterColumnsView) rosterColumnsView.style.display = 'grid';
+    if (rosterRawEditView) rosterRawEditView.style.display = 'none';
+    if (btnSaveRoster) btnSaveRoster.style.display = 'none';
+    if (btnToggleRosterModeText) btnToggleRosterModeText.textContent = 'Szöveges szerkesztés';
+    if (btnToggleRosterMode) {
+      const icon = btnToggleRosterMode.querySelector('.material-symbols-outlined');
+      if (icon) icon.textContent = 'edit_note';
+    }
 
     try {
       const res = await fetch(`/api/classes/${encodeURIComponent(className)}/students`);
       const students = await res.json();
-      rosterNamesTextarea.value = students.map(s => s.student_name).join('\n');
+      const names = students.map(s => s.student_name);
+
+      if (rosterStudentCountPill) {
+        rosterStudentCountPill.textContent = `${names.length} tanuló`;
+      }
+      if (rosterNamesTextarea) {
+        rosterNamesTextarea.value = names.join('\n');
+      }
+
+      renderRosterColumns(names);
     } catch (err) {
       console.error('Hiba a diákok betöltésekor:', err);
     }
+  }
+
+  // Váltás a számozott áttekintés és a KRÉTA szöveges szerkesztő között
+  if (btnToggleRosterMode) {
+    btnToggleRosterMode.addEventListener('click', () => {
+      isRosterRawEditMode = !isRosterRawEditMode;
+      if (isRosterRawEditMode) {
+        if (rosterColumnsView) rosterColumnsView.style.display = 'none';
+        if (rosterRawEditView) rosterRawEditView.style.display = 'block';
+        if (btnSaveRoster) btnSaveRoster.style.display = 'inline-flex';
+        if (btnToggleRosterModeText) btnToggleRosterModeText.textContent = 'Számozott áttekintés';
+        const icon = btnToggleRosterMode.querySelector('.material-symbols-outlined');
+        if (icon) icon.textContent = 'format_list_numbered';
+        if (rosterNamesTextarea) rosterNamesTextarea.focus();
+      } else {
+        const raw = rosterNamesTextarea ? rosterNamesTextarea.value : '';
+        const names = raw.split('\n').map(n => n.trim()).filter(Boolean);
+        renderRosterColumns(names);
+        if (rosterStudentCountPill) {
+          rosterStudentCountPill.textContent = `${names.length} tanuló`;
+        }
+        if (rosterColumnsView) rosterColumnsView.style.display = 'grid';
+        if (rosterRawEditView) rosterRawEditView.style.display = 'none';
+        if (btnSaveRoster) btnSaveRoster.style.display = 'none';
+        if (btnToggleRosterModeText) btnToggleRosterModeText.textContent = 'Szöveges szerkesztés';
+        const icon = btnToggleRosterMode.querySelector('.material-symbols-outlined');
+        if (icon) icon.textContent = 'edit_note';
+      }
+    });
   }
 
   // Névsor mentése
@@ -2630,6 +2740,18 @@
       const data = await res.json();
       if (res.ok && data.success) {
         showToast('Névsor sikeresen elmentve!', 'success');
+        if (rosterStudentCountPill) {
+          rosterStudentCountPill.textContent = `${names.length} tanuló`;
+        }
+        renderRosterColumns(names);
+        // Visszaváltás számozott nézetre
+        isRosterRawEditMode = false;
+        if (rosterColumnsView) rosterColumnsView.style.display = 'grid';
+        if (rosterRawEditView) rosterRawEditView.style.display = 'none';
+        if (btnSaveRoster) btnSaveRoster.style.display = 'none';
+        if (btnToggleRosterModeText) btnToggleRosterModeText.textContent = 'Szöveges szerkesztés';
+        const icon = btnToggleRosterMode ? btnToggleRosterMode.querySelector('.material-symbols-outlined') : null;
+        if (icon) icon.textContent = 'edit_note';
       } else {
         showAdminAlert('⚠️ Névsorhiba', data.error || 'Hiba a névsor mentésekor!');
       }
@@ -2644,9 +2766,20 @@
     if (!name || !name.trim()) return;
 
     selectedRosterClass = name.trim();
-    rosterClassTitle.textContent = `${selectedRosterClass} osztály névsora`;
-    rosterNamesTextarea.value = '';
-    rosterEditorBox.style.display = 'block';
+    if (rosterClassTitle) rosterClassTitle.textContent = `${selectedRosterClass} osztály névsora`;
+    if (rosterNamesTextarea) rosterNamesTextarea.value = '';
+    if (rosterStudentCountPill) rosterStudentCountPill.textContent = '0 tanuló';
+    if (rosterEditorBox) rosterEditorBox.style.display = 'block';
+
+    // Új osztály esetén rögtön a szerkesztő nyílik meg
+    isRosterRawEditMode = true;
+    if (rosterColumnsView) rosterColumnsView.style.display = 'none';
+    if (rosterRawEditView) rosterRawEditView.style.display = 'block';
+    if (btnSaveRoster) btnSaveRoster.style.display = 'inline-flex';
+    if (btnToggleRosterModeText) btnToggleRosterModeText.textContent = 'Számozott áttekintés';
+    const icon = btnToggleRosterMode ? btnToggleRosterMode.querySelector('.material-symbols-outlined') : null;
+    if (icon) icon.textContent = 'format_list_numbered';
+    if (rosterNamesTextarea) rosterNamesTextarea.focus();
   });
 
   // Osztály törlése modal megnyitása
@@ -2680,6 +2813,136 @@
       } catch (err) {
         console.error('Hiba az osztály törlésekor:', err);
         showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a törléskor!');
+      }
+    });
+  }
+
+  // Hivatalos Osztálynévsorok Exportálása (.xlsx letöltése)
+  const btnExportRoster = document.getElementById('btn-export-roster');
+  if (btnExportRoster) {
+    btnExportRoster.addEventListener('click', () => {
+      window.location.href = '/api/admin/roster/export';
+    });
+  }
+
+  // Hivatalos Osztálynévsorok Importálása (.xlsx / .csv feltöltése)
+  const btnImportRoster = document.getElementById('btn-import-roster');
+  const modalImportRoster = document.getElementById('modal-import-roster');
+  const rosterDropzone = document.getElementById('roster-dropzone');
+  const inputRosterFile = document.getElementById('input-roster-file');
+  const rosterSelectedFileInfo = document.getElementById('roster-selected-file-info');
+  const rosterSelectedFileName = document.getElementById('roster-selected-file-name');
+  const btnSubmitImportRoster = document.getElementById('btn-submit-import-roster');
+  const rosterImportStatus = document.getElementById('roster-import-status');
+  let selectedRosterFile = null;
+
+  function resetRosterImportModal() {
+    selectedRosterFile = null;
+    if (inputRosterFile) inputRosterFile.value = '';
+    if (rosterSelectedFileInfo) rosterSelectedFileInfo.style.display = 'none';
+    if (rosterSelectedFileName) rosterSelectedFileName.textContent = '';
+    if (rosterImportStatus) {
+      rosterImportStatus.style.display = 'none';
+      rosterImportStatus.textContent = '';
+    }
+    if (btnSubmitImportRoster) {
+      btnSubmitImportRoster.disabled = true;
+      btnSubmitImportRoster.innerHTML = '<span class="material-symbols-outlined" style="font-size: 19px;">upload</span><span>Névsorok importálása</span>';
+    }
+  }
+
+  function handleRosterFileSelect(file) {
+    if (!file) return;
+    selectedRosterFile = file;
+    if (rosterSelectedFileName) {
+      const sizeKb = (file.size / 1024).toFixed(1);
+      rosterSelectedFileName.textContent = `${file.name} (${sizeKb} KB)`;
+    }
+    if (rosterSelectedFileInfo) rosterSelectedFileInfo.style.display = 'block';
+    if (rosterImportStatus) rosterImportStatus.style.display = 'none';
+    if (btnSubmitImportRoster) btnSubmitImportRoster.disabled = false;
+  }
+
+  if (btnImportRoster) {
+    btnImportRoster.addEventListener('click', () => {
+      resetRosterImportModal();
+      openModal('modal-import-roster');
+    });
+  }
+
+  if (rosterDropzone && inputRosterFile) {
+    rosterDropzone.addEventListener('click', () => {
+      inputRosterFile.click();
+    });
+
+    inputRosterFile.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleRosterFileSelect(e.target.files[0]);
+      }
+    });
+
+    rosterDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      rosterDropzone.style.borderColor = 'var(--primary, #ea580c)';
+      rosterDropzone.style.backgroundColor = 'var(--primary-light, #fff7ed)';
+    });
+
+    rosterDropzone.addEventListener('dragleave', () => {
+      rosterDropzone.style.borderColor = 'var(--border-color, #cbd5e1)';
+      rosterDropzone.style.backgroundColor = '#ffffff';
+    });
+
+    rosterDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      rosterDropzone.style.borderColor = 'var(--border-color, #cbd5e1)';
+      rosterDropzone.style.backgroundColor = '#ffffff';
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleRosterFileSelect(e.dataTransfer.files[0]);
+      }
+    });
+  }
+
+  if (btnSubmitImportRoster) {
+    btnSubmitImportRoster.addEventListener('click', async () => {
+      if (!selectedRosterFile) return;
+
+      btnSubmitImportRoster.disabled = true;
+      btnSubmitImportRoster.innerHTML = '<span class="material-symbols-outlined" style="font-size: 19px; animation: spin 1s linear infinite;">sync</span><span>Importálás folyamatban...</span>';
+
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedRosterFile);
+
+        const res = await fetch('/api/admin/roster/import', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          closeModal('modal-import-roster');
+          showToast(`Sikeres importálás: ${data.classesCount} osztály, ${data.totalParsed} tanuló beolvasva! (${data.insertedCount} új)`, 'success');
+          await loadRosterClasses();
+        } else {
+          btnSubmitImportRoster.disabled = false;
+          btnSubmitImportRoster.innerHTML = '<span class="material-symbols-outlined" style="font-size: 19px;">upload</span><span>Névsorok importálása</span>';
+          if (rosterImportStatus) {
+            rosterImportStatus.style.display = 'block';
+            rosterImportStatus.style.backgroundColor = 'var(--danger-bg, #fee2e2)';
+            rosterImportStatus.style.color = 'var(--danger, #dc2626)';
+            rosterImportStatus.textContent = data.error || 'Hiba történt a névsor importálása során!';
+          }
+        }
+      } catch (err) {
+        console.error('Import hiba:', err);
+        btnSubmitImportRoster.disabled = false;
+        btnSubmitImportRoster.innerHTML = '<span class="material-symbols-outlined" style="font-size: 19px;">upload</span><span>Névsorok importálása</span>';
+        if (rosterImportStatus) {
+          rosterImportStatus.style.display = 'block';
+          rosterImportStatus.style.backgroundColor = 'var(--danger-bg, #fee2e2)';
+          rosterImportStatus.style.color = 'var(--danger, #dc2626)';
+          rosterImportStatus.textContent = 'Hálózati hiba a fájl feltöltése során!';
+        }
       }
     });
   }
