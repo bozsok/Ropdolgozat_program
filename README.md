@@ -1,4 +1,4 @@
-# Okoskodó – Röpdolgozat program (v1.13.0)
+# Okoskodó – Röpdolgozat program (v1.14.0)
 
 > **100% Offline Helyi Hálózatos Iskolai Röpdolgozat Rendszer (Socrative-klón)**  
 > Kifejezetten általános iskolai 3–8. évfolyamos oktatási környezetre (Digitális kultúra, Technika és Fejlesztő foglalkozás tantárgyakhoz) tervezve.  

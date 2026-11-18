@@ -1,3 +1,4 @@
 1. exportálni a Socrative-ból a teszteket és létrehozni a saját webalkalmazásban azokat
 2. exportálni KRÉTA rendszerből a tanulói névsort, osztályokat és importálhatóvá tenni a saját webalkalmazásban
-3. Ha rákattintok eg ykérdés számára, akkor megjelenik modal ablakban az adott kérdés és kapott válaszok. Ám mellé görgetve a hátsó tartalom görgetődik. ez nem jó. Modal ablak esetében csak a modal ablaknak szabad görgetődnie, ha elviszem az egérkurzort róla, akkor a háttér tartalma ne görgetődjön.
+3. A Beállítások és mentés menüpontban, ha rákattintottunk az Osztálynévsorok megnyitása gombra, akkor nincsen visszanyíl arra, hogy kiugorjak a Hivatalos osztálynévsorok fleületről, újra meg kell nyomni a Beállítások és mentés menüpontot. Ez nem logikus. Itt is kellen morzsaútvonal szerintem.
+

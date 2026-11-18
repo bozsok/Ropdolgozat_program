@@ -10,16 +10,15 @@
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/print.css">
 </head>
-<body style="background: #ffffff; padding: 20px;">
+<body class="print-report-body">
 
-  <!-- Képernyős vezérlősáv (Nyomtatáskor rejtve) -->
-  <div class="no-print" style="max-width: 800px; margin: 0 auto 24px auto; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; padding: 14px 20px; border-radius: 8px; border: 1px solid #cbd5e1;">
-    <div>
-      <h3 style="margin: 0; font-size: 1.1rem;">🖨️ Nyomtatásra és PDF mentésre kész</h3>
-      <p style="margin: 4px 0 0 0; color: #64748b; font-size: 0.9rem;">Minden diák értékelőlapja automatikusan új A4-es oldalra kerül.</p>
-    </div>
-    <button onclick="window.print()" class="btn btn-primary btn-lg">
+  <!-- Képernyős vezérlősáv (Nyomtatáskor és PDF mentéskor szigorúan rejtve) -->
+  <div class="print-toolbar no-print">
+    <button type="button" onclick="window.print()" class="btn btn-primary btn-lg">
       🖨️ Nyomtatás / Mentés PDF-be
+    </button>
+    <button type="button" onclick="window.close()" class="btn btn-secondary btn-lg">
+      ✕ Bezárás
     </button>
   </div>
 
@@ -30,6 +29,15 @@
 
   <script src="/js/utils.js"></script>
   <script>
+    function formatPrintAnswer(raw) {
+      if (!raw) return '';
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.map(formatCode).join(' vagy ');
+      } catch {}
+      return formatCode(raw);
+    }
+
     (async function() {
       const container = document.getElementById('print-pages-container');
       const urlParams = new URLSearchParams(window.location.search);
@@ -122,8 +130,7 @@
                         ${isCor ? '✓ Helyes' : '✗ Hibás'} (${a ? a.points_earned : 0} pont)
                       </span>
                     </div>
-                    ${!isCor ? `<div class="print-answer-row" style="color: #4b5563;">Helyes megoldás: <strong>${formatCode(q.correct_answer)}</strong></div>` : ''}
-                    ${q.explanation ? `<div class="print-answer-row" style="color: #6b7280; font-style: italic;">Magyarázat: ${formatCode(q.explanation)}</div>` : ''}
+                    ${!isCor ? `<div class="print-answer-row" style="color: #4b5563;">Helyes megoldás: <strong>${formatPrintAnswer(q.correct_answer)}</strong></div>` : ''}
                   </div>
                 `;
               }).join('')}

@@ -1350,6 +1350,21 @@ h5 {
   color: #b91c1c;
 }
 
+/* Kérdéstámogató súgó (tooltip) ikon a címkék mellett */
+.help-tooltip-icon {
+  font-size: 16px;
+  color: #94a3b8;
+  cursor: help;
+  transition: color 0.15s ease, transform 0.15s ease;
+  user-select: none;
+  vertical-align: middle;
+}
+
+.help-tooltip-icon:hover {
+  color: #0284c7;
+  transform: scale(1.15);
+}
+
 /* ==========================================================================
    TESZTSZERKESZTŐ MAPPARENDSZER ÉS MORZSAMENÜ (Calm Learner)
    ========================================================================== */

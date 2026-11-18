@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const ExcelJS = require('exceljs');
 const archiver = require('archiver');
 const sessionRepo = require('../db/sessionRepo');
@@ -6,6 +8,44 @@ const grader = require('./grader');
 /**
  * exporter.js - Eredmények exportálása (KRÉTA Excel, Interaktív HTML, Egyéni ZIP)
  */
+
+const LOGO_PATH = path.join(__dirname, '../../public/img/logo.png');
+let cachedLogoDataUri = null;
+
+function getLogoDataUri() {
+  if (!cachedLogoDataUri) {
+    try {
+      if (fs.existsSync(LOGO_PATH)) {
+        const buf = fs.readFileSync(LOGO_PATH);
+        cachedLogoDataUri = `data:image/png;base64,${buf.toString('base64')}`;
+      } else {
+        cachedLogoDataUri = '';
+      }
+    } catch {
+      cachedLogoDataUri = '';
+    }
+  }
+  return cachedLogoDataUri;
+}
+
+function getColLetter(colIdx) {
+  let letter = '';
+  while (colIdx > 0) {
+    const mod = (colIdx - 1) % 26;
+    letter = String.fromCharCode(65 + mod) + letter;
+    colIdx = Math.floor((colIdx - mod) / 26);
+  }
+  return letter;
+}
+
+function formatDisplayAnswer(ans) {
+  if (!ans) return '';
+  try {
+    const parsed = JSON.parse(ans);
+    if (Array.isArray(parsed)) return parsed.join(' vagy ');
+  } catch {}
+  return String(ans);
+}
 
 /**
  * 1. Csoportos KRÉTA-kompatibilis formázott Excel munkafüzet generálása
@@ -21,27 +61,59 @@ async function generateExcelReport(sessionId) {
   workbook.created = new Date();
 
   const worksheet = workbook.addWorksheet('Eredmények', {
-    views: [{ state: 'frozen', xSplit: 2, ySplit: 3 }]
+    views: [{ state: 'frozen', xSplit: 2, ySplit: 4 }]
   });
 
-  // 1. Sor: Cím és fejléc információk
-  worksheet.mergeCells('A1', `${String.fromCharCode(65 + questions.length + 4)}1`);
-  const titleCell = worksheet.getCell('A1');
-  titleCell.value = `${session.quiz_title} – Eredménytábla (${session.subject_name}, ${session.grade_level}. évfolyam)`;
-  titleCell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
-  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
-  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
-  worksheet.getRow(1).height = 30;
-
-  // 2. Sor: Oszlopfejlécek
   const headers = ['Tanuló neve', 'Gép'];
   questions.forEach((q, idx) => {
     headers.push(`K${idx + 1} (${q.points}p)`);
   });
   headers.push('Összpont', 'Százalék', 'KRÉTA jegy', 'Fókuszvesztés');
 
+  const lastCol = getColLetter(headers.length);
+  const todayFormatted = new Date().toLocaleDateString('hu-HU');
+
+  // Fejléc sorok magassága (1–3. sor)
+  worksheet.getRow(1).height = 24;
+  worksheet.getRow(2).height = 18;
+  worksheet.getRow(3).height = 18;
+
+  // Logó beágyazása az A1:B3 területre
+  if (fs.existsSync(LOGO_PATH)) {
+    const logoImageId = workbook.addImage({
+      filename: LOGO_PATH,
+      extension: 'png'
+    });
+    worksheet.addImage(logoImageId, {
+      tl: { col: 0.15, row: 0.15 },
+      ext: { width: 135, height: 40 }
+    });
+  }
+
+  // C1: Teszt címe (PDF-fel azonos formátum)
+  worksheet.mergeCells(`C1:${lastCol}1`);
+  const titleCell = worksheet.getCell('C1');
+  titleCell.value = session.quiz_title;
+  titleCell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF1E40AF' } };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'left' };
+
+  // C2: Tantárgy és évfolyam
+  worksheet.mergeCells(`C2:${lastCol}2`);
+  const metaCell = worksheet.getCell('C2');
+  metaCell.value = `Tantárgy: ${session.subject_name} | Évfolyam: ${session.grade_level}. évfolyam`;
+  metaCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF475569' } };
+  metaCell.alignment = { vertical: 'middle', horizontal: 'left' };
+
+  // C3: Dátum, résztvevők, pontszám
+  worksheet.mergeCells(`C3:${lastCol}3`);
+  const dateCell = worksheet.getCell('C3');
+  dateCell.value = `Dátum: ${todayFormatted} | Résztvevők száma: ${participants.length} fő | Maximális pontszám: ${totalMaxPoints} pont`;
+  dateCell.font = { name: 'Calibri', size: 9, italic: true, color: { argb: 'FF64748B' } };
+  dateCell.alignment = { vertical: 'middle', horizontal: 'left' };
+
+  // 4. Sor: Oszlopfejlécek
   const headerRow = worksheet.addRow(headers);
-  headerRow.height = 24;
+  headerRow.height = 26;
   headerRow.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
   headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
@@ -49,10 +121,10 @@ async function generateExcelReport(sessionId) {
     const cell = headerRow.getCell(col);
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
     cell.border = {
-      top: { style: 'thin' },
-      left: { style: 'thin' },
-      bottom: { style: 'medium' },
-      right: { style: 'thin' }
+      top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      bottom: { style: 'medium', color: { argb: 'FF1E40AF' } },
+      right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
     };
   }
 
@@ -132,6 +204,8 @@ function generateInteractiveHtml(sessionId) {
   if (!data) throw new Error('A dolgozat nem található!');
 
   const { session, questions, participants, answers, totalMaxPoints } = data;
+  const logoDataUri = getLogoDataUri();
+  const todayFormatted = new Date().toLocaleDateString('hu-HU');
 
   const answerMap = new Map();
   answers.forEach(a => {
@@ -146,7 +220,13 @@ function generateInteractiveHtml(sessionId) {
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #1e293b; margin: 0; padding: 24px; }
     .container { max-width: 1200px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); padding: 24px; }
-    h1 { font-size: 1.5rem; margin-top: 0; color: #1e40af; }
+    .report-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 20px; }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .header-logo { height: 42px; width: auto; object-fit: contain; }
+    .header-title { font-size: 1.45rem; margin: 0 0 4px 0; color: #1e40af; font-weight: 800; }
+    .header-meta { font-size: 0.9rem; color: #64748b; }
+    .header-right { text-align: right; }
+    .header-group-label { font-size: 1.15rem; font-weight: 700; color: #1e293b; }
     .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
     .btn { padding: 8px 16px; font-weight: 600; border-radius: 6px; border: 1px solid #cbd5e1; background: #f1f5f9; cursor: pointer; }
     .btn:hover { background: #e2e8f0; }
@@ -161,8 +241,19 @@ function generateInteractiveHtml(sessionId) {
 </head>
 <body>
   <div class="container">
-    <h1>${session.quiz_title}</h1>
-    <p style="color: #64748b; margin-top: -8px;">Tantárgy: ${session.subject_name} | Évfolyam: ${session.grade_level}. évfolyam</p>
+    <div class="report-header">
+      <div class="header-left">
+        ${logoDataUri ? `<img src="${logoDataUri}" alt="Okoskodó" class="header-logo">` : ''}
+        <div>
+          <h1 class="header-title">${session.quiz_title}</h1>
+          <div class="header-meta">Tantárgy: <strong>${session.subject_name}</strong> | Évfolyam: <strong>${session.grade_level}. évfolyam</strong></div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="header-group-label">Csoportos eredménytábla</div>
+        <div class="header-meta">Résztvevők: <strong>${participants.length} tanuló</strong> | Dátum: <strong>${todayFormatted}</strong></div>
+      </div>
+    </div>
     
     <div class="toolbar">
       <input type="text" id="filter-input" placeholder="🔍 Keresés név szerint..." style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; width: 250px;">
@@ -233,6 +324,8 @@ function createIndividualZipStream(sessionId) {
   if (!data) throw new Error('A dolgozat nem található!');
 
   const { session, questions, participants, answers, totalMaxPoints } = data;
+  const logoDataUri = getLogoDataUri();
+  const todayFormatted = new Date().toLocaleDateString('hu-HU');
   const archive = archiver('zip', { zlib: { level: 9 } });
 
   const answerMap = new Map();
@@ -249,7 +342,13 @@ function createIndividualZipStream(sessionId) {
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #1e293b; padding: 24px; }
     .card { max-width: 700px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-    .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px; }
+    .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 14px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .header-logo { height: 42px; width: auto; object-fit: contain; }
+    .header-title { margin: 0 0 4px 0; font-size: 1.35rem; color: #1e40af; font-weight: 800; }
+    .header-meta { font-size: 0.9rem; color: #64748b; }
+    .header-right { text-align: right; }
+    .student-name { font-size: 1.25rem; font-weight: 800; color: #1e293b; }
     .score-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px; text-align: center; margin-bottom: 24px; }
     .q-item { border-bottom: 1px solid #f1f5f9; padding: 12px 0; }
     .correct { color: #15803d; font-weight: bold; }
@@ -259,8 +358,17 @@ function createIndividualZipStream(sessionId) {
 <body>
   <div class="card">
     <div class="header">
-      <h2>${session.quiz_title}</h2>
-      <p style="color: #64748b;">Tanuló: <strong>${p.student_name}</strong> | Osztály: ${session.grade_level}. évf.</p>
+      <div class="header-left">
+        ${logoDataUri ? `<img src="${logoDataUri}" alt="Okoskodó" class="header-logo">` : ''}
+        <div>
+          <h2 class="header-title">${session.quiz_title}</h2>
+          <div class="header-meta">Tantárgy: <strong>${session.subject_name}</strong> | Évfolyam: <strong>${session.grade_level}. évfolyam</strong></div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="student-name">${p.student_name}</div>
+        <div class="header-meta">${p.pc_number ? p.pc_number + '. gép' : 'Diák'} | Dátum: <strong>${todayFormatted}</strong></div>
+      </div>
     </div>
     <div class="score-box">
       <div style="font-size: 2rem; font-weight: 800; color: #1d4ed8;">${p.total_points} / ${totalMaxPoints} pont (${p.percentage}%)</div>
@@ -275,7 +383,7 @@ function createIndividualZipStream(sessionId) {
           <div><strong>${idx + 1}. ${q.question_text}</strong> (${q.points}p)</div>
           <div style="margin-top: 4px;">Adott válasz: <strong>${a ? a.submitted_answer : '–'}</strong></div>
           <div class="${isCor ? 'correct' : 'wrong'}">${isCor ? '✓ Helyes' : '✗ Hibás'} (Kapott pont: ${a ? a.points_earned : 0}p)</div>
-          ${!isCor ? `<div style="font-size: 0.9rem; color: #475569;">Helyes válasz: ${q.correct_answer}</div>` : ''}
+          ${!isCor ? `<div style="font-size: 0.9rem; color: #475569;">Helyes válasz: ${formatDisplayAnswer(q.correct_answer)}</div>` : ''}
         </div>
       `;
     }).join('')}

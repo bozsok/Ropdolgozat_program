@@ -406,6 +406,19 @@
       if (exportCenterZip) exportCenterZip.href = `/api/admin/export/zip/${sessionId}`;
       if (exportCenterPrint) exportCenterPrint.href = `/print?sessionId=${sessionId}`;
 
+      const liveExportExcel = document.getElementById('live-export-excel');
+      const liveExportPrint = document.getElementById('live-export-print');
+      const liveExportHtml = document.getElementById('live-export-html');
+      const liveExportZip = document.getElementById('live-export-zip');
+      const liveExportSubtitle = document.getElementById('live-export-modal-subtitle');
+      if (liveExportExcel) liveExportExcel.href = `/api/admin/export/excel/${sessionId}`;
+      if (liveExportPrint) liveExportPrint.href = `/print?sessionId=${sessionId}`;
+      if (liveExportHtml) liveExportHtml.href = `/api/admin/export/html/${sessionId}`;
+      if (liveExportZip) liveExportZip.href = `/api/admin/export/zip/${sessionId}`;
+      if (liveExportSubtitle && data.session) {
+        liveExportSubtitle.textContent = `${data.session.quiz_title} (${data.session.grade_level}. évf.)`;
+      }
+
       renderMatrix(data);
 
       // Biztosítjuk, hogy a tab-live fül legyen aktív
@@ -1247,11 +1260,41 @@
     openModal('modal-confirm-finish');
   });
 
+  // Élő dolgozat exportálásának megnyitása
+  const btnLiveExport = document.getElementById('btn-live-export');
+  if (btnLiveExport) {
+    btnLiveExport.addEventListener('click', () => {
+      if (!currentSessionId) {
+        showToast('Nincs kiválasztott dolgozat az exportáláshoz!', 'error');
+        return;
+      }
+      openModal('modal-live-export');
+    });
+  }
+
   /**
    * Új Dolgozat Indítása (Modal)
    */
-  btnOpenStartModal.addEventListener('click', () => openModal('modal-start-session'));
-  btnOpenStartModalAlt.addEventListener('click', () => openModal('modal-start-session'));
+  function syncStartQuizTimeLimit() {
+    if (!startQuizId || !startTimeLimit) return;
+    const selOpt = startQuizId.options[startQuizId.selectedIndex];
+    if (selOpt && selOpt.dataset.timeLimit !== undefined) {
+      startTimeLimit.value = selOpt.dataset.timeLimit;
+    }
+  }
+
+  btnOpenStartModal.addEventListener('click', () => {
+    syncStartQuizTimeLimit();
+    openModal('modal-start-session');
+  });
+  btnOpenStartModalAlt.addEventListener('click', () => {
+    syncStartQuizTimeLimit();
+    openModal('modal-start-session');
+  });
+
+  if (startQuizId) {
+    startQuizId.addEventListener('change', syncStartQuizTimeLimit);
+  }
 
   formStartSession.addEventListener('submit', async () => {
     const payload = {
@@ -1361,10 +1404,12 @@
       allQuizzes.forEach(q => {
         const opt = document.createElement('option');
         opt.value = q.id;
+        opt.dataset.timeLimit = (q.default_time_limit_min !== null && q.default_time_limit_min !== undefined) ? q.default_time_limit_min : 0;
         const folderTag = q.folder_name ? `[${q.folder_name}] ` : '';
         opt.textContent = `${folderTag}${q.title} (${q.question_count} kérdés)`;
         startQuizId.appendChild(opt);
       });
+      syncStartQuizTimeLimit();
     } catch (err) {
       console.error('Hiba az indító tesztválasztó frissítésekor:', err);
     }
@@ -2106,6 +2151,28 @@
     const qExpl = existing ? existing.explanation : '';
     const qOptions = existing && Array.isArray(existing.options) ? existing.options : ['', '', '', ''];
 
+    // Meglévő helyes válaszok feldolgozása SHORT esetén (szinonimák / alternatívák)
+    let initialShortAnswers = [''];
+    if (qType === 'SHORT' && qCorrect) {
+      try {
+        const parsed = JSON.parse(qCorrect);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          initialShortAnswers = parsed.map(s => String(s).trim()).filter(Boolean);
+        } else {
+          initialShortAnswers = [qCorrect];
+        }
+      } catch {
+        if (qCorrect.includes('|')) {
+          initialShortAnswers = qCorrect.split('|').map(s => s.trim()).filter(Boolean);
+        } else if (qCorrect.includes(';')) {
+          initialShortAnswers = qCorrect.split(';').map(s => s.trim()).filter(Boolean);
+        } else {
+          initialShortAnswers = [qCorrect];
+        }
+      }
+    }
+    if (initialShortAnswers.length === 0) initialShortAnswers = [''];
+
     // Meglévő helyes válasz indexének azonosítása ABCD esetén
     let correctOptionIndex = -1;
     if (qType === 'ABCD' && qCorrect) {
@@ -2151,7 +2218,10 @@
             <input type="number" step="0.5" min="0.5" class="form-control q-points" value="${qPoints}">
           </div>
           <div>
-            <label class="form-label">Kérdés szövege (használd a \`kód\` jelölést!):</label>
+            <label class="form-label" style="display: inline-flex; align-items: center; gap: 5px;">
+              <span>Kérdés szövege:</span>
+              <span class="material-symbols-outlined help-tooltip-icon" title="Kódrészlet, képlet vagy billentyűkombináció kiemeléséhez használd a visszahajló idézőjelet (backtick --> AltGr+9): \`kód\` (pl. \`=SZUM(A1:A10)\` vagy \`Ctrl+C\`).">help</span>
+            </label>
             <input type="text" class="form-control q-text" value="${escapeHtml(qText)}" placeholder="pl. Melyik képlet számol összeget?">
           </div>
         </div>
@@ -2190,14 +2260,33 @@
           </div>
         </div>
 
-        <!-- 3. Rövid válasz (SHORT) esetén elfogadott szövegmező -->
+        <!-- 3. Rövid válasz (SHORT) esetén elfogadott válaszok (szinonimák) -->
         <div class="q-short-box" style="${qType === 'SHORT' ? '' : 'display:none;'} margin-bottom: 12px;">
-          <label class="form-label">Elfogadott helyes válasz (amit a diáknak pontosan be kell gépelnie):</label>
-          <input type="text" class="form-control q-short-input-val" value="${escapeHtml(qCorrect)}" placeholder="pl. =SZUM(A1:A10) vagy RAM">
+          <label class="form-label" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span>Elfogadott helyes válasz(ok) – szinonimák, alternatív írásmódok:</span>
+            <span style="font-size: 0.82rem; font-weight: normal; color: var(--text-muted);">Bármelyik megadott változatért jár a pont</span>
+          </label>
+          <div class="q-short-answers-container" style="display: flex; flex-direction: column; gap: 8px;">
+            ${initialShortAnswers.map((ans, idx) => `
+              <div class="q-short-answer-row" style="display: flex; gap: 8px; align-items: center;">
+                <span class="q-short-answer-num" style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); min-width: 24px;">${idx + 1}.</span>
+                <input type="text" class="form-control q-short-input-val" value="${escapeHtml(ans)}" placeholder="pl. ${idx === 0 ? 'fő megoldás (pl. Internet Protocol)' : 'szinonima / alternatíva (pl. IP)'}" style="flex: 1;">
+                <button type="button" class="btn btn-secondary btn-remove-short-ans" title="Alternatíva törlése" style="padding: 6px 10px; font-size: 0.85rem; ${initialShortAnswers.length > 1 ? '' : 'display: none;'}">
+                  <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
+                </button>
+              </div>
+            `).join('')}
+          </div>
+          <div style="margin-top: 8px;">
+            <button type="button" class="btn btn-secondary btn-add-short-ans" style="padding: 5px 12px; font-size: 0.84rem;">
+              <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 4px;">add</span>
+              <span>További elfogadott válasz (szinonima) hozzáadása</span>
+            </button>
+          </div>
         </div>
 
-        <!-- Magyarázat sor (mindhárom típusnál tiszta és egységes) -->
-        <div style="margin-top: 10px;">
+        <!-- Magyarázat sor (elrejtve, szükség esetén a display: none eltávolításával azonnal felfedhető) -->
+        <div style="display: none; margin-top: 10px;">
           <label class="form-label">Magyarázat (opcionális tanári indoklás a diák visszajelzéséhez):</label>
           <input type="text" class="form-control q-explanation" value="${escapeHtml(qExpl)}" placeholder="A megoldás magyarázata a diák képernyőjén megjelenő visszajelzéshez...">
         </div>
@@ -2252,6 +2341,57 @@
         }
       });
     });
+
+    // Rövid válasz (SHORT) alternatívák dinamikus kezelése
+    const shortContainer = item.querySelector('.q-short-answers-container');
+    const btnAddShort = item.querySelector('.btn-add-short-ans');
+
+    function refreshShortAnswerRows() {
+      if (!shortContainer) return;
+      const rows = shortContainer.querySelectorAll('.q-short-answer-row');
+      rows.forEach((row, idx) => {
+        const numSpan = row.querySelector('.q-short-answer-num');
+        if (numSpan) numSpan.textContent = `${idx + 1}.`;
+        const btnDel = row.querySelector('.btn-remove-short-ans');
+        if (btnDel) {
+          btnDel.style.display = rows.length > 1 ? 'inline-flex' : 'none';
+        }
+      });
+    }
+
+    if (btnAddShort && shortContainer) {
+      btnAddShort.addEventListener('click', () => {
+        const row = document.createElement('div');
+        row.className = 'q-short-answer-row';
+        row.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+        row.innerHTML = `
+          <span class="q-short-answer-num" style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); min-width: 24px;"></span>
+          <input type="text" class="form-control q-short-input-val" placeholder="szinonima / alternatíva..." style="flex: 1;">
+          <button type="button" class="btn btn-secondary btn-remove-short-ans" title="Alternatíva törlése" style="padding: 6px 10px; font-size: 0.85rem;">
+            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
+          </button>
+        `;
+        const btnDel = row.querySelector('.btn-remove-short-ans');
+        btnDel.addEventListener('click', () => {
+          row.remove();
+          refreshShortAnswerRows();
+        });
+        shortContainer.appendChild(row);
+        refreshShortAnswerRows();
+        const input = row.querySelector('input');
+        if (input) input.focus();
+      });
+
+      shortContainer.querySelectorAll('.btn-remove-short-ans').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const row = e.target.closest('.q-short-answer-row');
+          if (row) {
+            row.remove();
+            refreshShortAnswerRows();
+          }
+        });
+      });
+    }
 
     // Eltávolítás
     item.querySelector('.btn-remove-q').addEventListener('click', () => {
@@ -2376,12 +2516,13 @@
         options = ['Igaz', 'Hamis'];
 
       } else if (type === 'SHORT') {
-        const shortVal = b.querySelector('.q-short-input-val').value.trim();
-        if (!shortVal) {
-          showAdminAlert('⚠️ Helyes válasz hiányzik', `A(z) ${qNum}. rövid válaszos kérdésnél kötelező megadni az elfogadott helyes választ!`);
+        const shortInputs = b.querySelectorAll('.q-short-input-val');
+        const shortValues = Array.from(shortInputs).map(inp => inp.value.trim()).filter(Boolean);
+        if (shortValues.length === 0) {
+          showAdminAlert('⚠️ Helyes válasz hiányzik', `A(z) ${qNum}. rövid válaszos kérdésnél legalább 1 elfogadott helyes válasz megadása kötelező!`);
           return;
         }
-        correct = shortVal;
+        correct = (shortValues.length === 1) ? shortValues[0] : JSON.stringify(shortValues);
         options = [];
       }
 

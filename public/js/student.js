@@ -1356,25 +1356,32 @@
       } catch {
         // maradhat az eredeti result.correctAnswer
       }
+    } else if (q && q.question_type === 'SHORT') {
+      try {
+        const parsed = JSON.parse(result.correctAnswer);
+        if (Array.isArray(parsed)) displayCorrectAnswer = parsed.join(' vagy ');
+      } catch {
+        if (String(result.correctAnswer).includes('|')) {
+          displayCorrectAnswer = result.correctAnswer.split('|').map(s => s.trim()).join(' vagy ');
+        } else if (String(result.correctAnswer).includes(';')) {
+          displayCorrectAnswer = result.correctAnswer.split(';').map(s => s.trim()).join(' vagy ');
+        }
+      }
     }
 
     if (isCorrect) {
       feedbackCard.className = 'quiz-feedback-strip quiz-feedback-strip-correct';
       if (feedbackIcon) feedbackIcon.textContent = 'task_alt';
-      feedbackTitle.innerHTML = `Helyes válasz! (+${result.points_earned} pont)`;
+      feedbackTitle.innerHTML = 'Helyes válasz!';
     } else {
       feedbackCard.className = 'quiz-feedback-strip quiz-feedback-strip-wrong';
       if (feedbackIcon) feedbackIcon.textContent = 'cancel';
       feedbackTitle.innerHTML = `Helyes megoldás: <strong>${formatCode(displayCorrectAnswer)}</strong>`;
     }
 
-    if (result.explanation) {
-      feedbackBody.innerHTML = `<em>${formatCode(result.explanation)}</em>`;
-      feedbackBody.style.display = 'block';
-    } else {
-      feedbackBody.innerHTML = '';
-      feedbackBody.style.display = 'none';
-    }
+    // A magyarázat blokk elrejtve a letisztult visszajelzés és a duplikáció elkerülése érdekében
+    feedbackBody.innerHTML = '';
+    feedbackBody.style.display = 'none';
 
     const isLast = (currentQuestionIndex + 1 >= currentQuestions.length) || result.isFinished;
 

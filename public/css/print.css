@@ -3,19 +3,37 @@
    SZABÁLY: Tilos az !important használata (Rule 2)
    ========================================================================== */
 
+body.print-report-body {
+  background-color: #f8fafc;
+  padding: 20px;
+  color: #1e293b;
+}
+
+.print-toolbar {
+  max-width: 800px;
+  margin: 0 auto 20px auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+}
+
 @page {
   size: A4 portrait;
   margin: 15mm 15mm 15mm 15mm;
 }
 
 @media print {
-  body {
+  body.print-report-body {
     background-color: #ffffff;
     color: #000000;
     font-size: 11pt;
     line-height: 1.4;
+    padding: 0;
+    margin: 0;
   }
 
+  .print-toolbar,
   .no-print,
   .app-header,
   .badge-nav-bar,

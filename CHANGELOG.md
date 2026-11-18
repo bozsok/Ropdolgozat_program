@@ -4,11 +4,11 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
-## [1.13.0] – 2026-11-13
+## [1.14.0] – 2026-11-18
 
-### Diákoldali Igaz–Hamis letisztítás, Mátrix nézet és eszköztár pixelpontos stabilizálása, összecsukható KPI mutatók, Tesztszerkesztő relációbiztos mentése és magyar helyesírási revízió
+### Tesztszerkesztő hierarchikus mapparendszere, tesztáthelyezés, több helyes válasz (szinonimák), aktív dolgozat export központja, egységes export fejlécek és felületi letisztítás
 
-Átfogó diákoldali, tanári és adatintegritási stabilitási kiadás: az alsó tagozatos (3. osztályos) tanulók számára letisztultak az Igaz–Hamis kérdéskártyák a zavaró feliratoktól. A Tesztszerkesztő mentése relációbiztossá vált (in-place Smart Sync), megszüntetve az SQLite FOREIGN KEY hibákat. A tanári Mátrix nézetben végérvényesen megszűnt a táblázat és az eszköztár ugrálása a fix cellageometriának és az egységes 24 px-es státuszkapszuláknak köszönhetően. A 4 KPI mutatókártya összecsukhatóvá vált egyetlen kattintással a felső eszköztárból, a működési módok egységes magyar elnevezést kaptak, a rendszer felületei pedig teljes körű revízión estek át az MTA 12. kiadásának helyesírási szabályai szerint.
+Átfogó tanórai szervezési és kiértékelési kiadás: a Tesztszerkesztőben korlátlan mélységű, hierarchikus mapparendszer valósult meg morzsamenü navigációval és tesztáthelyezési lehetőséggel. A rövid szöveges válaszoknál bevezetésre került a több elfogadott helyes megoldás (szinonimák, alternatívák) toleráns gépi kiértékeléssel. A dolgozatindítás automatikusan betölti az előre megadott időkorlátot. A dolgozat exportálása közvetlenül az aktív munkamenet fejlécébe költözött kényelmes modális letöltőközponttal, a generált formátumok (KRÉTA Excel, interaktív HTML, egyéni ZIP értékelőlapok és nyomtatható A4 PDF) pedig egységes, reprezentatív fejlécet kaptak beágyazott Okoskodó logóval. A felesleges magyarázatsorok, pontszám-feliratok és reklámszövegek maradéktalanul törlésre kerültek mind a tanulói képernyőről, mind az exportokból.
 
 #### Hozzáadva és megújítva (Added and Redesigned)
 * **Tesztszerkesztő hierarchikus mapparendszer és morzsamenü navigáció:**
@@ -18,8 +18,71 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
   - **Morzsamenü (Breadcrumbs) és visszalépés:** A mappák közötti tájékozódást kattintható morzsamenü (*📁 Főmappa > 📁 6. évfolyam > 📁 Hálózatok*) és egyetlen kattintásos *„Szülőmappa”* visszalépő gomb segíti.
   - **Helyi mappaátnevezés és adatbiztonsági törlés:** A mappák a kártyájukon elhelyezett ceruza ikonnal közvetlenül in-place átnevezhetők. Mappa törlése esetén az adatbiztonsági garancia értelmében a mappában lévő tesztek és almappák nem vesznek el, hanem automatikusan felmozgatásra kerülnek a szülő mappába.
   - **Mappatámogatás a szerkesztőben és az indítóban:** A tesztszerkesztő űrlapon hierarchikus legördülő mezőben választható ki a célmappa, az adott mappában létrehozott új teszt alapértelmezetten abba a mappába kerül, az új dolgozat indításakor pedig a választólista a mappa nevét is feltünteti.
-  - **Teszt áthelyezése mappák között (4. kártyaikon):** A tesztkártyákon megjelent a 4. akciógomb (*📁 Áthelyezés mappába*). A gomb megnyomásakor a program minden alkalommal frissen lekéri a szerverről a teljes mappastruktúrát, majd egy dedikált modális ablakban felkínálja a célmappa kiválasztását (beleértve a Főmappát is), és egyetlen kattintással áthelyezi a tesztet.
 
+* **Teszt áthelyezése mappák között (4. kártyaikon és modális ablak):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A tesztkártyákon megjelent a 4. akciógomb (*📁 Áthelyezés mappába*). A gomb megnyomásakor a program minden alkalommal frissen lekéri a szerverről a teljes mappastruktúrát, majd egy dedikált modális ablakban felkínálja a célmappa kiválasztását (beleértve a Főmappát is), és egyetlen kattintással áthelyezi a tesztet.
+
+* **Rövid válaszos kérdéseknél több elfogadott helyes válasz (szinonimák, alternatívák):**
+  - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`src/services/grader.js`](file:///d:/dev/Röpdolgozat%20program/src/services/grader.js), [`src/services/exporter.js`](file:///d:/dev/Röpdolgozat%20program/src/services/exporter.js)
+  - **Dinamikus alternatívalista a Tesztszerkesztőben:** A rövid válasz (SHORT) típusú kérdéseknél a tanár tetszőleges számú elfogadott megoldást rögzíthet a *„További elfogadott válasz (szinonima) hozzáadása”* gombbal (pl. 1. *Internet Protocol*, 2. *IP*, 3. *IP-cím*).
+  - **Intelligens, toleráns értékelés:** Bármelyik megadott változatot gépeli be a tanuló (kis- és nagybetűkre vagy felesleges szóközökre érzéketlenül), a rendszer azonnal teljes pontszámmal elfogadja azt.
+  - **Kultúrált visszajelzés:** Hibás válasz esetén a tanuló képernyőjén és a tanulói értékelőlapokon az elfogadott lehetőségek természetes magyar kötőszóval jelennek meg (pl. *Internet Protocol vagy IP vagy IP-cím*).
+
+* **Export menüpont áthelyezése közvetlenül az aktív dolgozat fejlécébe és letöltési modál:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A felső navigációs fejlécből (`admin-nav-tabs`) kikerült a különálló *„Export (.xlsx, .pdf, .html)”* fül, mivel a tanórai exportálás logikailag mindig a futó vagy megnyitott dolgozathoz kapcsolódik.
+  - Az élő mátrix felső gombsorába (`admin-toolbar-actions`) bekerült egy kényelmes, azonnal elérhető *„Export”* gomb (`btn-live-export`), amely egy elegáns modális ablakban kínálja fel az aktív dolgozat Excel (.xlsx), nyomtatható A4 PDF, offline HTML mátrix és ZIP csomag formátumú letöltését.
+
+* **Egységes fejléc és Okoskodó logó beágyazása minden exportált formátumban (.xlsx, .html, .zip, .pdf):**
+  - **Fájlok:** [`src/services/exporter.js`](file:///d:/dev/Röpdolgozat%20program/src/services/exporter.js), [`public/print-report.html`](file:///d:/dev/Röpdolgozat%20program/public/print-report.html)
+  - A PDF nyomtatási sablon elegáns megjelenéséhez igazodva mind a KRÉTA Excel (.xlsx), mind az interaktív offline csoportos HTML mátrix, mind pedig az egyéni ZIP értékelőlapok azonos, reprezentatív fejlécet kaptak.
+  - **Okoskodó logó beágyazása:** Az Excel munkalap tetejére natívan beágyazásra került a hivatalos logó képe, a HTML fájlokban pedig offline Base64 adat-URL formájában jelenik meg, így hálózati kapcsolat nélkül is bárhol hibátlanul renderelődik.
+  - **Egységes adathierarchia:** A bal oldalon a logó mellett a teszt címe, tantárgya és évfolyama, a jobb oldalon pedig a résztvevők létszáma, a tanuló neve, a gép száma és az aktuális dátum látható minden formátumban.
+
+#### Javítva (Fixed)
+* **Időkorlát automatikus betöltése az új dolgozat indításakor:**
+  - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A teszt indításakor felugró *„Új dolgozat indítása”* modális ablakban a kiválasztott feladatsor alapján automatikusan és dinamikusan beíródik a Tesztszerkesztőben előre meghatározott időkorlát (perc) az *„Egyéni időkorlát”* mezőbe (`quizzes.default_time_limit_min`), így a tanárnak nem szükséges azt manuálisan minden alkalommal begépelnie.
+
+* **Tanulói visszajelző sáv letisztítása a (+1pont) felirattól:**
+  - **Fájlok:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A *„Következő”* gomb mellett helyes válasz leadásakor megjelenő zöld pipás feliratból törlésre került a felesleges `(+1pont)` szövegezés, így a tanuló képernyőjén diszkrét, tiszta *„Helyes válasz!”* üzenet jelenik meg.
+
+* **Kérdésszöveg címke letisztítása és kódkiemelés súgó tooltip ikon:**
+  - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A kérdéskártyákon a zavaró zárójeles felirat helyett letisztult *„Kérdés szövege:”* címke jelent meg.
+  - A címke mellett egy finom kérdőjel ikon (`help`) kapott helyet, amely fölé víve az egeret egyértelmű súgóbuborék (tooltip) mutatja be a kód-, képlet- és billentyűparancs-kiemelés (visszahajló idézőjel: \`kód\`) használatát.
+
+* **Visszajelző sáv duplikációjának felszámolása és Magyarázat mező elrejtése:**
+  - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Megszűnt az a jelenség, hogy a tanulói felület alsó sávjában a helyes megoldás kétszer jelent meg egymás alatt.
+  - A Tesztszerkesztőben az opcionális *„Magyarázat”* beviteli mező elrejtésre került (`display: none`), megőrizve a struktúrát a későbbi esetleges visszakapcsoláshoz.
+  - A tanulói felületen a visszajelző sáv kizárólag a letisztult, pontos helyes választ (`Helyes megoldás: [érték]`) jeleníti meg a *„Következő”* gomb mellett, megszüntetve a felesleges redundanciát.
+
+* **Magyarázat (explanation) elrejtése a nyomtatási és ZIP exportokból is:**
+  - **Fájlok:** [`public/print-report.html`](file:///d:/dev/Röpdolgozat%20program/public/print-report.html), [`src/services/exporter.js`](file:///d:/dev/Röpdolgozat%20program/src/services/exporter.js)
+  - A Tesztszerkesztőhöz és a tanulói képernyőhöz hasonlóan a nyomtatható A4 PDF jelentésből és az egyéni ZIP értékelőlapokból is maradéktalanul eltávolításra került a felesleges *„Magyarázat:”* sor, helyette hibás válasznál kizárólag a hivatalos helyes megoldás jelenik meg természetes magyar kötőszóval formázva.
+
+* **Nyomtatható A4 PDF export letisztítása a felesleges reklámszövegtől és kerettől:**
+  - **Fájlok:** [`public/print-report.html`](file:///d:/dev/Röpdolgozat%20program/public/print-report.html), [`public/css/print.css`](file:///d:/dev/Röpdolgozat%20program/public/css/print.css)
+  - Törlésre került a PDF első oldalán korábban megjelenő felesleges *„Nyomtatásra és PDF mentésre kész, Minden diák értékelőlapja...”* keretes szövegezés.
+  - Az inline stílusok helyett tiszta CSS osztályok (`.print-toolbar.no-print`) kerültek bevezetésre, garantálva, hogy a PDF mentésben és a papírnyomtatásban a vezérlősáv és a gombok maradéktalanul rejtettek legyenek, így a PDF dokumentum azonnal a hivatalos tanulói értékelőlappal indul.
+
+* **Projektverzió és kliensoldali gyorsítótár-frissítés (Cache-Busting):**
+  - **Fájlok:** [`package.json`](file:///d:/dev/Röpdolgozat%20program/package.json), [`project-context.md`](file:///d:/dev/Röpdolgozat%20program/project-context.md), [`README.md`](file:///d:/dev/Röpdolgozat%20program/README.md), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/projector.html`](file:///d:/dev/Röpdolgozat%20program/public/projector.html)
+  - A projektverzió egységesen `v1.14.0`-ra frissült.
+  - Minden HTML felületen frissültek a stíluslapok és szkriptek cache-busting paraméterei (`?v=1.14.0`), garantálva, hogy a tanári gép és a 42 db tanulói kliensgép böngészője azonnal, beragadt gyorsítótár nélkül a legfrissebb CSS-t és JS-t töltse be.
+
+---
+
+## [1.13.0] – 2026-11-13
+
+### Diákoldali Igaz–Hamis letisztítás, Mátrix nézet és eszköztár pixelpontos stabilizálása, összecsukható KPI mutatók, Tesztszerkesztő relációbiztos mentése és magyar helyesírási revízió
+
+Átfogó diákoldali, tanári és adatintegritási stabilitási kiadás: az alsó tagozatos (3. osztályos) tanulók számára letisztultak az Igaz–Hamis kérdéskártyák a zavaró feliratoktól. A Tesztszerkesztő mentése relációbiztossá vált (in-place Smart Sync), megszüntetve az SQLite FOREIGN KEY hibákat. A tanári Mátrix nézetben végérvényesen megszűnt a táblázat és az eszköztár ugrálása a fix cellageometriának és az egységes 24 px-es státuszkapszuláknak köszönhetően. A 4 KPI mutatókártya összecsukhatóvá vált egyetlen kattintással a felső eszköztárból, a működési módok egységes magyar elnevezést kaptak, a rendszer felületei pedig teljes körű revízión estek át az MTA 12. kiadásának helyesírási szabályai szerint.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
 * **Tesztszerkesztő Socrative-stílusú számozott helyes válasz kizöldítés és mentési validáció:**
   - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
   - **Redundancia és elgépelés felszámolása:** A korábbi, felesleges dupla munkát és elgépelési kockázatot hordozó *„Helyes válasz pontos értéke”* kézi másolómező maradéktalanul megszűnt.
@@ -40,6 +103,7 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
   - Helyüket két nagy méretű, tiszta, középre zárt és modern gombkártya vette át, kizárólag a lényeggel: **IGAZ** és **HAMIS**. Kiválasztáskor a kártya elegáns narancssárga kiemelést és finom árnyékot kap.
 
 #### Javítva (Fixed)
+
 * **Háttérgörgetés blokkolása és görgetési láncolás (Scroll Chaining) elleni védelem modális ablakoknál:**
   - **Fájlok:** [`public/js/utils.js`](file:///d:/dev/Röpdolgozat%20program/public/js/utils.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
   - Megszűnt az a zavaró jelenség, hogy felugró modális ablakok (pl. az új kérdés típusválasztója, kérdésrészletező vagy megerősítő párbeszédpanelek) alatt az egérrel a háttérben elhelyezkedő fő tartalom görgethető maradt.

@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.13.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.14.0">
   <style>
     /* Admin specifikus elrendezés (Tilos az !important) */
     .admin-container {
@@ -90,10 +90,6 @@
           <span class="material-symbols-outlined">history_edu</span>
           <span>Reports / Korábbi dolgozatok</span>
         </button>
-        <button class="nav-tab-btn" data-tab="tab-export" type="button">
-          <span class="material-symbols-outlined">file_download</span>
-          <span>Export (.xlsx, .pdf, .html)</span>
-        </button>
         <button class="nav-tab-btn" data-tab="tab-backup" type="button">
           <span class="material-symbols-outlined">tune</span>
           <span>Beállítások és mentés</span>
@@ -156,6 +152,10 @@
             <button id="btn-admin-start-race" class="admin-toolbar-btn-race" style="display: none;" type="button">
               <span class="material-symbols-outlined">rocket_launch</span>
               <span>RAJT! Verseny indítása</span>
+            </button>
+            <button id="btn-live-export" class="admin-toolbar-btn-secondary" type="button" title="Az aktív dolgozat eredményeinek exportálása">
+              <span class="material-symbols-outlined">file_download</span>
+              <span>Export</span>
             </button>
             <button id="btn-open-start-modal-alt" class="admin-toolbar-btn-secondary" type="button">
               <span class="material-symbols-outlined">add_circle</span>
@@ -946,6 +946,69 @@
     </div>
   </div>
 
+  <!-- Élő Dolgozat Exportálása Modal -->
+  <div id="modal-live-export" class="modal-backdrop">
+    <div class="modal-window" style="max-width: 520px;">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 40px; height: 40px; border-radius: 10px; background-color: #e0f2fe; color: #0284c7; display: flex; align-items: center; justify-content: center;">
+            <span class="material-symbols-outlined" style="font-size: 24px;">file_download</span>
+          </div>
+          <div>
+            <h3 class="card-title" style="margin: 0; font-size: 1.15rem;">Dolgozat exportálása</h3>
+            <p id="live-export-modal-subtitle" class="card-subtitle" style="margin: 2px 0 0 0; font-size: 0.85rem; color: var(--text-muted);">Eredmények letöltése különböző formátumokban</p>
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-live-export')" style="padding: 4px 8px;">✕</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px 0;">
+        <a id="live-export-excel" href="#" class="admin-export-btn" target="_blank" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; text-decoration: none; color: var(--text-main); font-weight: 600;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="material-symbols-outlined" style="color: #16a34a; font-size: 26px;">table_view</span>
+            <div style="text-align: left;">
+              <div style="font-size: 0.95rem;">Excel táblázat (.xlsx)</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: normal;">KRÉTA-kompatibilis érdemjegyekkel és százalékokkal</div>
+            </div>
+          </div>
+          <span class="material-symbols-outlined" style="color: #64748b;">download</span>
+        </a>
+        <a id="live-export-print" href="#" class="admin-export-btn" target="_blank" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; text-decoration: none; color: var(--text-main); font-weight: 600;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="material-symbols-outlined" style="color: #dc2626; font-size: 26px;">picture_as_pdf</span>
+            <div style="text-align: left;">
+              <div style="font-size: 0.95rem;">Nyomtatható jelentés (A4 PDF)</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: normal;">Hivatalos jegyzőkönyv és egyéni értékelések</div>
+            </div>
+          </div>
+          <span class="material-symbols-outlined" style="color: #64748b;">print</span>
+        </a>
+        <a id="live-export-html" href="#" class="admin-export-btn" target="_blank" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; text-decoration: none; color: var(--text-main); font-weight: 600;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="material-symbols-outlined" style="color: #2563eb; font-size: 26px;">code_blocks</span>
+            <div style="text-align: left;">
+              <div style="font-size: 0.95rem;">Webes dokumentum (.html)</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: normal;">Offline megnyitható, rendezhető interaktív mátrix</div>
+            </div>
+          </div>
+          <span class="material-symbols-outlined" style="color: #64748b;">download</span>
+        </a>
+        <a id="live-export-zip" href="#" class="admin-export-btn" target="_blank" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; text-decoration: none; color: var(--text-main); font-weight: 600;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="material-symbols-outlined" style="color: #d97706; font-size: 26px;">folder_zip</span>
+            <div style="text-align: left;">
+              <div style="font-size: 0.95rem;">Teljes értékelő csomag (ZIP)</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: normal;">Minden tanuló egyéni értékelőlapja külön fájlban</div>
+            </div>
+          </div>
+          <span class="material-symbols-outlined" style="color: #64748b;">download</span>
+        </a>
+      </div>
+      <div class="modal-footer" style="padding-top: 8px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-live-export')">Bezárás</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Kérdés és Diákválaszok Részletei Modal -->
   <div id="modal-question-detail" class="modal-backdrop">
     <div class="modal-window modal-window-lg">
@@ -1015,8 +1078,8 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.13.0"></script>
-  <script src="/js/admin.js?v=1.13.0"></script>
+  <script src="/js/utils.js?v=1.14.0"></script>
+  <script src="/js/admin.js?v=1.14.0"></script>
 </body>
 </html>
 
