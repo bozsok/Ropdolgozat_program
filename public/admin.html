@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.14.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.15.0">
   <style>
     /* Admin specifikus elrendezés (Tilos az !important) */
     .admin-container {
@@ -84,11 +84,11 @@
       <nav class="admin-nav-tabs">
         <button id="tab-btn-live" class="nav-tab-btn active" data-tab="tab-live" type="button">
           <span class="material-symbols-outlined">grid_view</span>
-          <span>Élő felügyelet (mátrix)</span>
+          <span>Eredménytábla</span>
         </button>
         <button class="nav-tab-btn" data-tab="tab-reports" type="button">
           <span class="material-symbols-outlined">history_edu</span>
-          <span>Reports / Korábbi dolgozatok</span>
+          <span>Korábbi dolgozatok</span>
         </button>
         <button class="nav-tab-btn" data-tab="tab-backup" type="button">
           <span class="material-symbols-outlined">tune</span>
@@ -344,37 +344,33 @@
     <section id="tab-reports" class="admin-tab-content" style="display: none;">
       <div class="admin-toolbar">
         <div>
-          <h3 style="margin-bottom: 4px;">📑 Dolgozatok és eredmények archívuma (Reports)</h3>
-          <p style="color: var(--text-muted); font-size: 0.9rem;">
+          <h2 class="admin-toolbar-title" style="font-size: 1.5rem; font-weight: 800; margin: 0 0 4px 0; color: var(--text-main);">Dolgozatok és eredmények archívuma</h2>
+          <p class="admin-toolbar-desc" style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
             Itt megtekintheted a korábban megírt és lezárt dolgozatokat, újra megnyithatod az eredménytáblát és letöltheted a KRÉTA Excel riportokat.
           </p>
         </div>
-        <button id="btn-refresh-reports" class="btn btn-secondary">🔄 Frissítés</button>
+        <button id="btn-refresh-reports" class="btn btn-secondary" type="button" style="display: inline-flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="font-size: 19px;">refresh</span>
+          <span>Frissítés</span>
+        </button>
       </div>
 
-      <!-- Kereső sáv -->
-      <div class="card" style="padding: 12px 18px; margin-bottom: 16px;">
-        <input type="text" id="input-search-reports" class="form-control" placeholder="🔍 Keresés dolgozat címe, osztály vagy tantárgy szerint...">
+      <!-- Kereső és Osztály szűrő sáv (Calm Learner) -->
+      <div class="report-filter-bar">
+        <div class="report-search-wrap">
+          <span class="material-symbols-outlined report-search-icon">search</span>
+          <input type="text" id="input-search-reports" class="form-control report-search-input" placeholder="Keresés dolgozat címe, tantárgy vagy osztály szerint...">
+        </div>
+        <div class="report-class-filter-wrap">
+          <select id="select-filter-reports-class" class="form-control report-class-select">
+            <option value="">Összes osztály</option>
+          </select>
+        </div>
       </div>
 
-      <!-- Dolgozatok listája táblázatban -->
-      <div class="card" style="padding: 0; overflow-x: auto;">
-        <table class="table" style="width: 100%; border-collapse: collapse;">
-          <thead>
-            <tr style="background-color: var(--bg-hover); text-align: left; border-bottom: 2px solid var(--border-color);">
-              <th style="padding: 12px 16px;">Időpont</th>
-              <th style="padding: 12px 16px;">Tantárgy és Évfolyam</th>
-              <th style="padding: 12px 16px;">Dolgozat címe</th>
-              <th style="padding: 12px 16px;">Osztály</th>
-              <th style="padding: 12px 16px; text-align: center;">Létszám</th>
-              <th style="padding: 12px 16px; text-align: center;">Státusz</th>
-              <th style="padding: 12px 16px; text-align: right;">Műveletek / Exportok</th>
-            </tr>
-          </thead>
-          <tbody id="reports-table-body">
-            <!-- Dinamikus sorok -->
-          </tbody>
-        </table>
+      <!-- Dolgozatok kártyás listája (Calm Learner kártyák) -->
+      <div id="reports-cards-container" class="report-cards-list">
+        <!-- Dinamikusan töltődik be a JavaScript által -->
       </div>
     </section>
 
@@ -382,8 +378,8 @@
     <section id="tab-export" class="admin-tab-content" style="display: none;">
       <div class="admin-toolbar">
         <div>
-          <h2 style="font-size: 1.5rem; font-weight: 800; margin: 0 0 4px 0; color: var(--text-main);">Export- és kiértékelési központ</h2>
-          <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
+          <h2 class="admin-toolbar-title" style="font-size: 1.5rem; font-weight: 800; margin: 0 0 4px 0; color: var(--text-main);">Export- és kiértékelési központ</h2>
+          <p class="admin-toolbar-desc" style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
             Töltsd le a kiválasztott dolgozat eredményeit hivatalos KRÉTA Excel, nyomtatható A4 PDF vagy interaktív HTML formátumban!
           </p>
         </div>
@@ -476,7 +472,10 @@
     <section id="tab-quizzes" class="admin-tab-content" style="display: none;">
       <div class="admin-toolbar">
         <div>
-          <h3>Feladatsorok és kérdések</h3>
+          <h2 class="admin-toolbar-title" style="font-size: 1.5rem; font-weight: 800; margin: 0 0 4px 0; color: var(--text-main);">Feladatsorok és kérdések</h2>
+          <p class="admin-toolbar-desc" style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
+            Tesztek, feladatsorok és mappák kezelése a tanórákhoz.
+          </p>
         </div>
         <div style="display: flex; gap: 10px; align-items: center;">
           <button id="btn-new-folder" class="btn btn-secondary" type="button" title="Új mappa létrehozása">
@@ -566,9 +565,38 @@
 
     <!-- 3. FÜL: OSZTÁLYNÉVSOROK KEZELŐJE (ROSTER MANAGER) -->
     <section id="tab-roster" class="admin-tab-content" style="display: none;">
+      <!-- Navigációs morzsaútvonal és visszalépés a Beállításokhoz -->
+      <nav class="quiz-breadcrumbs-bar" style="margin-top: 0; margin-bottom: 16px;">
+        <div class="quiz-breadcrumbs-list">
+          <button type="button" id="btn-roster-breadcrumb-back" class="quiz-breadcrumb-item">
+            <span class="material-symbols-outlined" style="font-size: 18px;">tune</span>
+            <span>Beállítások és mentés</span>
+          </button>
+          <span class="quiz-breadcrumb-separator">
+            <span class="material-symbols-outlined" style="font-size: 16px;">chevron_right</span>
+          </span>
+          <span class="quiz-breadcrumb-item active">
+            <span class="material-symbols-outlined" style="font-size: 18px;">groups</span>
+            <span>Hivatalos osztálynévsorok</span>
+          </span>
+        </div>
+        <button type="button" id="btn-roster-back-up" class="quiz-breadcrumb-up-btn" title="Visszalépés a beállításokhoz">
+          <span class="material-symbols-outlined" style="font-size: 18px;">arrow_back</span>
+          <span>Vissza a beállításokhoz</span>
+        </button>
+      </nav>
+
       <div class="admin-toolbar">
-        <h3>Hivatalos osztálynévsorok</h3>
-        <button id="btn-new-class" class="btn btn-primary">➕ Új osztály rögzítése</button>
+        <div>
+          <h2 class="admin-toolbar-title" style="font-size: 1.5rem; font-weight: 800; margin: 0 0 4px 0; color: var(--text-main);">Hivatalos osztálynévsorok</h2>
+          <p class="admin-toolbar-desc" style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
+            Iskolai osztályok és tanulói névsorok karbantartása a hibátlan naplózáshoz.
+          </p>
+        </div>
+        <button id="btn-new-class" class="btn btn-primary" type="button" style="display: inline-flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="font-size: 19px;">add_circle</span>
+          <span>Új osztály rögzítése</span>
+        </button>
       </div>
 
       <div style="display: grid; grid-template-columns: 280px 1fr; gap: 20px;">
@@ -584,7 +612,10 @@
         <div class="card" id="roster-editor-box" style="display: none;">
           <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
             <h4 id="roster-class-title">Osztály névsora</h4>
-            <button id="btn-delete-class" class="btn btn-danger">Osztály törlése</button>
+            <button id="btn-delete-class" class="btn btn-soft-danger" type="button">
+              <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+              <span>Osztály törlése</span>
+            </button>
           </div>
 
           <div class="form-group">
@@ -595,7 +626,10 @@
           </div>
 
           <div style="text-align: right;">
-            <button id="btn-save-roster" class="btn btn-success btn-lg">💾 Névsor mentése</button>
+            <button id="btn-save-roster" class="btn btn-soft-success btn-lg" type="button">
+              <span class="material-symbols-outlined" style="font-size: 20px;">save</span>
+              <span>Névsor mentése</span>
+            </button>
           </div>
         </div>
       </div>
@@ -605,8 +639,8 @@
     <section id="tab-backup" class="admin-tab-content" style="display: none;">
       <div class="admin-toolbar">
         <div>
-          <h2 style="font-size: 1.5rem; font-weight: 800; margin: 0 0 4px 0; color: var(--text-main);">Beállítások és biztonsági mentés</h2>
-          <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
+          <h2 class="admin-toolbar-title" style="font-size: 1.5rem; font-weight: 800; margin: 0 0 4px 0; color: var(--text-main);">Beállítások és biztonsági mentés</h2>
+          <p class="admin-toolbar-desc" style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
             Rendszermentés, offline adatvédelem és tantermi osztálynévsorok kezelése.
           </p>
         </div>
@@ -647,7 +681,7 @@
           <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 20px;">
             Itt szerkesztheted az iskola hivatalos osztályait és diákjainak névsorát, vagy új osztályokat vehetsz fel a hibátlan KRÉTA napló-illesztéshez.
           </p>
-          <button type="button" class="btn btn-secondary" onclick="document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display = 'none'); document.getElementById('tab-roster').style.display = 'block';" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 12px 20px; border-radius: 10px; cursor: pointer;">
+          <button type="button" id="btn-open-roster-manager" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 12px 20px; border-radius: 10px; cursor: pointer;">
             <span class="material-symbols-outlined">edit</span>
             <span>Osztálynévsorok megnyitása</span>
           </button>
@@ -724,7 +758,7 @@
           A lezárás után a tanulók már <strong>nem küldhetnek be további válaszokat</strong>, és az eredmények véglegessé válnak.
         </p>
         <p style="margin-bottom: 0; color: var(--text-muted, #5a4138); font-size: 0.88rem;">
-          Az adatok automatikusan bekerülnek a <em>Reports / Korábbi dolgozatok</em> archívumába, és letölthetők lesznek az <em>Export</em> menüpontban.
+          Az adatok automatikusan bekerülnek a <em>Korábbi dolgozatok</em> archívumába, és letölthetők lesznek az <em>Exportálás</em> gombbal.
         </p>
       </div>
       <div class="modal-footer">
@@ -856,6 +890,29 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-delete-folder')">Mégse</button>
         <button type="button" id="btn-submit-delete-folder" class="btn btn-danger">🗑️ Mappa törlése</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Osztály Törlése Modal -->
+  <div id="modal-confirm-delete-class" class="modal-backdrop">
+    <div class="modal-window" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title">🗑️ Osztály törlése</h3>
+        <p class="card-subtitle">Hivatalos osztály és névsor végleges eltávolítása</p>
+      </div>
+      <div style="padding: 12px 0; color: var(--text-main, #1b1b1e); line-height: 1.6; font-size: 0.95rem;">
+        <p style="margin-bottom: 10px;">
+          Biztosan törölni szeretnéd a(z) <strong id="delete-class-name" style="color: var(--danger, #dc2626);">-</strong> osztályt és az összes tanulóját a névsorból?
+        </p>
+        <div style="background-color: var(--surface-low, #f5f3f6); padding: 12px 14px; border-radius: 8px; border-left: 3px solid var(--danger, #dc2626); font-size: 0.88rem; color: var(--text-muted, #5a4138);">
+          <strong>Figyelem:</strong><br>
+          A művelet során az osztály hivatalos tanulói névsora véglegesen törlődik.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-delete-class')">Mégse</button>
+        <button type="button" id="btn-submit-delete-class" class="btn btn-danger">🗑️ Osztály törlése</button>
       </div>
     </div>
   </div>
@@ -1078,8 +1135,8 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.14.0"></script>
-  <script src="/js/admin.js?v=1.14.0"></script>
+  <script src="/js/utils.js?v=1.15.0"></script>
+  <script src="/js/admin.js?v=1.15.0"></script>
 </body>
 </html>
 

@@ -1,0 +1,1 @@
+KRÉTA admin felületén Nyilvántartás --> Tanulók parancs, majd kék színű Export gomb --> Export paranccsal letöltjük az .xlsx fájlt.

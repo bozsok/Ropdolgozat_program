@@ -75,8 +75,9 @@
   const btnExportPrint = document.getElementById('btn-export-print');
 
   // Reports (Archívum) elemek
-  const reportsTableBody = document.getElementById('reports-table-body');
+  const reportsCardsContainer = document.getElementById('reports-cards-container');
   const inputSearchReports = document.getElementById('input-search-reports');
+  const selectFilterReportsClass = document.getElementById('select-filter-reports-class');
   const btnRefreshReports = document.getElementById('btn-refresh-reports');
   let allReports = [];
 
@@ -365,14 +366,15 @@
 
       // Fejléc és státusz frissítése
       const isFinished = data.session.status === 'FINISHED';
+      const classMeta = data.session.class_name ? ` | Osztály: ${escapeHtml(data.session.class_name)}` : '';
       if (isFinished) {
         if (sessionBadgeChannel) {
           sessionBadgeChannel.className = 'admin-session-finished-pill';
-          sessionBadgeChannel.innerHTML = '<span>⏹️</span><span>Lezárt dolgozat</span>';
+          sessionBadgeChannel.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px;">lock</span><span>Lezárva</span>';
         }
-        liveSessionTitle.textContent = data.session.quiz_title + ' [LEZÁRT ARCHÍVUM]';
+        liveSessionTitle.textContent = data.session.quiz_title;
         const endedFormatted = data.session.ended_at ? data.session.ended_at.replace('T', ' ').substring(0, 16) : '–';
-        liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${formatSessionMode(data.session.mode)} | Befejezve: ${endedFormatted}`;
+        liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam${classMeta} | Mód: ${formatSessionMode(data.session.mode)} | Befejezve: ${endedFormatted}`;
         if (btnFinishSession) btnFinishSession.style.display = 'none';
         if (btnAdminStartRace) btnAdminStartRace.style.display = 'none';
       } else {
@@ -381,7 +383,7 @@
           sessionBadgeChannel.innerHTML = '<span class="admin-pulse-dot"></span><span>Kitöltés folyamatban</span>';
         }
         liveSessionTitle.textContent = data.session.quiz_title;
-        liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam | Mód: ${formatSessionMode(data.session.mode)}`;
+        liveSessionInfo.textContent = `Tantárgy: ${data.session.subject_name} | Évfolyam: ${data.session.grade_level}. évfolyam${classMeta} | Mód: ${formatSessionMode(data.session.mode)}`;
         if (btnFinishSession) btnFinishSession.style.display = 'inline-flex';
 
         if (btnAdminStartRace) {
@@ -2647,28 +2649,62 @@
     rosterEditorBox.style.display = 'block';
   });
 
-  // Osztály törlése
-  btnDeleteClass.addEventListener('click', async () => {
+  // Osztály törlése modal megnyitása
+  btnDeleteClass.addEventListener('click', () => {
     if (!selectedRosterClass) return;
-    if (!confirm(`Biztosan törlöd a(z) ${selectedRosterClass} osztályt és összes diákját?`)) {
-      return;
+    const deleteClassNameEl = document.getElementById('delete-class-name');
+    if (deleteClassNameEl) {
+      deleteClassNameEl.textContent = selectedRosterClass;
     }
-
-    try {
-      const res = await fetch(`/api/admin/classes/${encodeURIComponent(selectedRosterClass)}`, { method: 'DELETE' });
-      if (res.ok) {
-        showToast('Osztály sikeresen törölve!', 'success');
-        rosterEditorBox.style.display = 'none';
-        selectedRosterClass = null;
-        await loadRosterClasses();
-      } else {
-        const err = await res.json();
-        showAdminAlert('⚠️ Törlési hiba', err.error || 'Hiba az osztály törlésekor!');
-      }
-    } catch (err) {
-      showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a törléskor!');
-    }
+    openModal('modal-confirm-delete-class');
   });
+
+  // Osztály törlése megerősítése
+  const btnSubmitDeleteClass = document.getElementById('btn-submit-delete-class');
+  if (btnSubmitDeleteClass) {
+    btnSubmitDeleteClass.addEventListener('click', async () => {
+      closeModal('modal-confirm-delete-class');
+      if (!selectedRosterClass) return;
+
+      try {
+        const res = await fetch(`/api/admin/classes/${encodeURIComponent(selectedRosterClass)}`, { method: 'DELETE' });
+        if (res.ok) {
+          showToast('Osztály sikeresen törölve!', 'success');
+          rosterEditorBox.style.display = 'none';
+          selectedRosterClass = null;
+          await loadRosterClasses();
+        } else {
+          const err = await res.json();
+          showAdminAlert('⚠️ Törlési hiba', err.error || 'Hiba az osztály törlésekor!');
+        }
+      } catch (err) {
+        console.error('Hiba az osztály törlésekor:', err);
+        showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a törléskor!');
+      }
+    });
+  }
+
+  /**
+   * Dolgozat exportálása modal megnyitása és hivatkozások beállítása (Calm Learner)
+   */
+  function openSessionExportModal(sessionId, quizTitle, gradeLevel, subjectName, className) {
+    const liveExportExcel = document.getElementById('live-export-excel');
+    const liveExportPrint = document.getElementById('live-export-print');
+    const liveExportHtml = document.getElementById('live-export-html');
+    const liveExportZip = document.getElementById('live-export-zip');
+    const liveExportSubtitle = document.getElementById('live-export-modal-subtitle');
+    if (liveExportExcel) liveExportExcel.href = `/api/admin/export/excel/${sessionId}`;
+    if (liveExportPrint) liveExportPrint.href = `/print?sessionId=${sessionId}`;
+    if (liveExportHtml) liveExportHtml.href = `/api/admin/export/html/${sessionId}`;
+    if (liveExportZip) liveExportZip.href = `/api/admin/export/zip/${sessionId}`;
+    if (liveExportSubtitle) {
+      const classPart = className ? ` • ${className}` : '';
+      const subjectPart = subjectName ? `${subjectName} ` : '';
+      const gradePart = gradeLevel ? `(${gradeLevel}. évf.)` : '';
+      liveExportSubtitle.textContent = `${quizTitle || 'Dolgozat'} – ${subjectPart}${gradePart}${classPart}`;
+    }
+    openModal('modal-live-export');
+  }
 
   /**
    * Korábbi és aktív dolgozatok (Reports archívum) betöltése
@@ -2688,6 +2724,23 @@
       }
       const data = await res.json();
       allReports = Array.isArray(data) ? data : [];
+
+      // Osztály szűrő legördülő feltöltése a meglévő dolgozatok osztályaival
+      if (selectFilterReportsClass) {
+        const curVal = selectFilterReportsClass.value;
+        const classes = [...new Set(allReports.map(s => s.class_name).filter(Boolean))].sort();
+        selectFilterReportsClass.innerHTML = '<option value="">Összes osztály</option>';
+        classes.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c;
+          opt.textContent = `${c} osztály`;
+          selectFilterReportsClass.appendChild(opt);
+        });
+        if (curVal && classes.includes(curVal)) {
+          selectFilterReportsClass.value = curVal;
+        }
+      }
+
       filterAndRenderReports();
     } catch (err) {
       console.error('Hiba a jelentések betöltésekor:', err);
@@ -2695,12 +2748,16 @@
   }
 
   function filterAndRenderReports() {
-    if (!reportsTableBody) return;
+    if (!reportsCardsContainer) return;
     const query = inputSearchReports ? inputSearchReports.value.trim().toLowerCase() : '';
+    const selectedClass = selectFilterReportsClass ? selectFilterReportsClass.value.trim() : '';
 
     let filtered = allReports;
+    if (selectedClass) {
+      filtered = filtered.filter(s => s.class_name === selectedClass);
+    }
     if (query) {
-      filtered = allReports.filter(s =>
+      filtered = filtered.filter(s =>
         (s.quiz_title && s.quiz_title.toLowerCase().includes(query)) ||
         (s.subject_name && s.subject_name.toLowerCase().includes(query)) ||
         (s.class_name && s.class_name.toLowerCase().includes(query)) ||
@@ -2709,68 +2766,110 @@
     }
 
     if (filtered.length === 0) {
-      reportsTableBody.innerHTML = `
-        <tr>
-          <td colspan="7" style="text-align: center; padding: 32px; color: var(--text-muted);">
-            Nem található a keresésnek megfelelő dolgozat az archívumban.
-          </td>
-        </tr>
+      reportsCardsContainer.innerHTML = `
+        <div class="card" style="text-align: center; padding: 48px 24px; border-radius: 16px; border: 1px solid var(--border-color); background-color: #ffffff;">
+          <div style="width: 56px; height: 56px; border-radius: 16px; background-color: var(--surface-low); color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px;">
+            <span class="material-symbols-outlined" style="font-size: 28px;">history_edu</span>
+          </div>
+          <h4 style="margin: 0 0 6px 0; font-size: 1.1rem; color: var(--text-main);">Nem található dolgozat</h4>
+          <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">
+            A megadott keresési vagy szűrési feltételeknek nem felel meg egyetlen dolgozat sem az archívumban.
+          </p>
+        </div>
       `;
       return;
     }
 
-    reportsTableBody.innerHTML = '';
+    reportsCardsContainer.innerHTML = '';
     filtered.forEach(s => {
-      const tr = document.createElement('tr');
-      tr.style.borderBottom = '1px solid var(--border-color)';
+      const card = document.createElement('div');
+      card.className = 'report-card';
 
       const startedFormatted = s.started_at ? s.started_at.replace('T', ' ').substring(0, 16) : '–';
       const isAct = s.status === 'ACTIVE';
       const statusBadge = isAct
-        ? `<span class="badge" style="background-color: rgba(34, 197, 94, 0.15); color: var(--success); font-weight: 600;">🟢 Folyamatban</span>`
-        : `<span class="badge" style="background-color: rgba(100, 116, 139, 0.15); color: var(--text-muted); font-weight: 600;">⏹️ Lezárva</span>`;
+        ? `<span class="badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; background-color: rgba(34, 197, 94, 0.12); color: #15803d; font-weight: 700; font-size: 0.78rem;"><span class="material-symbols-outlined" style="font-size: 14px; color: #16a34a;">radio_button_checked</span><span>Folyamatban</span></span>`
+        : `<span class="badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; background-color: rgba(100, 116, 139, 0.12); color: #475569; font-weight: 700; font-size: 0.78rem;"><span class="material-symbols-outlined" style="font-size: 14px; color: #64748b;">lock</span><span>Lezárva</span></span>`;
 
-      tr.innerHTML = `
-        <td style="padding: 12px 16px; font-size: 0.9rem; color: var(--text-muted);">${startedFormatted}</td>
-        <td style="padding: 12px 16px;"><strong>${escapeHtml(s.subject_name)}</strong> <span style="color: var(--text-muted);">(${s.grade_level}. évf.)</span></td>
-        <td style="padding: 12px 16px; font-weight: 600;">${escapeHtml(s.quiz_title)}</td>
-        <td style="padding: 12px 16px;">${s.class_name ? escapeHtml(s.class_name) : '<span style="color: var(--text-muted);">–</span>'}</td>
-        <td style="padding: 12px 16px; text-align: center;"><strong>${s.participant_count || 0}</strong> diák</td>
-        <td style="padding: 12px 16px; text-align: center;">${statusBadge}</td>
-        <td style="padding: 12px 16px; text-align: right;">
-          <div style="display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end;">
-            <button class="btn btn-primary btn-sm btn-view-report" data-id="${s.id}" title="Mátrix és diákválaszok megnyitása">
-              👁️ Mátrix
-            </button>
-            <a href="/api/admin/export/excel/${s.id}" class="btn btn-success btn-sm" title="KRÉTA Excel riport letöltése" target="_blank">
-              📊 Excel
-            </a>
-            <a href="/api/admin/export/html/${s.id}" class="btn btn-secondary btn-sm" title="Csoportos interaktív HTML letöltése" target="_blank">
-              🌐 HTML
-            </a>
-            <a href="/api/admin/export/zip/${s.id}" class="btn btn-secondary btn-sm" title="Egyéni tanulói lapok ZIP letöltése" target="_blank">
-              📦 ZIP
-            </a>
-            <a href="/print?sessionId=${s.id}" class="btn btn-secondary btn-sm" title="Nyomtatható A4 PDF lapok" target="_blank">
-              🖨️ PDF
-            </a>
-            <button class="btn btn-danger btn-sm btn-delete-report" data-id="${s.id}" title="Dolgozat végleges törlése az archívumból">
-              🗑️ Törlés
-            </button>
+      const classPill = s.class_name
+        ? `<span class="report-card-pill">${escapeHtml(s.class_name)} osztály</span>`
+        : `<span class="report-card-pill" style="color: var(--text-muted);">${s.grade_level ? `${escapeHtml(s.grade_level)}. évfolyam` : 'Minden osztály'}</span>`;
+
+      let avgText = '';
+      if (s.avg_grade !== null && s.avg_grade !== undefined && s.participant_count > 0) {
+        const formattedGrade = Number(s.avg_grade).toFixed(1);
+        avgText = `<span class="report-card-avg">Átlag: ${formattedGrade} (${s.avg_percentage}%)</span>`;
+      } else if (s.avg_points !== null && s.avg_points !== undefined && s.participant_count > 0) {
+        avgText = `<span class="report-card-avg">Átlag: ${s.avg_points} pont</span>`;
+      }
+
+      card.innerHTML = `
+        <div class="report-card-left">
+          <div class="report-card-icon">
+            <span class="material-symbols-outlined">history_edu</span>
           </div>
-        </td>
+          <div class="report-card-content">
+            <div class="report-card-title-row">
+              <h3 class="report-card-title">${escapeHtml(s.quiz_title)}</h3>
+              ${statusBadge}
+            </div>
+            <div class="report-card-meta-row">
+              ${classPill}
+              <span class="report-card-meta-item">
+                <span class="material-symbols-outlined">school</span>
+                <strong>${escapeHtml(s.subject_name)}</strong>
+              </span>
+              <span style="color: var(--border-color);">•</span>
+              <span class="report-card-meta-item">
+                <span class="material-symbols-outlined">calendar_today</span>
+                <span>${startedFormatted}</span>
+              </span>
+              <span style="color: var(--border-color);">•</span>
+              <span class="report-card-meta-item">
+                <span class="material-symbols-outlined">group</span>
+                <span><strong>${s.participant_count || 0}</strong> diák kitöltötte</span>
+              </span>
+              ${avgText ? `<span style="color: var(--border-color);">•</span> ${avgText}` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="report-card-actions">
+          <button class="btn btn-primary btn-report-view" data-id="${s.id}" type="button" title="Dolgozat eredménytáblájának (mátrix) megnyitása">
+            <span class="material-symbols-outlined">grid_view</span>
+            <span>Eredménytábla</span>
+          </button>
+          <button class="btn btn-secondary btn-report-export" data-id="${s.id}" type="button" title="Dolgozat exportálása (.xlsx, .pdf, .html, .zip)">
+            <span class="material-symbols-outlined">download</span>
+            <span>Exportálás</span>
+          </button>
+          <button class="btn btn-soft-danger btn-report-delete" data-id="${s.id}" type="button" title="Dolgozat végleges törlése az archívumból">
+            <span class="material-symbols-outlined">delete</span>
+            <span>Törlés</span>
+          </button>
+        </div>
       `;
 
-      const btnView = tr.querySelector('.btn-view-report');
+      // 1. Eredménytábla (Mátrix) megnyitása
+      const btnView = card.querySelector('.btn-report-view');
       if (btnView) {
         btnView.addEventListener('click', () => {
           switchSession(s.id);
         });
       }
 
-      const btnDelReport = tr.querySelector('.btn-delete-report');
-      if (btnDelReport) {
-        btnDelReport.addEventListener('click', () => {
+      // 2. Exportálás modal megnyitása a kiválasztott dolgozathoz
+      const btnExport = card.querySelector('.btn-report-export');
+      if (btnExport) {
+        btnExport.addEventListener('click', () => {
+          openSessionExportModal(s.id, s.quiz_title, s.grade_level, s.subject_name, s.class_name);
+        });
+      }
+
+      // 3. Törlés jóváhagyó modal megnyitása
+      const btnDelete = card.querySelector('.btn-report-delete');
+      if (btnDelete) {
+        btnDelete.addEventListener('click', () => {
           pendingDeleteSessionId = s.id;
           const targetEl = document.getElementById('delete-session-title');
           if (targetEl) targetEl.textContent = `${s.quiz_title} (${s.subject_name} ${s.grade_level}. évf. ${s.class_name || ''})`;
@@ -2778,12 +2877,16 @@
         });
       }
 
-      reportsTableBody.appendChild(tr);
+      reportsCardsContainer.appendChild(card);
     });
   }
 
   if (inputSearchReports) {
     inputSearchReports.addEventListener('input', filterAndRenderReports);
+  }
+
+  if (selectFilterReportsClass) {
+    selectFilterReportsClass.addEventListener('change', filterAndRenderReports);
   }
 
   if (btnRefreshReports) {
@@ -2800,10 +2903,32 @@
     });
   });
 
+  const btnOpenRosterManager = document.getElementById('btn-open-roster-manager');
+  if (btnOpenRosterManager) {
+    btnOpenRosterManager.addEventListener('click', () => {
+      switchTab('tab-roster');
+      loadRosterClasses();
+    });
+  }
+
+  const btnRosterBreadcrumbBack = document.getElementById('btn-roster-breadcrumb-back');
+  const btnRosterBackUp = document.getElementById('btn-roster-back-up');
+  if (btnRosterBreadcrumbBack) {
+    btnRosterBreadcrumbBack.addEventListener('click', () => {
+      switchTab('tab-backup');
+    });
+  }
+  if (btnRosterBackUp) {
+    btnRosterBackUp.addEventListener('click', () => {
+      switchTab('tab-backup');
+    });
+  }
+
   function switchTab(tabId) {
     currentTab = tabId;
     navTabBtns.forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === tabId);
+      const isTargetTab = (tabId === 'tab-roster' && b.dataset.tab === 'tab-backup') || (b.dataset.tab === tabId);
+      b.classList.toggle('active', isTargetTab);
     });
     tabContents.forEach(c => {
       c.style.display = c.id === tabId ? 'block' : 'none';

@@ -4,6 +4,57 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.15.0] – 2026-11-18
+
+### Eredménytábla és Korábbi dolgozatok Calm Learner kártyás megújítása, valós KRÉTA osztályátlag, diszkrét gombszínek és tantermi morzsamenü navigáció
+
+Átfogó tanári felület- és vizuális élményfejlesztési (Calm Learner UX) kiadás: a korábbi dolgozatok archívuma modern, szellős és szűrhető kártyás felületté alakult a Calm Learner designrendszer alapján. A kártyákon a nyers pontátlag helyett a valós KRÉTA érdemjegy-átlag és százalék (pl. *Átlag: 4.2 (84%)*) jelenik meg a tanulók valós osztálymegjelölésével. Az Eredménytábla fejlécében megszűnt a duplikált feliratozás az egységes lakat ikonos lezárás-kapszula javára. A veszélyes műveletek (dolgozattörlés, osztálytörlés) és a mentési funkciók finom pasztell hátterű, modern vizuális stílust és egységes Material ikonokat kaptak, az Osztálynévsorok felületén pedig dedikált morzsamenü navigáció és biztonsági modális jóváhagyás támogatja a tanári munkát.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Korábbi dolgozatok modern Calm Learner kártyás megjelenítése és osztályszűrő:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - A korábbi zsúfolt táblázat helyett tiszta, szellős kártyás elrendezés valósult meg a hivatalos Calm Learner terv alapján.
+  - A kártyákon áttekinthető hierarchiában látható a dolgozat címe, a tantárgy, az indítás időpontja, a kitöltő diákok száma, az osztály megnevezése és az osztályátlag.
+  - Dedikált keresőmező és dinamikus osztályválasztó legördülő lista segíti az archív dolgozatok közötti azonnali szűrést.
+  - A korábbi különálló exportgombok helyett egyetlen, letisztult *„Exportálás”* gomb nyitja meg a meglévő modális letöltőközpontot (Excel, PDF, HTML, ZIP).
+
+* **Valós KRÉTA osztályátlag, százalék és valós osztálymegnevezés:**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A kártyákon a korábbi nyers összpontszám-átlag helyett a dolgozat kérdéseinek maximális összpontszáma és a diákok leadott válaszai alapján a hivatalos KRÉTA ponthatárok szerinti osztályátlag és átlagos százalék jelenik meg (pl. *Átlag: 4.2 (84%)*), teljes összhangban a mátrix felületén látható KPI mutatókkal.
+  - Az adatbázis-lekérdezésben a dolgozat osztályának megnevezése a résztvevő diákok osztályából automatikusan feloldásra kerül, így megszűnt a téves *„Egyéni/Nincs osztály”* felirat.
+
+* **Finomhangolt pasztell gombszínek (`.btn-soft-danger` és `.btn-soft-success`) és egységes Material ikonok:**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Bevezetésre került az eredménytábla `0p` / `1 (elégtelen)` és `+ 1p` / `5 (jeles)` celláival harmonizáló enyhe hátterű, finom szegélyű gombstílus (`!important` nélkül).
+  - A korábbi dolgozatok kártyáin a *„Törlés”* gomb, valamint a Hivatalos osztálynévsorok felületen az *„Osztály törlése”* gomb megkapta a diszkrét piros figyelmeztető stílust és a törlés ikont (`delete`).
+  - A *„Névsor mentése”* gomb elavult emoji helyett hivatalos mentés ikont (`save`) és diszkrét zöld stílust (`.btn-soft-success`) kapott.
+
+* **Hivatalos osztálynévsorok morzsamenü (Breadcrumbs) és modális törlés-megerősítés:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A Beállítások és mentés menüpontból elérhető Hivatalos osztálynévsorok felület dedikált morzsamenüt kapott (*Beállítások és biztonsági mentés > Hivatalos osztálynévsorok*), amellyel a tanár egyetlen kattintással visszatérhet az előző nézetbe.
+  - Az osztályok törlésekor a böngészős natív alert/confirm ablak helyett az alkalmazás többi részével harmonizáló, elegáns modális jóváhagyó ablak jelenik meg.
+
+#### Javítva (Fixed)
+* **Kártyák lebegési (hover) simítása és szöveghullámzás megszüntetése:**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A kártyák fölé vitt egérkurzor esetén korábban tapasztalt minimális elmozdulás és szöveghomályosodás megszűnt: a függőleges transzformációs ugrás törlésre került, kizárólag a szegély és az árnyék vált finom átmenettel.
+
+* **Eredménytábla fejléc duplikációjának felszámolása és egységes lezárás-jelvény:**
+  - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A dolgozat címe mögül törlésre került a felesleges `[LEZÁRT ARCHÍVUM]` felirat.
+  - Az Eredménytábla fejlécében a lezárt dolgozatoknál mostantól a Korábbi dolgozatok kártyáin is használt diszkrét szürke, lakat ikonos kapszula (`🔒 Lezárva`) jelenik meg.
+
+* **Felső menüpontok elnevezésének egységesítése:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html)
+  - A felső menüsávban az *„Élő felügyelet (mátrix)”* felirat letisztult *„Eredménytábla”* névre, a *„Reports / Korábbi dolgozatok”* menüpont pedig *„Korábbi dolgozatok”* névre egyszerűsödött.
+
+* **Projektverzió és gyorsítótár-érvénytelenítés (Cache-Busting):**
+  - **Fájlok:** [`package.json`](file:///d:/dev/Röpdolgozat%20program/package.json), [`project-context.md`](file:///d:/dev/Röpdolgozat%20program/project-context.md), [`README.md`](file:///d:/dev/Röpdolgozat%20program/README.md), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/projector.html`](file:///d:/dev/Röpdolgozat%20program/public/projector.html)
+  - A projektverzió egységesen `v1.15.0`-ra frissült.
+  - Minden HTML felületen frissültek a stíluslapok és szkriptek cache-busting paraméterei (`?v=1.15.0`), garantálva, hogy a tanári gép és a 42 db tanulói kliensgép böngészője azonnal, beragadt gyorsítótár nélkül a legfrissebb CSS-t és JS-t töltse be.
+
+---
+
 ## [1.14.0] – 2026-11-18
 
 ### Tesztszerkesztő hierarchikus mapparendszere, tesztáthelyezés, több helyes válasz (szinonimák), aktív dolgozat export központja, egységes export fejlécek és felületi letisztítás

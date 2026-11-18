@@ -44,12 +44,17 @@ function getAllSessions() {
       s.subject_id,
       sub.name AS subject_name,
       s.grade_level,
-      s.class_name,
+      COALESCE(
+        NULLIF(s.class_name, ''),
+        (SELECT GROUP_CONCAT(DISTINCT st.class_name) FROM participants p2 JOIN students st ON st.id = p2.student_id WHERE p2.session_id = s.id),
+        ''
+      ) AS class_name,
       s.quiz_id,
       q.title AS quiz_title,
       s.mode,
       s.status,
       s.time_limit_min,
+      s.grade_thresholds_json,
       s.started_at,
       s.ended_at,
       COUNT(DISTINCT p.id) AS participant_count,
@@ -68,7 +73,79 @@ function getAllSessions() {
     GROUP BY s.id
     ORDER BY s.started_at DESC
   `);
-  return stmt.all();
+  const sessions = stmt.all();
+
+  if (sessions.length === 0) return sessions;
+
+  // Kvízek maximális összpontszáma
+  const quizPointsStmt = db.prepare(`
+    SELECT quiz_id, COALESCE(SUM(points), 0.0) AS max_points
+    FROM questions
+    GROUP BY quiz_id
+  `);
+  const quizPointsMap = new Map();
+  quizPointsStmt.all().forEach(row => {
+    quizPointsMap.set(row.quiz_id, Number(row.max_points) || 0.0);
+  });
+
+  // Résztvevők összpontszáma dolgozatonként
+  const participantsPointsStmt = db.prepare(`
+    SELECT 
+      p.session_id,
+      p.id AS participant_id,
+      COALESCE(SUM(a.points_earned), 0.0) AS user_total,
+      COUNT(a.id) AS answers_count
+    FROM participants p
+    LEFT JOIN answers a ON a.participant_id = p.id
+    GROUP BY p.id
+  `);
+  const sessionParticipantsMap = new Map();
+  participantsPointsStmt.all().forEach(row => {
+    if (!sessionParticipantsMap.has(row.session_id)) {
+      sessionParticipantsMap.set(row.session_id, []);
+    }
+    sessionParticipantsMap.get(row.session_id).push(row);
+  });
+
+  return sessions.map(s => {
+    let thresholds = { 2: 30, 3: 55, 4: 75, 5: 90 };
+    try {
+      if (s.grade_thresholds_json) thresholds = JSON.parse(s.grade_thresholds_json);
+    } catch {
+      thresholds = { 2: 30, 3: 55, 4: 75, 5: 90 };
+    }
+
+    const maxPoints = quizPointsMap.get(s.quiz_id) || 0.0;
+    const parts = sessionParticipantsMap.get(s.id) || [];
+
+    let sumGrades = 0;
+    let sumPercentages = 0;
+    let validCount = 0;
+
+    parts.forEach(p => {
+      if (p.answers_count > 0) {
+        const pct = maxPoints > 0 ? Math.round((p.user_total / maxPoints) * 100) : 0;
+        const gr = grader.calculateGrade(pct, thresholds);
+        sumGrades += gr;
+        sumPercentages += pct;
+        validCount++;
+      }
+    });
+
+    let avg_grade = null;
+    let avg_percentage = null;
+
+    if (validCount > 0) {
+      avg_grade = Number((sumGrades / validCount).toFixed(1));
+      avg_percentage = Math.round(sumPercentages / validCount);
+    }
+
+    return {
+      ...s,
+      avg_grade,
+      avg_percentage
+    };
+  });
 }
 
 /**
@@ -108,6 +185,11 @@ function getSessionById(sessionId) {
   const stmt = db.prepare(`
     SELECT 
       s.*,
+      COALESCE(
+        NULLIF(s.class_name, ''),
+        (SELECT GROUP_CONCAT(DISTINCT st.class_name) FROM participants p2 JOIN students st ON st.id = p2.student_id WHERE p2.session_id = s.id),
+        ''
+      ) AS class_name,
       sub.name AS subject_name,
       q.title AS quiz_title,
       q.default_time_limit_min
