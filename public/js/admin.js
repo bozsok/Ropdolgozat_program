@@ -105,9 +105,13 @@
   // Tesztszerkesztő elemek
   const quizzesListContainer = document.getElementById('quizzes-list-container');
   const btnNewQuiz = document.getElementById('btn-new-quiz');
+  const btnNewFolder = document.getElementById('btn-new-folder');
+  const quizBreadcrumbsBar = document.getElementById('quiz-breadcrumbs-bar');
+  const quizBreadcrumbsList = document.getElementById('quiz-breadcrumbs-list');
   const quizEditorCard = document.getElementById('quiz-editor-card');
   const btnCloseEditor = document.getElementById('btn-close-editor');
   const editQuizId = document.getElementById('edit-quiz-id');
+  const editQuizFolderId = document.getElementById('edit-quiz-folder-id');
   const editSubjectId = document.getElementById('edit-subject-id');
   const editGradeLevel = document.getElementById('edit-grade-level');
   const editTimeLimit = document.getElementById('edit-time-limit');
@@ -115,6 +119,11 @@
   const editorQuestionsList = document.getElementById('editor-questions-list');
   const btnAddQuestion = document.getElementById('btn-add-question');
   const btnSaveQuiz = document.getElementById('btn-save-quiz');
+
+  // Mapparendszer állapotváltozói
+  let currentFolderId = null;
+  let currentBreadcrumbs = [];
+  let pendingDeleteFolderId = null;
 
   // Névsor elemek
   const adminRosterClassList = document.getElementById('admin-roster-class-list');
@@ -131,6 +140,7 @@
   let pendingSeatChangeParticipantId = null;
   let pendingDeleteSessionId = null;
   let pendingDeleteQuizId = null;
+  let pendingMoveQuizId = null;
 
   /**
    * Rendszerértesítés megjelenítése elegáns modálban (böngészős alert helyett)
@@ -1169,6 +1179,40 @@
     });
   }
 
+  const btnSubmitDeleteFolder = document.getElementById('btn-submit-delete-folder');
+  if (btnSubmitDeleteFolder) {
+    btnSubmitDeleteFolder.addEventListener('click', async () => {
+      closeModal('modal-confirm-delete-folder');
+      if (!pendingDeleteFolderId) return;
+
+      try {
+        await deleteFolder(pendingDeleteFolderId);
+      } catch (err) {
+        console.error('Hiba a mappa törlésekor:', err);
+      } finally {
+        pendingDeleteFolderId = null;
+      }
+    });
+  }
+
+  const btnSubmitMoveQuiz = document.getElementById('btn-submit-move-quiz');
+  const moveQuizTargetFolder = document.getElementById('move-quiz-target-folder');
+  if (btnSubmitMoveQuiz) {
+    btnSubmitMoveQuiz.addEventListener('click', async () => {
+      closeModal('modal-move-quiz');
+      if (!pendingMoveQuizId) return;
+
+      try {
+        const targetFolderId = moveQuizTargetFolder && moveQuizTargetFolder.value ? moveQuizTargetFolder.value : null;
+        await moveQuiz(pendingMoveQuizId, targetFolderId);
+      } catch (err) {
+        console.error('Hiba a teszt áthelyezésekor:', err);
+      } finally {
+        pendingMoveQuizId = null;
+      }
+    });
+  }
+
   // Űrhajós verseny indítása (RAJT gomb)
   if (btnAdminStartRace) {
     btnAdminStartRace.addEventListener('click', async () => {
@@ -1273,23 +1317,226 @@
   /**
    * Tesztek betöltése (Tesztszerkesztő)
    */
-  async function loadQuizzes() {
+  /**
+   * Tesztek és mappák betöltése (Tesztszerkesztő hierarchikus nézet)
+   */
+  async function loadQuizzes(targetFolderId = currentFolderId) {
+    currentFolderId = (targetFolderId !== undefined) ? targetFolderId : currentFolderId;
+    try {
+      const folderParam = (currentFolderId === null || currentFolderId === undefined) ? 'root' : currentFolderId;
+
+      // 1. Almappák és morzsamenü lekérése
+      const folderRes = await fetch(`/api/admin/quiz-folders?parentId=${folderParam}`);
+      const folderData = await folderRes.json();
+      const currentFolders = folderData.folders || [];
+      currentBreadcrumbs = folderData.breadcrumbs || [];
+
+      // 2. Kvízek lekérése az aktuális mappában
+      const quizRes = await fetch(`/api/admin/quizzes?folderId=${folderParam}`);
+      quizzesList = await quizRes.json();
+
+      // 3. Dolgozatindító modál legördülő frissítése az összes teszttel
+      await updateStartSessionQuizOptions();
+
+      // 4. Morzsamenü és navigáció kirajzolása
+      renderBreadcrumbs();
+
+      // 5. Kártyarács kirajzolása (mappák elöl, utána tesztek)
+      renderQuizGrid(currentFolders, quizzesList);
+
+    } catch (err) {
+      console.error('Hiba a tesztek és mappák betöltésekor:', err);
+    }
+  }
+
+  /**
+   * Dolgozatindító modál kvíz-választó mezőjének frissítése az összes elérhető teszttel
+   */
+  async function updateStartSessionQuizOptions() {
+    if (!startQuizId) return;
     try {
       const res = await fetch('/api/admin/quizzes');
-      quizzesList = await res.json();
-
-      // Indító modal legördülő frissítése
+      const allQuizzes = await res.json();
       startQuizId.innerHTML = '';
-      quizzesList.forEach(q => {
+      allQuizzes.forEach(q => {
         const opt = document.createElement('option');
         opt.value = q.id;
-        opt.textContent = `${q.title} (${q.question_count} kérdés)`;
+        const folderTag = q.folder_name ? `[${q.folder_name}] ` : '';
+        opt.textContent = `${folderTag}${q.title} (${q.question_count} kérdés)`;
         startQuizId.appendChild(opt);
       });
+    } catch (err) {
+      console.error('Hiba az indító tesztválasztó frissítésekor:', err);
+    }
+  }
 
-      // Tesztszerkesztő lista kártyái (Mindig szabadon szerkeszthető sablonok)
-      quizzesListContainer.innerHTML = '';
-      quizzesList.forEach(q => {
+  /**
+   * Morzsamenü sáv renderelése
+   */
+  function renderBreadcrumbs() {
+    if (!quizBreadcrumbsList) return;
+    quizBreadcrumbsList.innerHTML = '';
+
+    // Főmappa (Gyökér)
+    if (currentFolderId === null || currentFolderId === undefined) {
+      const rootSpan = document.createElement('span');
+      rootSpan.className = 'quiz-breadcrumb-item active';
+      rootSpan.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">folder_open</span> <span>Főmappa</span>';
+      quizBreadcrumbsList.appendChild(rootSpan);
+    } else {
+      const rootBtn = document.createElement('button');
+      rootBtn.type = 'button';
+      rootBtn.className = 'quiz-breadcrumb-item';
+      rootBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">folder</span> <span>Főmappa</span>';
+      rootBtn.addEventListener('click', () => loadQuizzes(null));
+      quizBreadcrumbsList.appendChild(rootBtn);
+    }
+
+    // Útvonal elemei
+    if (Array.isArray(currentBreadcrumbs)) {
+      currentBreadcrumbs.forEach((bc, idx) => {
+        const sep = document.createElement('span');
+        sep.className = 'quiz-breadcrumb-separator';
+        sep.innerHTML = '<span class="material-symbols-outlined" style="font-size: 16px;">chevron_right</span>';
+        quizBreadcrumbsList.appendChild(sep);
+
+        const isLast = (idx === currentBreadcrumbs.length - 1);
+        if (isLast) {
+          const itemSpan = document.createElement('span');
+          itemSpan.className = 'quiz-breadcrumb-item active';
+          itemSpan.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">folder_open</span> <span>${escapeHtml(bc.name)}</span>`;
+          quizBreadcrumbsList.appendChild(itemSpan);
+        } else {
+          const itemBtn = document.createElement('button');
+          itemBtn.type = 'button';
+          itemBtn.className = 'quiz-breadcrumb-item';
+          itemBtn.innerHTML = `<span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">folder</span> <span>${escapeHtml(bc.name)}</span>`;
+          itemBtn.addEventListener('click', () => loadQuizzes(bc.id));
+          quizBreadcrumbsList.appendChild(itemBtn);
+        }
+      });
+    }
+
+    // Szülőmappa gomb kezelése
+    if (quizBreadcrumbsBar) {
+      let upBtn = quizBreadcrumbsBar.querySelector('.quiz-breadcrumb-up-btn');
+      if (currentFolderId !== null && currentFolderId !== undefined) {
+        if (!upBtn) {
+          upBtn = document.createElement('button');
+          upBtn.type = 'button';
+          upBtn.className = 'quiz-breadcrumb-up-btn';
+          quizBreadcrumbsBar.appendChild(upBtn);
+        }
+        upBtn.style.display = 'inline-flex';
+        upBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 17px; vertical-align: middle;">arrow_upward</span> <span>Szülőmappa</span>';
+        const parentId = (currentBreadcrumbs.length > 1) ? currentBreadcrumbs[currentBreadcrumbs.length - 2].id : null;
+        upBtn.onclick = () => loadQuizzes(parentId);
+      } else if (upBtn) {
+        upBtn.style.display = 'none';
+      }
+    }
+  }
+
+  /**
+   * Tesztek és mappák kártyarácsának kirajzolása
+   */
+  function renderQuizGrid(folders, quizzes) {
+    if (!quizzesListContainer) return;
+    quizzesListContainer.innerHTML = '';
+
+    // Üres állapot kezelése
+    if ((!folders || folders.length === 0) && (!quizzes || quizzes.length === 0)) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.style.gridColumn = '1 / -1';
+      emptyDiv.style.padding = '36px 20px';
+      emptyDiv.style.textAlign = 'center';
+      emptyDiv.style.backgroundColor = '#f8fafc';
+      emptyDiv.style.border = '1.5px dashed #cbd5e1';
+      emptyDiv.style.borderRadius = '12px';
+      emptyDiv.style.color = 'var(--text-muted, #64748b)';
+      emptyDiv.innerHTML = `
+        <span class="material-symbols-outlined" style="font-size: 40px; color: #94a3b8; display: block; margin-bottom: 8px;">folder_open</span>
+        <p style="margin: 0; font-size: 0.95rem; font-weight: 500;">Ebben a mappában még nincs teszt vagy almappa.</p>
+        <p style="margin: 6px 0 0 0; font-size: 0.85rem; color: #94a3b8;">Hozz létre egy új mappát vagy új tesztet a fenti eszköztár gombjaival!</p>
+      `;
+      quizzesListContainer.appendChild(emptyDiv);
+      return;
+    }
+
+    // 1. Mappakártyák kirajzolása
+    if (Array.isArray(folders)) {
+      folders.forEach(f => {
+        const card = document.createElement('div');
+        card.className = 'folder-card';
+        card.title = `${f.name} mappa megnyitása`;
+
+        const subCount = f.subfolder_count || 0;
+        const qCount = f.quiz_count || 0;
+        let metaText = '';
+        if (subCount > 0 && qCount > 0) {
+          metaText = `${subCount} almappa &bull; ${qCount} teszt`;
+        } else if (subCount > 0) {
+          metaText = `${subCount} almappa`;
+        } else if (qCount > 0) {
+          metaText = `${qCount} teszt`;
+        } else {
+          metaText = 'Üres mappa';
+        }
+
+        card.innerHTML = `
+          <div class="folder-card-header">
+            <div class="folder-card-icon">
+              <span class="material-symbols-outlined">folder</span>
+            </div>
+            <div class="folder-card-info">
+              <h4 class="folder-card-title">${escapeHtml(f.name)}</h4>
+              <p class="folder-card-meta">${metaText}</p>
+            </div>
+          </div>
+          <div class="folder-card-actions">
+            <button type="button" class="folder-btn-action btn-rename-folder" title="Mappa átnevezése">
+              <span class="material-symbols-outlined" style="font-size: 18px;">edit</span>
+            </button>
+            <button type="button" class="folder-btn-action folder-btn-delete btn-delete-folder" title="Mappa törlése">
+              <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+            </button>
+          </div>
+        `;
+
+        // Belépés a mappába
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.folder-card-actions') || e.target.closest('input') || e.target.closest('button')) return;
+          loadQuizzes(f.id);
+        });
+
+        // Átnevezés
+        const btnRename = card.querySelector('.btn-rename-folder');
+        if (btnRename) {
+          btnRename.addEventListener('click', (e) => {
+            e.stopPropagation();
+            inlineRenameFolder(f, card);
+          });
+        }
+
+        // Törlés
+        const btnDel = card.querySelector('.btn-delete-folder');
+        if (btnDel) {
+          btnDel.addEventListener('click', (e) => {
+            e.stopPropagation();
+            pendingDeleteFolderId = f.id;
+            const targetEl = document.getElementById('delete-folder-name');
+            if (targetEl) targetEl.textContent = f.name;
+            openModal('modal-confirm-delete-folder');
+          });
+        }
+
+        quizzesListContainer.appendChild(card);
+      });
+    }
+
+    // 2. Tesztkártyák kirajzolása
+    if (Array.isArray(quizzes)) {
+      quizzes.forEach(q => {
         const card = document.createElement('div');
         card.className = 'quiz-card';
 
@@ -1308,13 +1555,15 @@
             <button type="button" class="quiz-btn-icon quiz-btn-copy btn-duplicate" data-id="${q.id}" title="Másolat készítése">
               <span class="material-symbols-outlined">content_copy</span>
             </button>
+            <button type="button" class="quiz-btn-icon quiz-btn-move btn-move" data-id="${q.id}" title="Teszt áthelyezése másik mappába">
+              <span class="material-symbols-outlined">drive_file_move</span>
+            </button>
             <button type="button" class="quiz-btn-icon quiz-btn-delete btn-delete" data-id="${q.id}" title="Teszt törlése">
               <span class="material-symbols-outlined">delete</span>
             </button>
           </div>
         `;
 
-        // Gomb eseménykezelők
         const btnEdit = card.querySelector('.btn-edit');
         if (btnEdit) {
           btnEdit.addEventListener('click', () => openQuizEditor(q.id));
@@ -1324,6 +1573,17 @@
         if (btnDup) {
           btnDup.addEventListener('click', async () => {
             await duplicateQuiz(q.id);
+          });
+        }
+
+        const btnMove = card.querySelector('.btn-move');
+        if (btnMove) {
+          btnMove.addEventListener('click', async () => {
+            pendingMoveQuizId = q.id;
+            const targetEl = document.getElementById('move-quiz-title');
+            if (targetEl) targetEl.textContent = q.title;
+            await loadMoveFolderOptions(q.folder_id);
+            openModal('modal-move-quiz');
           });
         }
 
@@ -1339,9 +1599,190 @@
 
         quizzesListContainer.appendChild(card);
       });
+    }
+  }
 
+  /**
+   * Mappa közvetlen helyi (in-place) átnevezése
+   */
+  function inlineRenameFolder(folder, card) {
+    const infoEl = card.querySelector('.folder-card-info');
+    const actionsEl = card.querySelector('.folder-card-actions');
+    if (!infoEl) return;
+
+    const originalHtml = infoEl.innerHTML;
+    const originalActionsDisplay = actionsEl ? actionsEl.style.display : '';
+    if (actionsEl) actionsEl.style.display = 'none';
+
+    infoEl.innerHTML = `
+      <input type="text" class="folder-card-new-input" value="${escapeHtml(folder.name)}" style="margin-bottom: 6px;">
+      <div style="display: flex; gap: 6px;">
+        <button type="button" class="btn btn-primary btn-save-rename" style="padding: 4px 10px; font-size: 0.8rem;">Mentés</button>
+        <button type="button" class="btn btn-secondary btn-cancel-rename" style="padding: 4px 10px; font-size: 0.8rem;">Mégse</button>
+      </div>
+    `;
+
+    const input = infoEl.querySelector('input');
+    const btnSave = infoEl.querySelector('.btn-save-rename');
+    const btnCancel = infoEl.querySelector('.btn-cancel-rename');
+
+    input.focus();
+    input.select();
+
+    const cancel = (e) => {
+      if (e) e.stopPropagation();
+      infoEl.innerHTML = originalHtml;
+      if (actionsEl) actionsEl.style.display = originalActionsDisplay;
+    };
+
+    const save = async (e) => {
+      if (e) e.stopPropagation();
+      const newName = input.value.trim();
+      if (!newName) {
+        showToast('A mappa neve nem lehet üres!', 'error');
+        input.focus();
+        return;
+      }
+      if (newName === folder.name) {
+        cancel();
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/admin/quiz-folders/${folder.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast('Mappa sikeresen átnevezve!', 'success');
+          await loadQuizzes(currentFolderId);
+        } else {
+          showAdminAlert('⚠️ Hiba', data.error || 'Hiba a mappa átnevezésekor!');
+          cancel();
+        }
+      } catch (err) {
+        showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a mappa átnevezésekor!');
+        cancel();
+      }
+    };
+
+    btnCancel.addEventListener('click', cancel);
+    btnSave.addEventListener('click', save);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        save(e);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancel(e);
+      }
+    });
+    input.addEventListener('click', (e) => e.stopPropagation());
+  }
+
+  // Új mappa létrehozása gomb (eszköztár)
+  if (btnNewFolder) {
+    btnNewFolder.addEventListener('click', () => {
+      if (!quizzesListContainer) return;
+
+      const existingNewCard = quizzesListContainer.querySelector('.folder-card-new');
+      if (existingNewCard) {
+        const existingInput = existingNewCard.querySelector('.folder-card-new-input');
+        if (existingInput) {
+          existingInput.focus();
+          existingInput.select();
+        }
+        return;
+      }
+
+      const newCard = document.createElement('div');
+      newCard.className = 'folder-card-new';
+      newCard.innerHTML = `
+        <div class="folder-card-new-header">
+          <span class="material-symbols-outlined" style="font-size: 26px; color: #d97706;">create_new_folder</span>
+          <strong style="color: #78350f; font-size: 0.95rem;">Új mappa</strong>
+        </div>
+        <input type="text" class="folder-card-new-input" value="Új mappa" placeholder="Mappa neve...">
+        <div class="folder-card-new-actions">
+          <button type="button" class="btn btn-secondary btn-cancel-new-folder" style="padding: 6px 12px; font-size: 0.85rem;">Mégse</button>
+          <button type="button" class="btn btn-primary btn-save-new-folder" style="padding: 6px 12px; font-size: 0.85rem;">Létrehozás</button>
+        </div>
+      `;
+
+      quizzesListContainer.prepend(newCard);
+
+      const input = newCard.querySelector('.folder-card-new-input');
+      const btnSave = newCard.querySelector('.btn-save-new-folder');
+      const btnCancel = newCard.querySelector('.btn-cancel-new-folder');
+
+      input.focus();
+      input.select();
+
+      const cancel = () => {
+        newCard.remove();
+      };
+
+      const save = async () => {
+        const folderName = input.value.trim();
+        if (!folderName) {
+          showToast('A mappa neve nem lehet üres!', 'error');
+          input.focus();
+          return;
+        }
+
+        try {
+          btnSave.disabled = true;
+          const res = await fetch('/api/admin/quiz-folders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: folderName,
+              parent_id: currentFolderId
+            })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            showToast('Mappa sikeresen létrehozva!', 'success');
+            await loadQuizzes(currentFolderId);
+          } else {
+            showAdminAlert('⚠️ Hiba', data.error || 'Hiba a mappa létrehozásakor!');
+            btnSave.disabled = false;
+          }
+        } catch (err) {
+          showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a mappa létrehozásakor!');
+          btnSave.disabled = false;
+        }
+      };
+
+      btnCancel.addEventListener('click', cancel);
+      btnSave.addEventListener('click', save);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          save();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cancel();
+        }
+      });
+    });
+  }
+
+  // Mappa törlése a szerveren
+  async function deleteFolder(folderId) {
+    try {
+      const res = await fetch(`/api/admin/quiz-folders/${folderId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Mappa sikeresen törölve! A tesztek a szülő mappába kerültek.', 'success');
+        await loadQuizzes(currentFolderId);
+      } else {
+        showAdminAlert('⚠️ Törlési hiba', data.error || 'Hiba a mappa törlésekor!');
+      }
     } catch (err) {
-      console.error('Hiba a tesztek betöltésekor:', err);
+      showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a mappa törlésekor!');
     }
   }
 
@@ -1356,7 +1797,7 @@
       const data = await res.json();
       if (res.ok) {
         showToast('Teszt sikeresen másolva és duplikálva!', 'success');
-        await loadQuizzes();
+        await loadQuizzes(currentFolderId);
         openQuizEditor(data.quiz.id);
       } else {
         showAdminAlert('⚠️ Másolási hiba', data.error || 'Hiba a másolás során!');
@@ -1372,13 +1813,142 @@
       const res = await fetch(`/api/admin/quizzes/${quizId}`, { method: 'DELETE' });
       if (res.ok) {
         showToast('Teszt sikeresen törölve!', 'success');
-        await loadQuizzes();
+        await loadQuizzes(currentFolderId);
       } else {
         const err = await res.json();
         showAdminAlert('⚠️ Törlési hiba', err.error || 'Hiba a törlés során!');
       }
     } catch (err) {
       showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a törléskor!');
+    }
+  }
+
+  /**
+   * Célmappa választó legördülő mező feltöltése és ellenőrzése az áthelyezési modálban
+   */
+  async function loadMoveFolderOptions(selectedFolderId = null) {
+    const targetSelect = document.getElementById('move-quiz-target-folder');
+    if (!targetSelect) return;
+
+    targetSelect.innerHTML = '<option value="">⏳ Mappák betöltése és ellenőrzése...</option>';
+
+    try {
+      const res = await fetch('/api/admin/quiz-folders?all=true');
+      const allFolders = await res.json();
+
+      targetSelect.innerHTML = '<option value="">📁 Főmappa (Gyökér)</option>';
+
+      const folderMap = new Map();
+      allFolders.forEach(f => folderMap.set(f.id, f));
+
+      function getPath(f) {
+        const parts = [f.name];
+        let curr = f;
+        const visited = new Set([curr.id]);
+        while (curr.parent_id && folderMap.has(curr.parent_id)) {
+          curr = folderMap.get(curr.parent_id);
+          if (visited.has(curr.id)) break;
+          visited.add(curr.id);
+          parts.unshift(curr.name);
+        }
+        return parts.join(' / ');
+      }
+
+      const sortedFolders = allFolders.map(f => ({
+        id: f.id,
+        name: f.name,
+        path: getPath(f)
+      })).sort((a, b) => a.path.localeCompare(b.path, 'hu'));
+
+      sortedFolders.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.id;
+        opt.textContent = `📁 ${f.path}`;
+        if (selectedFolderId !== null && selectedFolderId !== undefined && Number(selectedFolderId) === f.id) {
+          opt.selected = true;
+        }
+        targetSelect.appendChild(opt);
+      });
+
+      if (selectedFolderId === null || selectedFolderId === undefined || selectedFolderId === '') {
+        targetSelect.value = '';
+      }
+    } catch (err) {
+      console.error('Hiba a mappák lekérésekor az áthelyezési modálhoz:', err);
+      targetSelect.innerHTML = '<option value="">📁 Főmappa (Gyökér)</option>';
+    }
+  }
+
+  /**
+   * Teszt áthelyezése a szerveren
+   */
+  async function moveQuiz(quizId, targetFolderId) {
+    try {
+      const res = await fetch(`/api/admin/quizzes/${quizId}/move`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId: targetFolderId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('Teszt sikeresen áthelyezve!', 'success');
+        await loadQuizzes(currentFolderId);
+      } else {
+        showAdminAlert('⚠️ Áthelyezési hiba', data.error || 'Hiba a teszt áthelyezésekor!');
+      }
+    } catch (err) {
+      showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a teszt áthelyezésekor!');
+    }
+  }
+
+  /**
+   * Mappa választó legördülő mező feltöltése a tesztszerkesztőben
+   */
+  async function loadFolderSelectOptions(selectedId = null) {
+    if (!editQuizFolderId) return;
+    try {
+      const res = await fetch('/api/admin/quiz-folders?all=true');
+      const allFolders = await res.json();
+
+      editQuizFolderId.innerHTML = '<option value="">📁 Főmappa (Gyökér)</option>';
+
+      const folderMap = new Map();
+      allFolders.forEach(f => folderMap.set(f.id, f));
+
+      function getPath(f) {
+        const parts = [f.name];
+        let curr = f;
+        const visited = new Set([curr.id]);
+        while (curr.parent_id && folderMap.has(curr.parent_id)) {
+          curr = folderMap.get(curr.parent_id);
+          if (visited.has(curr.id)) break;
+          visited.add(curr.id);
+          parts.unshift(curr.name);
+        }
+        return parts.join(' / ');
+      }
+
+      const sortedFolders = allFolders.map(f => ({
+        id: f.id,
+        name: f.name,
+        path: getPath(f)
+      })).sort((a, b) => a.path.localeCompare(b.path, 'hu'));
+
+      sortedFolders.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.id;
+        opt.textContent = `📁 ${f.path}`;
+        if (selectedId !== null && selectedId !== undefined && Number(selectedId) === f.id) {
+          opt.selected = true;
+        }
+        editQuizFolderId.appendChild(opt);
+      });
+
+      if (selectedId === null || selectedId === undefined || selectedId === '') {
+        editQuizFolderId.value = '';
+      }
+    } catch (err) {
+      console.error('Hiba a mappák betöltésekor a választóba:', err);
     }
   }
 
@@ -1394,6 +1964,10 @@
       editGradeLevel.value = '6';
       editTimeLimit.value = '10';
       editorQuestionsList.innerHTML = '';
+      await loadFolderSelectOptions(currentFolderId);
+      if (editQuizFolderId) {
+        editQuizFolderId.value = (currentFolderId !== null && currentFolderId !== undefined) ? String(currentFolderId) : '';
+      }
       addQuestionBlock(); // 1 üres kérdés alapból
       renumberQuestions();
       return;
@@ -1409,6 +1983,10 @@
       editSubjectId.value = quiz.subject_id;
       editGradeLevel.value = quiz.subject_grade;
       editTimeLimit.value = quiz.default_time_limit_min;
+      await loadFolderSelectOptions(quiz.folder_id);
+      if (editQuizFolderId) {
+        editQuizFolderId.value = (quiz.folder_id !== null && quiz.folder_id !== undefined) ? String(quiz.folder_id) : '';
+      }
 
       editorQuestionsList.innerHTML = '';
       quiz.questions.forEach(q => {
@@ -1822,6 +2400,7 @@
 
     const payload = {
       subject_id: parseInt(editSubjectId.value, 10),
+      folder_id: (editQuizFolderId && editQuizFolderId.value) ? parseInt(editQuizFolderId.value, 10) : null,
       title,
       subject_grade: editGradeLevel.value.trim(),
       default_time_limit_min: parseInt(editTimeLimit.value, 10) || 0,
@@ -1842,7 +2421,7 @@
       if (res.ok && data.success) {
         showToast('Teszt sikeresen elmentve!', 'success');
         quizEditorCard.style.display = 'none';
-        await loadQuizzes();
+        await loadQuizzes(currentFolderId);
       } else {
         showAdminAlert('⚠️ Mentési hiba', data.error || 'Hiba a mentés során!');
       }

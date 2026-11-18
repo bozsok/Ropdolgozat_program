@@ -1328,6 +1328,17 @@ h5 {
   color: #1e293b;
 }
 
+.quiz-btn-move {
+  background-color: #f3e8ff;
+  color: #7e22ce;
+  border-color: #d8b4fe;
+}
+
+.quiz-btn-move:hover {
+  background-color: #e9d5ff;
+  color: #6b21a8;
+}
+
 .quiz-btn-delete {
   background-color: #fee2e2;
   color: #dc2626;
@@ -1337,6 +1348,249 @@ h5 {
 .quiz-btn-delete:hover {
   background-color: #fecaca;
   color: #b91c1c;
+}
+
+/* ==========================================================================
+   TESZTSZERKESZTŐ MAPPARENDSZER ÉS MORZSAMENÜ (Calm Learner)
+   ========================================================================== */
+
+/* Morzsamenü navigációs sáv */
+.quiz-breadcrumbs-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  margin-bottom: 6px;
+  padding: 8px 14px;
+  background-color: #f8fafc;
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid #e2e8f0;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+.quiz-breadcrumbs-list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 0.92rem;
+  color: var(--text-muted, #5a4138);
+}
+
+.quiz-breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: #0284c7;
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.92rem;
+}
+
+.quiz-breadcrumb-item:hover {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.quiz-breadcrumb-item.active {
+  font-weight: 700;
+  color: var(--text-main, #1b1b1e);
+  cursor: default;
+}
+
+.quiz-breadcrumb-item.active:hover {
+  background: transparent;
+  color: var(--text-main, #1b1b1e);
+}
+
+.quiz-breadcrumb-separator {
+  display: inline-flex;
+  align-items: center;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  user-select: none;
+}
+
+.quiz-breadcrumb-up-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #475569;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+
+.quiz-breadcrumb-up-btn:hover {
+  background-color: #f1f5f9;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+
+/* Mappakártya a tesztek listájában */
+.folder-card {
+  background-color: #fffdf5;
+  border: 1.5px solid #fde68a;
+  border-radius: var(--radius-md, 12px);
+  box-shadow: 0 1px 3px rgba(217, 119, 6, 0.06);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  position: relative;
+}
+
+.folder-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(217, 119, 6, 0.14);
+  border-color: #f59e0b;
+}
+
+.folder-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.folder-card-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background-color: #fef3c7;
+  color: #d97706;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.folder-card-icon .material-symbols-outlined {
+  font-size: 24px;
+}
+
+.folder-card-info {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.folder-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #78350f;
+  margin: 0 0 4px 0;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.folder-card-meta {
+  color: #92400e;
+  font-size: 0.82rem;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.folder-card-actions {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px dashed #fde68a;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.folder-btn-action {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.folder-btn-action:hover {
+  background-color: #fde68a;
+  color: #78350f;
+}
+
+.folder-btn-delete {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.folder-btn-delete:hover {
+  background-color: #fecaca;
+  color: #991b1b;
+}
+
+/* In-place új mappa kártya */
+.folder-card-new {
+  background-color: #fffbeb;
+  border: 2px dashed #f59e0b;
+  border-radius: var(--radius-md, 12px);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.folder-card-new-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.folder-card-new-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: 1.5px solid #d97706;
+  border-radius: 6px;
+  outline: none;
+  box-sizing: border-box;
+  background-color: #ffffff;
+  color: #78350f;
+  font-family: inherit;
+}
+
+.folder-card-new-input:focus {
+  border-color: #b45309;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+}
+
+.folder-card-new-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 @media (max-width: 1024px) {

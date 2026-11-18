@@ -131,11 +131,66 @@ router.delete('/admin/classes/:className', requireAdminAuth, (req, res) => {
 
 router.get('/admin/quizzes', requireAdminAuth, (req, res) => {
   try {
-    const { subjectId, gradeLevel } = req.query;
-    const quizzes = quizRepo.getQuizzes(subjectId || null, gradeLevel || null);
+    const { subjectId, gradeLevel, folderId } = req.query;
+    const quizzes = quizRepo.getQuizzes(subjectId || null, gradeLevel || null, folderId);
     res.json(quizzes);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Mappák listázása (almappák és morzsamenü útvonal)
+router.get('/admin/quiz-folders', requireAdminAuth, (req, res) => {
+  try {
+    if (req.query.all === 'true') {
+      const allFolders = quizRepo.getAllFolders();
+      return res.json(allFolders);
+    }
+
+    const rawParent = req.query.parentId;
+    const parentId = (rawParent === undefined || rawParent === '' || rawParent === 'null' || rawParent === 'root') ? null : Number(rawParent);
+    const folders = quizRepo.getFolders(parentId);
+    const breadcrumbs = quizRepo.getFolderBreadcrumbs(parentId);
+
+    res.json({
+      success: true,
+      currentFolderId: parentId,
+      folders,
+      breadcrumbs
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Új mappa létrehozása
+router.post('/admin/quiz-folders', requireAdminAuth, (req, res) => {
+  try {
+    const { name, parent_id } = req.body;
+    const created = quizRepo.createFolder({ name, parent_id });
+    res.json({ success: true, folder: created });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Mappa átnevezése
+router.put('/admin/quiz-folders/:id', requireAdminAuth, (req, res) => {
+  try {
+    const updated = quizRepo.renameFolder(req.params.id, req.body.name);
+    res.json({ success: true, folder: updated });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Mappa törlése (benne lévő tesztek a szülő mappába kerülnek át)
+router.delete('/admin/quiz-folders/:id', requireAdminAuth, (req, res) => {
+  try {
+    quizRepo.deleteFolder(req.params.id);
+    res.json({ success: true, message: 'Mappa sikeresen törölve, a tesztek felkerültek a szülő mappába.' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -180,6 +235,17 @@ router.delete('/admin/quizzes/:id', requireAdminAuth, (req, res) => {
   try {
     quizRepo.deleteQuiz(req.params.id);
     res.json({ success: true, message: 'Teszt sikeresen törölve!' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Teszt áthelyezése másik mappába
+router.put('/admin/quizzes/:id/move', requireAdminAuth, (req, res) => {
+  try {
+    const { folderId } = req.body;
+    const updated = quizRepo.moveQuiz(req.params.id, folderId);
+    res.json({ success: true, quiz: updated });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

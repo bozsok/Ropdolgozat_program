@@ -475,13 +475,31 @@
     <!-- 4. FÜL: TESZTSZERKESZTŐ -->
     <section id="tab-quizzes" class="admin-tab-content" style="display: none;">
       <div class="admin-toolbar">
-        <h3>Feladatsorok és kérdések</h3>
-        <button id="btn-new-quiz" class="btn btn-primary">➕ Új teszt létrehozása</button>
+        <div>
+          <h3>Feladatsorok és kérdések</h3>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button id="btn-new-folder" class="btn btn-secondary" type="button" title="Új mappa létrehozása">
+            <span class="material-symbols-outlined" style="font-size: 19px; vertical-align: middle; margin-right: 4px;">create_new_folder</span>
+            <span>Új mappa</span>
+          </button>
+          <button id="btn-new-quiz" class="btn btn-primary" type="button">
+            <span class="material-symbols-outlined" style="font-size: 19px; vertical-align: middle; margin-right: 4px;">add_circle</span>
+            <span>Új teszt létrehozása</span>
+          </button>
+        </div>
       </div>
 
-      <!-- Tesztek kártyalistája -->
+      <!-- Mappa morzsamenü navigációs sáv -->
+      <nav id="quiz-breadcrumbs-bar" class="quiz-breadcrumbs-bar">
+        <div id="quiz-breadcrumbs-list" class="quiz-breadcrumbs-list">
+          <!-- Dinamikus morzsák -->
+        </div>
+      </nav>
+
+      <!-- Tesztek és mappák kártyalistája -->
       <div id="quizzes-list-container" class="quiz-cards-grid">
-        <!-- Dinamikus tesztkártyák -->
+        <!-- Dinamikus mappák és tesztkártyák -->
       </div>
 
       <!-- Tesztszerkesztő űrlap kártya (alapértelmezetten rejtve) -->
@@ -494,10 +512,16 @@
         <form id="form-quiz-editor" onsubmit="return false;">
           <input type="hidden" id="edit-quiz-id">
           
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
             <div class="form-group">
               <label class="form-label" for="edit-subject-id">Tantárgy:</label>
               <select id="edit-subject-id" class="form-control"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="edit-quiz-folder-id">Mappa:</label>
+              <select id="edit-quiz-folder-id" class="form-control">
+                <option value="">📁 Főmappa (Gyökér)</option>
+              </select>
             </div>
             <div class="form-group">
               <label class="form-label" for="edit-grade-level">Évfolyam:</label>
@@ -812,6 +836,50 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-delete-quiz')">Mégse</button>
         <button type="button" id="btn-submit-delete-quiz" class="btn btn-danger">🗑️ Teszt törlése</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mappa Törlése Modal -->
+  <div id="modal-confirm-delete-folder" class="modal-backdrop">
+    <div class="modal-window" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title">🗑️ Mappa törlése</h3>
+      </div>
+      <div style="padding: 14px 0; color: var(--text-main); font-size: 0.95rem; line-height: 1.5;">
+        <p>Biztosan törölni szeretnéd a(z) <strong id="delete-folder-name" style="color: var(--danger);">-</strong> mappát?</p>
+        <div style="margin-top: 10px; padding: 10px 12px; background-color: var(--surface-low); border-left: 3px solid var(--info); border-radius: 6px; font-size: 0.85rem; color: var(--text-muted);">
+          <strong>Adatbiztonsági megjegyzés:</strong><br>
+          A mappában lévő tesztek és almappák nem vesznek el, hanem automatikusan átkerülnek a szülő mappába.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-delete-folder')">Mégse</button>
+        <button type="button" id="btn-submit-delete-folder" class="btn btn-danger">🗑️ Mappa törlése</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Teszt Áthelyezése Modal -->
+  <div id="modal-move-quiz" class="modal-backdrop">
+    <div class="modal-window" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title">📁 Teszt áthelyezése mappába</h3>
+      </div>
+      <div style="padding: 14px 0; color: var(--text-main); font-size: 0.95rem; line-height: 1.5;">
+        <p style="margin-bottom: 12px;">
+          Teszt: <strong id="move-quiz-title" style="color: var(--primary);">-</strong>
+        </p>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="move-quiz-target-folder">Célmappa kiválasztása:</label>
+          <select id="move-quiz-target-folder" class="form-control">
+            <option value="">📁 Főmappa (Gyökér)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-move-quiz')">Mégse</button>
+        <button type="button" id="btn-submit-move-quiz" class="btn btn-primary">📁 Áthelyezés</button>
       </div>
     </div>
   </div>

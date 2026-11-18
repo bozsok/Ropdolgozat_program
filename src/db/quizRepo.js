@@ -14,13 +14,15 @@ function getSubjects() {
 
 /**
  * Tesztek listázása opcionális szűréssel
- * Tartalmazza a kérdések számát és a zároltsági állapotot
+ * Tartalmazza a kérdések számát, a mappát és a pontszámot
  */
-function getQuizzes(subjectId = null, gradeLevel = null) {
+function getQuizzes(subjectId = null, gradeLevel = null, folderId = undefined) {
   let query = `
     SELECT 
       q.id,
       q.subject_id,
+      q.folder_id,
+      f.name AS folder_name,
       s.name AS subject_name,
       q.title,
       q.subject_grade,
@@ -32,6 +34,7 @@ function getQuizzes(subjectId = null, gradeLevel = null) {
       COALESCE(SUM(qst.points), 0.0) AS total_points
     FROM quizzes q
     JOIN subjects s ON s.id = q.subject_id
+    LEFT JOIN quiz_folders f ON f.id = q.folder_id
     LEFT JOIN questions qst ON qst.quiz_id = q.id
     WHERE 1=1
   `;
@@ -45,6 +48,15 @@ function getQuizzes(subjectId = null, gradeLevel = null) {
   if (gradeLevel) {
     query += ' AND q.subject_grade = ?';
     params.push(gradeLevel);
+  }
+
+  if (folderId !== undefined) {
+    if (folderId === null || folderId === 'root') {
+      query += ' AND q.folder_id IS NULL';
+    } else {
+      query += ' AND q.folder_id = ?';
+      params.push(Number(folderId));
+    }
   }
 
   query += ' GROUP BY q.id ORDER BY q.updated_at DESC, q.id DESC';
@@ -63,6 +75,8 @@ function getQuizById(quizId, isStudentView = false) {
     SELECT 
       q.id,
       q.subject_id,
+      q.folder_id,
+      f.name AS folder_name,
       s.name AS subject_name,
       q.title,
       q.subject_grade,
@@ -72,6 +86,7 @@ function getQuizById(quizId, isStudentView = false) {
       q.updated_at
     FROM quizzes q
     JOIN subjects s ON s.id = q.subject_id
+    LEFT JOIN quiz_folders f ON f.id = q.folder_id
     WHERE q.id = ?
   `);
 
@@ -149,7 +164,7 @@ function isQuizLocked(quizId) {
 /**
  * Új teszt és kérdéseinek mentése tranzakcióban
  */
-function createQuiz({ subject_id = 1, title, subject_grade = '', default_time_limit_min = 0, questions = [] }) {
+function createQuiz({ subject_id = 1, folder_id = null, title, subject_grade = '', default_time_limit_min = 0, questions = [] }) {
   const trimmedTitle = String(title || '').trim();
   if (!trimmedTitle) throw new Error('A teszt címe kötelező!');
 
@@ -157,11 +172,12 @@ function createQuiz({ subject_id = 1, title, subject_grade = '', default_time_li
 
   const tx = db.transaction(() => {
     const insertQuiz = db.prepare(`
-      INSERT INTO quizzes (subject_id, title, subject_grade, default_time_limit_min)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO quizzes (subject_id, folder_id, title, subject_grade, default_time_limit_min)
+      VALUES (?, ?, ?, ?, ?)
     `);
     const quizResult = insertQuiz.run(
       Number(subject_id) || 1,
+      folder_id ? Number(folder_id) : null,
       trimmedTitle,
       String(subject_grade || '').trim(),
       Number(default_time_limit_min) || 0
@@ -205,18 +221,19 @@ function createQuiz({ subject_id = 1, title, subject_grade = '', default_time_li
 /**
  * Meglévő teszt szerkesztése (Szabadon szerkeszthető tanári sablon)
  */
-function updateQuiz(quizId, { subject_id, title, subject_grade, default_time_limit_min, questions }) {
+function updateQuiz(quizId, { subject_id, folder_id = null, title, subject_grade, default_time_limit_min, questions }) {
   const trimmedTitle = String(title || '').trim();
   if (!trimmedTitle) throw new Error('A teszt címe kötelező!');
 
   const tx = db.transaction(() => {
     const updateQuizStmt = db.prepare(`
       UPDATE quizzes 
-      SET subject_id = ?, title = ?, subject_grade = ?, default_time_limit_min = ?, updated_at = CURRENT_TIMESTAMP
+      SET subject_id = ?, folder_id = ?, title = ?, subject_grade = ?, default_time_limit_min = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
     updateQuizStmt.run(
       Number(subject_id) || 1,
+      folder_id ? Number(folder_id) : null,
       trimmedTitle,
       String(subject_grade || '').trim(),
       Number(default_time_limit_min) || 0,
@@ -337,6 +354,7 @@ function duplicateQuiz(quizId, customTitle = null) {
 
   return createQuiz({
     subject_id: original.subject_id,
+    folder_id: original.folder_id,
     title: newTitle,
     subject_grade: original.subject_grade,
     default_time_limit_min: original.default_time_limit_min,
@@ -372,6 +390,139 @@ function deleteQuiz(quizId) {
   return true;
 }
 
+/**
+ * ============================================================================
+ * MAPPAKEZELŐ ADATBÁZIS MŰVELETEK (quiz_folders)
+ * ============================================================================
+ */
+
+/**
+ * Mappák listázása egy adott szülőmappában (vagy a gyökérben)
+ * @param {number|null} parentId - NULL = legfelső gyökérszint
+ */
+function getFolders(parentId = null) {
+  const query = `
+    SELECT 
+      f.id,
+      f.parent_id,
+      f.name,
+      f.created_at,
+      (SELECT COUNT(*) FROM quiz_folders sub WHERE sub.parent_id = f.id) AS subfolder_count,
+      (SELECT COUNT(*) FROM quizzes q WHERE q.folder_id = f.id) AS quiz_count
+    FROM quiz_folders f
+    WHERE ${parentId === null ? 'f.parent_id IS NULL' : 'f.parent_id = ?'}
+    ORDER BY f.name COLLATE NOCASE ASC
+  `;
+  const stmt = db.prepare(query);
+  return parentId === null ? stmt.all() : stmt.all(Number(parentId));
+}
+
+/**
+ * Az összes mappa lekérése lapos listaként (legördülő menükhöz és útvonalépítéshez)
+ */
+function getAllFolders() {
+  const stmt = db.prepare(`
+    SELECT id, parent_id, name, created_at
+    FROM quiz_folders
+    ORDER BY name COLLATE NOCASE ASC
+  `);
+  return stmt.all();
+}
+
+/**
+ * Egy mappa navigációs morzsamenü útvonala a gyökértől a megadott mappáig
+ * @param {number|null} folderId 
+ * @returns {Array<{id: number, name: string}>}
+ */
+function getFolderBreadcrumbs(folderId) {
+  if (!folderId) return [];
+  const crumbs = [];
+  let currentId = Number(folderId);
+  const stmt = db.prepare('SELECT id, parent_id, name FROM quiz_folders WHERE id = ?');
+  const visited = new Set();
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const folder = stmt.get(currentId);
+    if (!folder) break;
+    crumbs.unshift({ id: folder.id, name: folder.name });
+    currentId = folder.parent_id;
+  }
+  return crumbs;
+}
+
+/**
+ * Új mappa létrehozása
+ */
+function createFolder({ name, parent_id = null }) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) throw new Error('A mappa neve kötelező!');
+
+  const validParentId = (parent_id !== null && parent_id !== undefined && parent_id !== '') ? Number(parent_id) : null;
+  const stmt = db.prepare(`
+    INSERT INTO quiz_folders (parent_id, name)
+    VALUES (?, ?)
+  `);
+  const res = stmt.run(validParentId, trimmed);
+  return { id: res.lastInsertRowid, parent_id: validParentId, name: trimmed };
+}
+
+/**
+ * Mappa átnevezése
+ */
+function renameFolder(folderId, newName) {
+  const trimmed = String(newName || '').trim();
+  if (!trimmed) throw new Error('A mappa új neve kötelező!');
+
+  const stmt = db.prepare('UPDATE quiz_folders SET name = ? WHERE id = ?');
+  const res = stmt.run(trimmed, Number(folderId));
+  if (res.changes === 0) throw new Error('A mappa nem található!');
+  return { id: Number(folderId), name: trimmed };
+}
+
+/**
+ * Mappa törlése (Tesztek felkerülnek a szülő mappába adatvesztés nélkül)
+ */
+function deleteFolder(folderId) {
+  const fId = Number(folderId);
+  const folder = db.prepare('SELECT id, parent_id FROM quiz_folders WHERE id = ?').get(fId);
+  if (!folder) throw new Error('A mappa nem található!');
+
+  const tx = db.transaction(() => {
+    // 1. A mappában lévő tesztek a szülő mappába (vagy gyökérbe) kerülnek
+    db.prepare('UPDATE quizzes SET folder_id = ? WHERE folder_id = ?').run(folder.parent_id, fId);
+    // 2. A mappában lévő almappák a szülő mappába kerülnek
+    db.prepare('UPDATE quiz_folders SET parent_id = ? WHERE parent_id = ?').run(folder.parent_id, fId);
+    // 3. Mappa rekord törlése
+    db.prepare('DELETE FROM quiz_folders WHERE id = ?').run(fId);
+  });
+
+  tx();
+  return { success: true };
+}
+
+/**
+ * Teszt áthelyezése másik mappába (vagy gyökérbe)
+ * @param {number} quizId
+ * @param {number|null} targetFolderId
+ * @returns {object}
+ */
+function moveQuiz(quizId, targetFolderId) {
+  const qId = Number(quizId);
+  const fId = (targetFolderId === null || targetFolderId === undefined || targetFolderId === '' || targetFolderId === 'root') ? null : Number(targetFolderId);
+
+  if (fId !== null) {
+    const folderExists = db.prepare('SELECT id FROM quiz_folders WHERE id = ?').get(fId);
+    if (!folderExists) {
+      throw new Error('A megadott célmappa nem létezik!');
+    }
+  }
+
+  const stmt = db.prepare('UPDATE quizzes SET folder_id = ? WHERE id = ?');
+  stmt.run(fId, qId);
+  return getQuizById(qId);
+}
+
 module.exports = {
   getSubjects,
   getQuizzes,
@@ -380,6 +531,13 @@ module.exports = {
   createQuiz,
   updateQuiz,
   duplicateQuiz,
-  deleteQuiz
+  deleteQuiz,
+  moveQuiz,
+  getFolders,
+  getAllFolders,
+  getFolderBreadcrumbs,
+  createFolder,
+  renameFolder,
+  deleteFolder
 };
 

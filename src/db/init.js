@@ -26,7 +26,31 @@ function initializeDatabase() {
   const schemaPath = path.join(__dirname, '..', '..', 'DATABASE_SCHEMA.sql');
   const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 
-  // Séma futtatása (táblák, indexek, triggerek)
+  // 1. Előzetes migráció: quiz_folders tábla és quizzes.folder_id meglétének biztosítása a séma futtatása előtt
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS quiz_folders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        parent_id INTEGER DEFAULT NULL,
+        name TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (parent_id) REFERENCES quiz_folders(id) ON DELETE CASCADE
+    );
+  `);
+
+  try {
+    const tableList = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='quizzes'").get();
+    if (tableList) {
+      const quizColumns = db.prepare('PRAGMA table_info(quizzes)').all();
+      const hasFolderId = quizColumns.some(c => c.name === 'folder_id');
+      if (!hasFolderId) {
+        db.prepare('ALTER TABLE quizzes ADD COLUMN folder_id INTEGER DEFAULT NULL REFERENCES quiz_folders(id) ON DELETE SET NULL').run();
+      }
+    }
+  } catch (err) {
+    console.error('Hiba a quizzes.folder_id migrációjakor:', err);
+  }
+
+  // 2. Séma futtatása (táblák, indexek, triggerek)
   db.exec(schemaSql);
 
   // Mintaadatok feltöltése tranzakcióban (ha még üres az adatbázis)

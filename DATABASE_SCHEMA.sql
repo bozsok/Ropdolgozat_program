@@ -36,19 +36,36 @@ CREATE TABLE IF NOT EXISTS students (
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_name);
 
 -- ----------------------------------------------------------------------------
+-- 2.5 TÁBLA: quiz_folders (Tesztek hierarchikus mapparendszere)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS quiz_folders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_id INTEGER DEFAULT NULL,             -- NULL = legfelső (gyökér) szint, egyébként a szülő mappa ID-ja
+    name TEXT NOT NULL,                         -- A mappa neve (pl. "6. évfolyam", "1. félév")
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (parent_id) REFERENCES quiz_folders(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_quiz_folders_parent ON quiz_folders(parent_id);
+
+-- ----------------------------------------------------------------------------
 -- 3. TÁBLA: quizzes (Tesztek / Feladatsorok fejléce)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS quizzes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     subject_id INTEGER NOT NULL DEFAULT 1,      -- Hivatkozás a subjects táblára
+    folder_id INTEGER DEFAULT NULL,             -- Mappa kapcsolódás (NULL = gyökér mappa)
     title TEXT NOT NULL,                        -- A teszt címe (pl. "6. osztály - Hálózatok alapjai")
     subject_grade TEXT DEFAULT '',              -- Évfolyam / kategória (pl. "6. évfolyam")
     default_time_limit_min INTEGER DEFAULT 0,   -- Alapértelmezett időkorlát percben (0 = nincs korlát)
     locked_at DATETIME DEFAULT NULL,            -- Zárolás UTC időpontja (első indításkor automatikusan kitöltődik)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE RESTRICT
+    FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE RESTRICT,
+    FOREIGN KEY (folder_id) REFERENCES quiz_folders(id) ON DELETE SET NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_quizzes_folder ON quizzes(folder_id);
 
 -- ----------------------------------------------------------------------------
 -- 4. TÁBLA: questions (Kérdések a tesztekhez)
