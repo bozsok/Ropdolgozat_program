@@ -193,7 +193,9 @@
     closeLoginModal();
     applyKpiVisibility();
     setupSocket();
+    initSettingsHandlers();
     await loadInitialData();
+    loadSettings();
   }
 
   /**
@@ -597,10 +599,14 @@
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
+  let lastMatrixData = null;
+  let isMatrixAnonymous = true;
+
   /**
    * Élő Mátrix Táblázat Kirajzolása
    */
   function renderMatrix(data) {
+    lastMatrixData = data;
     const { questions, participants, answers, session } = data;
 
     // KPI összegző kártyák azonnali kiszámítása és frissítése
@@ -613,7 +619,17 @@
 
     matrixHeadRow.innerHTML = `
       <th class="col-num">#</th>
-      <th class="col-name">Tanuló neve</th>
+      <th class="col-name">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span>Tanuló neve</span>
+          <label class="matrix-anon-wrap" title="Anonim mód: nevek elrejtése / felfedése" onclick="event.stopPropagation();">
+            <span class="material-symbols-outlined">${isMatrixAnonymous ? 'visibility_off' : 'visibility'}</span>
+            <span class="matrix-anon-label">Anonim</span>
+            <input type="checkbox" id="matrix-anon-checkbox" class="matrix-anon-checkbox" ${isMatrixAnonymous ? 'checked' : ''}>
+            <span class="matrix-anon-slider"></span>
+          </label>
+        </div>
+      </th>
       <th class="col-pc">Gép</th>
       ${qColsHtml}
       <th class="col-points">Pont</th>
@@ -622,6 +638,14 @@
       <th class="col-focus">Fókusz</th>
       <th class="col-actions">Műveletek</th>
     `;
+
+    const anonCheckbox = matrixHeadRow.querySelector('#matrix-anon-checkbox');
+    if (anonCheckbox) {
+      anonCheckbox.onchange = (e) => {
+        isMatrixAnonymous = e.target.checked;
+        if (lastMatrixData) renderMatrix(lastMatrixData);
+      };
+    }
 
     // Eseménydelegáció a fejléc sorra (Best Practice - soha nem vész el)
     matrixHeadRow.onclick = (e) => {
@@ -666,10 +690,14 @@
         ? `<span class="admin-student-status status-finished"><span class="material-symbols-outlined" style="font-size: 13px;">check_circle</span> Kész</span>`
         : `<span class="admin-student-status status-working"><span class="material-symbols-outlined" style="font-size: 13px;">edit_note</span> Folyamatban...</span>`;
 
+      const displayedName = isMatrixAnonymous
+        ? (p.pc_number ? `PC-${p.pc_number} tanulója` : `${pIdx + 1}. diák`)
+        : escapeHtml(p.student_name);
+
       tdName.innerHTML = `
         <div class="admin-student-cell">
           <div class="admin-student-info">
-            <span class="admin-student-name">${escapeHtml(p.student_name)}</span>
+            <span class="admin-student-name" title="${isMatrixAnonymous ? 'Anonim mód aktív (kattints a fenti csúszkára a nevek felfedéséhez)' : escapeHtml(p.student_name)}">${displayedName}</span>
             ${statusHtml}
           </div>
         </div>
@@ -1289,6 +1317,9 @@
     const selOpt = startQuizId.options[startQuizId.selectedIndex];
     if (selOpt && selOpt.dataset.timeLimit !== undefined) {
       startTimeLimit.value = selOpt.dataset.timeLimit;
+    }
+    if (currentClassroomSettings && currentClassroomSettings.shuffle_questions !== undefined) {
+      if (startShuffleQuestions) startShuffleQuestions.checked = Boolean(currentClassroomSettings.shuffle_questions);
     }
   }
 
@@ -3308,6 +3339,251 @@
 
     if (tabId === 'tab-reports') {
       loadReports();
+    }
+    if (tabId === 'tab-backup') {
+      loadSettings();
+    }
+  }
+
+  // ==========================================================================
+  // BEÁLLÍTÁSOK ÉS BIZTONSÁGI MENTÉS KEZELÉSE
+  // ==========================================================================
+
+  let pendingRestoreFile = null;
+  let currentClassroomSettings = null;
+
+  async function loadSettings() {
+    try {
+      const res = await fetch('/api/admin/settings');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.success || !data.settings) return;
+
+      const { grade_thresholds, classroom_settings } = data.settings;
+      currentClassroomSettings = classroom_settings;
+
+      const t5Input = document.getElementById('threshold-input-5');
+      const t4Input = document.getElementById('threshold-input-4');
+      const t3Input = document.getElementById('threshold-input-3');
+      const t2Input = document.getElementById('threshold-input-2');
+
+      if (t5Input && grade_thresholds) t5Input.value = grade_thresholds[5] ?? 90;
+      if (t4Input && grade_thresholds) t4Input.value = grade_thresholds[4] ?? 75;
+      if (t3Input && grade_thresholds) t3Input.value = grade_thresholds[3] ?? 55;
+      if (t2Input && grade_thresholds) t2Input.value = grade_thresholds[2] ?? 30;
+
+      updateThresholdLabels();
+
+      if (classroom_settings) {
+        const anon = document.getElementById('setting-anonym-mode');
+        const shuf = document.getElementById('setting-shuffle-questions');
+        const hide = document.getElementById('setting-hide-feedback');
+
+        if (anon) anon.checked = Boolean(classroom_settings.anonym_mode_default);
+        if (shuf) shuf.checked = Boolean(classroom_settings.shuffle_questions);
+        if (hide) hide.checked = Boolean(classroom_settings.hide_immediate_feedback);
+
+        isMatrixAnonymous = Boolean(classroom_settings.anonym_mode_default);
+        if (lastMatrixData) renderMatrix(lastMatrixData);
+      }
+    } catch (err) {
+      console.error('Hiba a beállítások betöltésekor:', err);
+    }
+  }
+
+  function updateThresholdLabels() {
+    const t5 = parseInt(document.getElementById('threshold-input-5')?.value, 10) || 90;
+    const t4 = parseInt(document.getElementById('threshold-input-4')?.value, 10) || 75;
+    const t3 = parseInt(document.getElementById('threshold-input-3')?.value, 10) || 55;
+    const t2 = parseInt(document.getElementById('threshold-input-2')?.value, 10) || 30;
+
+    const desc5 = document.getElementById('threshold-desc-5');
+    const desc4 = document.getElementById('threshold-desc-4');
+    const desc3 = document.getElementById('threshold-desc-3');
+    const desc2 = document.getElementById('threshold-desc-2');
+    const desc1 = document.getElementById('threshold-desc-1');
+
+    if (desc5) desc5.textContent = `${t5}% – 100%`;
+    if (desc4) desc4.textContent = `${t4}% – ${Math.max(t4, t5 - 1)}%`;
+    if (desc3) desc3.textContent = `${t3}% – ${Math.max(t3, t4 - 1)}%`;
+    if (desc2) desc2.textContent = `${t2}% – ${Math.max(t2, t3 - 1)}%`;
+    if (desc1) desc1.textContent = `0% – ${Math.max(0, t2 - 1)}%`;
+  }
+
+  function showSettingsToast(msg) {
+    const toast = document.getElementById('settings-toast');
+    const toastMsg = document.getElementById('settings-toast-message');
+    if (toast && toastMsg) {
+      toastMsg.textContent = msg;
+      toast.style.display = 'flex';
+      setTimeout(() => {
+        toast.style.display = 'none';
+      }, 4000);
+    } else {
+      showToast(msg, 'success');
+    }
+  }
+
+  async function saveSettings() {
+    const t5 = parseInt(document.getElementById('threshold-input-5')?.value, 10);
+    const t4 = parseInt(document.getElementById('threshold-input-4')?.value, 10);
+    const t3 = parseInt(document.getElementById('threshold-input-3')?.value, 10);
+    const t2 = parseInt(document.getElementById('threshold-input-2')?.value, 10);
+
+    if (isNaN(t2) || isNaN(t3) || isNaN(t4) || isNaN(t5)) {
+      showAdminAlert('⚠️ Érvénytelen ponthatárok', 'Kérjük, minden érdemjegyhez adj meg érvényes százalékos alsó határt!');
+      return;
+    }
+
+    if (t2 <= 0 || t2 >= t3 || t3 >= t4 || t4 >= t5 || t5 > 100) {
+      showAdminAlert('⚠️ Helytelen ponthatár-sorrend', 'A ponthatároknak szigorúan növekvő sorrendben kell lenniük:\n0 < 2-es < 3-as < 4-es < 5-ös <= 100%!');
+      return;
+    }
+
+    const payload = {
+      grade_thresholds: { 2: t2, 3: t3, 4: t4, 5: t5 },
+      classroom_settings: {
+        anonym_mode_default: Boolean(document.getElementById('setting-anonym-mode')?.checked),
+        shuffle_questions: Boolean(document.getElementById('setting-shuffle-questions')?.checked),
+        hide_immediate_feedback: Boolean(document.getElementById('setting-hide-feedback')?.checked)
+      }
+    };
+
+    try {
+      const btnSave = document.getElementById('btn-save-settings');
+      if (btnSave) btnSave.disabled = true;
+
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showSettingsToast('A beállítások sikeresen mentve a helyi gép profiljában!');
+      } else {
+        showAdminAlert('⚠️ Mentési hiba', data.error || 'Nem sikerült elmenteni a beállításokat.');
+      }
+    } catch (err) {
+      console.error('Hiba a beállítások mentésekor:', err);
+      showAdminAlert('⚠️ Hálózati hiba', 'Nem sikerült elérni a szervert a mentéshez.');
+    } finally {
+      const btnSave = document.getElementById('btn-save-settings');
+      if (btnSave) btnSave.disabled = false;
+    }
+  }
+
+  async function executeResetSettings() {
+    closeModal('modal-confirm-reset-settings');
+    try {
+      const res = await fetch('/api/admin/settings/reset', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        await loadSettings();
+        showSettingsToast('A gyári alapértékek sikeresen visszaállítva!');
+      } else {
+        showAdminAlert('⚠️ Visszaállítási hiba', data.error || 'Nem sikerült visszaállítani az alapértékeket.');
+      }
+    } catch (err) {
+      console.error('Hiba a beállítások alaphelyzetbe állításakor:', err);
+      showAdminAlert('⚠️ Hálózati hiba', 'Nem sikerült elérni a szervert a visszaállításhoz.');
+    }
+  }
+
+  function initSettingsHandlers() {
+    // Ponthatár élő szövegfrissítés
+    ['threshold-input-5', 'threshold-input-4', 'threshold-input-3', 'threshold-input-2'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', updateThresholdLabels);
+      }
+    });
+
+    // Mentés gomb
+    const btnSave = document.getElementById('btn-save-settings');
+    if (btnSave) {
+      btnSave.addEventListener('click', saveSettings);
+    }
+
+    // Alapértelmezések visszaállítása gomb (modal megnyitása)
+    const btnReset = document.getElementById('btn-reset-settings');
+    if (btnReset) {
+      btnReset.addEventListener('click', () => {
+        openModal('modal-confirm-reset-settings');
+      });
+    }
+
+    // Alapértelmezések véglegesítése a modálban
+    const btnExecuteReset = document.getElementById('btn-execute-reset-settings');
+    if (btnExecuteReset) {
+      btnExecuteReset.addEventListener('click', executeResetSettings);
+    }
+
+    // Mentésfájl kiválasztása gomb
+    const btnTriggerRestore = document.getElementById('btn-trigger-restore');
+    const inputRestore = document.getElementById('input-restore-backup');
+    if (btnTriggerRestore && inputRestore) {
+      btnTriggerRestore.addEventListener('click', () => {
+        inputRestore.value = '';
+        inputRestore.click();
+      });
+
+      inputRestore.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+
+        pendingRestoreFile = file;
+        const nameEl = document.getElementById('restore-file-display-name');
+        const sizeEl = document.getElementById('restore-file-display-size');
+        if (nameEl) nameEl.textContent = file.name;
+        if (sizeEl) sizeEl.textContent = `Fájlméret: ${(file.size / (1024 * 1024)).toFixed(2)} MB`;
+
+        openModal('modal-confirm-restore');
+      });
+    }
+
+    // Visszaállítás megerősítése
+    const btnExecuteRestore = document.getElementById('btn-execute-restore');
+    if (btnExecuteRestore) {
+      btnExecuteRestore.addEventListener('click', async () => {
+        if (!pendingRestoreFile) return;
+
+        const originalHtml = btnExecuteRestore.innerHTML;
+        btnExecuteRestore.disabled = true;
+        btnExecuteRestore.innerHTML = `
+          <span class="material-symbols-outlined spin">sync</span>
+          <span>Visszaállítás folyamatban...</span>
+        `;
+
+        try {
+          const formData = new FormData();
+          formData.append('backupFile', pendingRestoreFile);
+
+          const res = await fetch('/api/admin/restore', {
+            method: 'POST',
+            body: formData
+          });
+
+          const data = await res.json();
+          if (res.ok && data.success) {
+            closeModal('modal-confirm-restore');
+            showToast('A rendszermentés sikeresen visszaállítva! Az oldal 2 másodperc múlva frissül...', 'success');
+            setTimeout(() => {
+              window.location.reload();
+            }, 1800);
+          } else {
+            showAdminAlert('⚠️ Visszaállítási hiba', data.error || 'A mentés visszaállítása sikertelen volt!');
+            btnExecuteRestore.disabled = false;
+            btnExecuteRestore.innerHTML = originalHtml;
+          }
+        } catch (err) {
+          console.error('Hiba a visszaállítás során:', err);
+          showAdminAlert('⚠️ Hálózati hiba', 'Nem sikerült feltölteni a mentésfájlt a szerverre.');
+          btnExecuteRestore.disabled = false;
+          btnExecuteRestore.innerHTML = originalHtml;
+        }
+      });
     }
   }
 

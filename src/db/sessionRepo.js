@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('./init');
 const grader = require('../services/grader');
+const settingsRepo = require('./settingsRepo');
 
 /**
  * sessionRepo.js - Órai dolgozatok (sessions), résztvevők és válaszok adatbázis műveletei
@@ -211,9 +212,9 @@ function startSession({
   class_name = '',
   mode = 'STUDENT_PACED',
   time_limit_min = 0,
-  shuffle_questions = 0,
+  shuffle_questions = null,
   shuffle_options = 0,
-  show_feedback_on_end = 1,
+  show_feedback_on_end = null,
   grade_thresholds = null
 }) {
   const trimmedGrade = String(grade_level || '').trim();
@@ -226,7 +227,19 @@ function startSession({
     throw new Error(`Ezen a csatornán (${existingActive.subject_name} ${trimmedGrade}. évfolyam) már fut egy aktív dolgozat! Előbb azt kell lezárni.`);
   }
 
-  const thresholdsJson = grade_thresholds ? JSON.stringify(grade_thresholds) : '{"2":30,"3":55,"4":75,"5":90}';
+  const activeSettings = settingsRepo.getSettings ? settingsRepo.getSettings() : null;
+  const activeThresholds = grade_thresholds || (activeSettings ? activeSettings.grade_thresholds : null);
+  const thresholdsJson = activeThresholds ? JSON.stringify(activeThresholds) : '{"2":30,"3":55,"4":75,"5":90}';
+
+  let effectiveShuffleQuestions = shuffle_questions;
+  if (effectiveShuffleQuestions === null || effectiveShuffleQuestions === undefined) {
+    effectiveShuffleQuestions = activeSettings?.classroom_settings?.shuffle_questions ? 1 : 0;
+  }
+
+  let effectiveShowFeedback = show_feedback_on_end;
+  if (effectiveShowFeedback === null || effectiveShowFeedback === undefined) {
+    effectiveShowFeedback = activeSettings?.classroom_settings?.hide_immediate_feedback ? 0 : 1;
+  }
 
   let sessionId = null;
   const tx = db.transaction(() => {
@@ -249,9 +262,9 @@ function startSession({
       String(class_name || '').trim(),
       mode,
       Number(time_limit_min) || 0,
-      shuffle_questions ? 1 : 0,
+      effectiveShuffleQuestions ? 1 : 0,
       shuffle_options ? 1 : 0,
-      show_feedback_on_end ? 1 : 0,
+      effectiveShowFeedback ? 1 : 0,
       thresholdsJson
     );
 

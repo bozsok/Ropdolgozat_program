@@ -1,5 +1,5 @@
 # PROJEKT KONTEXTUS ÉS RENDSZERMEGÁLLAPODÁS (project-context.md)
-**Projekt verzió:** v1.18.0 (Stabil tantermi kiadás, változási napló: `CHANGELOG.md`)  
+**Projekt verzió:** v1.19.0 (Stabil tantermi kiadás, változási napló: `CHANGELOG.md`)  
 **Projekt neve:** Röpdolgozat program – Iskolai Helyi Hálózatos Röpdolgozat Rendszer (Socrative-klón)  
 **Célközönség:** Általános iskola 3–8. osztály (Digitális kultúra, Technika és Fejlesztő foglalkozás tantárgyak)  
 **Működési környezet:** 100% Offline Helyi Hálózat (LAN) – 1 db Windows Server 2016 (vagy újabb) + 42 db Windows 10 kliensgép + több tanári munkaállomás.  
@@ -61,7 +61,9 @@
   - **Gépváltás adatvesztés nélkül (Tanári jóváhagyással):** Ha egy gép elromlik, a tanár az élő mátrixban a **[ 💺 Gépváltás ]** gombra kattintva engedélyezi az átülést. A tanuló korábbi válaszai és pontjai maradéktalanul megmaradnak, a régi gép tokenje azonnal érvénytelenné válik, és az új gép új tokent kap.
   - **Téves névfoglalás törlése:** Ha egy diák véletlenül a padtársa nevére kattintott bejelentkezéskor, a tanár a **[ 🗑️ Név törlése ]** gombbal kitörli a téves rekordot és a tévesen leadott válaszokat az aktív dolgozatból, így a valódi diák tiszta lappal léphet be.
 * **Diákazonosítás és Történeti Hitelesség:** A tanulók stabil belső `student_id` alapján azonosítódnak, a nevük pedig történeti pillanatfelvételként tárolódik. Azonos nevű diákok esetén a hivatalos KRÉTA naplózási gyakorlat szerint megkülönböztető jelölés (pl. „Kovács Péter I.”, „Kovács Péter II.”) alkalmazandó.
-* **Alapértelmezett KRÉTA ponthatárok:** `0–29%: 1`, `30–54%: 2`, `55–74%: 3`, `75–89%: 4`, `90–100%: 5`.
+* **Alapértelmezett KRÉTA ponthatárok:** `0–29%: 1`, `30–54%: 2`, `55–74%: 3`, `75–89%: 4`, `90–100%: 5` (a tanár a Beállítások menüpontban szabadon testreszabhatja a határokat).
+* **Tantermi Anonim mód és Kérdéskeverés:** A tanári élő mátrix fejlécében lévő egykattintásos gyorskapcsolóval a nevek azonnal anonimizálhatók a kivetítőn (`PC-X tanulója` / `1. diák`). A dolgozatindításkor a kérdéskeverés központilag vezérelhető.
+* **Teljes rendszermentés visszaállítása (Restore):** ZIP vagy `.okoskodobackup` csomag közvetlen visszatöltése `PRAGMA integrity_check` vizsgálattal, `.bak` vészhelyzeti pillanatképpel és Proxy Hot-Reload kapcsolattal.
 
 ---
 
@@ -78,6 +80,7 @@
   5. `sessions` (Aktív és lezárt órai alkalmak / szobák, évfolyammal, tantárggyal, ponthatárokkal)
   6. `participants` (Csatlakozott tanulók, gépazonosító `1-42`, csapatszín, fókuszvesztés-számláló)
   7. `answers` (Egyedi diákválaszok, `eval_status`, `points_earned`, manuális felülbírálás)
+  8. `system_settings` (Rendszerbeállítások, egyéni értékelési határok és tantermi felügyeleti opciók)
 
 ---
 

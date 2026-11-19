@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const multer = require('multer');
 const config = require('../../config');
 const { requireAdminAuth, isValidToken, loginAdmin, logoutAdmin } = require('../middleware/auth');
@@ -12,6 +13,7 @@ const db = require('../db/init');
 const exporter = require('../services/exporter');
 const backup = require('../services/backup');
 const presenceService = require('../services/presenceService');
+const settingsRepo = require('../db/settingsRepo');
 
 const router = express.Router();
 const ExcelJS = require('exceljs');
@@ -19,6 +21,11 @@ const ExcelJS = require('exceljs');
 const uploadMemory = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 } // max 15 MB
+});
+
+const uploadBackup = multer({
+  dest: path.join(os.tmpdir(), 'okoskodo_backups'),
+  limits: { fileSize: 500 * 1024 * 1024 } // max 500 MB
 });
 
 // Multer feltöltési konfiguráció (kérdés-képekhez kvízenkénti almappákban)
@@ -790,15 +797,19 @@ router.post('/student/submit-answer', (req, res) => {
       io.to(`session_${participant.session_id}`).emit('matrix:updated', matrixData);
     }
 
+    const session = sessionRepo.getSessionById(participant.session_id);
+    const hideFeedback = session ? (session.show_feedback_on_end === 0) : false;
+
     res.json({
       success: true,
       alreadySubmitted: submission.alreadySubmitted,
-      eval_status: submission.answer.eval_status,
-      is_correct: submission.answer.is_correct,
-      points_earned: submission.answer.points_earned,
+      eval_status: hideFeedback ? null : submission.answer.eval_status,
+      is_correct: hideFeedback ? null : submission.answer.is_correct,
+      points_earned: hideFeedback ? null : submission.answer.points_earned,
       isFinished: submission.isFinished,
-      correctAnswer: submission.correctAnswer,
-      explanation: submission.explanation
+      correctAnswer: hideFeedback ? null : submission.correctAnswer,
+      explanation: hideFeedback ? null : submission.explanation,
+      hideFeedback: hideFeedback
     });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -902,6 +913,56 @@ router.get('/admin/backup', requireAdminAuth, (req, res) => {
     archive.pipe(res);
     archive.finalize();
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Rendszerbeállítások lekérése (Admin)
+router.get('/admin/settings', requireAdminAuth, (req, res) => {
+  try {
+    const settings = settingsRepo.getSettings();
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Rendszerbeállítások mentése (Admin)
+router.post('/admin/settings', requireAdminAuth, (req, res) => {
+  try {
+    const settings = settingsRepo.saveSettings(req.body);
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Rendszerbeállítások visszaállítása gyári alapértékekre (Admin)
+router.post('/admin/settings/reset', requireAdminAuth, (req, res) => {
+  try {
+    const settings = settingsRepo.resetSettings();
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Teljes rendszermentés visszaállítása (Admin)
+router.post('/admin/restore', requireAdminAuth, uploadBackup.single('backupFile'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Nincs kijelölt feltöltendő mentésfájl!' });
+  }
+  const uploadedPath = req.file.path;
+  try {
+    backup.restoreSystemBackup(uploadedPath);
+    try {
+      if (fs.existsSync(uploadedPath)) fs.unlinkSync(uploadedPath);
+    } catch {}
+    res.json({ success: true, message: 'A rendszermentés visszaállítása sikeresen befejeződött!' });
+  } catch (err) {
+    try {
+      if (fs.existsSync(uploadedPath)) fs.unlinkSync(uploadedPath);
+    } catch {}
     res.status(500).json({ error: err.message });
   }
 });

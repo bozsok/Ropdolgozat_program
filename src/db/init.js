@@ -12,12 +12,39 @@ if (!fs.existsSync(config.uploadsDir)) {
 }
 
 // SQLite adatbázis megnyitása
-const db = new Database(config.dbPath);
+let currentDb = new Database(config.dbPath);
 
-// Kötelező pragma beállítások (AI_RULES & TECH_STACK)
-db.pragma('journal_mode = WAL');
-db.pragma('synchronous = NORMAL');
-db.pragma('foreign_keys = ON');
+function applyPragmas(targetDb) {
+  targetDb.pragma('journal_mode = WAL');
+  targetDb.pragma('synchronous = NORMAL');
+  targetDb.pragma('foreign_keys = ON');
+}
+
+applyPragmas(currentDb);
+
+// Proxy wrapper a futásidejű biztonsági mentés visszatöltéséhez (Hot-Reload)
+const db = new Proxy({}, {
+  get(target, prop) {
+    if (prop === '__reopen') {
+      return () => {
+        try { currentDb.close(); } catch {}
+        currentDb = new Database(config.dbPath);
+        applyPragmas(currentDb);
+        return currentDb;
+      };
+    }
+    if (prop === '__close') {
+      return () => {
+        try { currentDb.close(); } catch {}
+      };
+    }
+    const val = currentDb[prop];
+    if (typeof val === 'function') {
+      return val.bind(currentDb);
+    }
+    return val;
+  }
+});
 
 /**
  * Adatbázis inicializálása a sémával és beépített mintaadatokkal

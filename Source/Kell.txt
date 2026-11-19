@@ -1,5 +1,2 @@
 1. exportálni a Socrative-ból a teszteket és létrehozni a saját webalkalmazásban azokat
-2. teljes rendszermentés kártyára kell a 'Biztonségi mentés feltöltése' gomb a mechanizmussal
-3. a tanulói teszt kitöltésekor kell kép is, jó lenne, ha kétoszlopos lenne a tesztkitöltés, baloldalon nagy kép, jobb oldalon a teszt.
 4. a tanári munkaállomást is ki kellene olvasni, ne csak a tanulói gép számát
-5. a Beállítások és mentés menüpont tartalma legyen kibővítve a Terv/Tanár/Beállítások mappában látott tervvel

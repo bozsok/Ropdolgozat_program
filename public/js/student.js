@@ -1318,6 +1318,17 @@
       shortAnswerInput.disabled = true;
       actionButtonsBox.style.display = 'none';
 
+      // Ha a tanár letiltotta az azonnali visszajelzést (hide_immediate_feedback)
+      if (result.hideFeedback) {
+        const isLast = (currentQuestionIndex + 1 >= currentQuestions.length) || result.isFinished;
+        if (isLast) {
+          finishQuiz();
+        } else {
+          renderQuestion(currentQuestionIndex + 1);
+        }
+        return;
+      }
+
       // Azonnali Socrative kiértékelés megjelenítése
       showFeedback(result);
 

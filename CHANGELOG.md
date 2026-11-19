@@ -4,6 +4,66 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.19.0] – 2026-11-19
+
+### Teljes rendszermentés visszaállítása (Restore) SQLite integritás-ellenőrzéssel és hot-reload mechanizmussal, Beállítások és mentés fül megújítása, 5-fokozatú értékelési határok és Calm Learner színskála harmonizáció, Eredménytáblai Anonim mód gyorskapcsoló, központi kérdéskeverés, valamint a mentési méretrobbanás elhárítása és modális megerősítés
+
+Jelentős rendszerbiztonsági és tantermi ergonómiai kiadás: a tanári felületen megvalósult a teljes rendszermentések közvetlen visszatöltése (Restore) ZIP vagy `.okoskodobackup` fájlból automatikus SQLite integritás-ellenőrzéssel (`PRAGMA integrity_check`), vészhelyzeti `.bak` pillanatkép-készítéssel és futásidejű adatbázis Hot-Reload kapcsolattal. A Beállítások és mentés menüpont teljes felújításon esett át a Calm Learner dizájn szerint: a korábbi 1040 px-es korlát eltávolításával a felület teljes szélességében (1400 px) terül el, a KRÉTA 5-fokozatú értékelési határai szabadon testreszabhatók, színeik pedig maradéktalanul harmonizálva lettek a diákfelületi élő érdemjegy chippel. Az Élő Eredménytábla (mátrix) fejlécében megjelent egy egykattintásos Anonim mód gyorskapcsoló a tanulói nevek azonnali elrejtésére és felfedésére, a kérdéskeverés központilag vezérelhetővé vált, az azonnali diák-visszajelzés pedig opcionálisan letiltható a dolgozat végéig. Emellett felszámolásra került a biztonsági mentések végtelen rekurzív méretrobbanása (~4.46 MB-ra normalizálva), az alapértelmezések visszaállítása pedig natív böngészős felugró helyett elegáns Calm Learner modális megerősítést kapott.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Teljes rendszermentés visszaállítása (System Backup Restore):**
+  - **Fájlok:** [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js), [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Új `restoreSystemBackup(zipFilePath)` funkció: kicsomagolás platformfüggetlenül (`bsdtar` vagy PowerShell `Expand-Archive`), a benne lévő `ropdolgozat.db` kötelező integritás-ellenőrzése (`PRAGMA integrity_check`) az élesítés előtt.
+  - Vészhelyzeti védelem: az éles adatbázisról automatikus pillanatkép készül (`ropdolgozat.db.bak`).
+  - Adatbázis Hot-Reload: `src/db/init.js` Database példánya transzparens ES6 Proxy burkolást kapott (`__close` és `__reopen` metódusokkal), így az adatbázis- és képcsere a futó szerver újraindítása nélkül valósul meg.
+  - Új `POST /api/admin/restore` végpont max. 500 MB-os csomagméretig Multer kezeléssel.
+  - Megerősítő modális ablak (`#modal-confirm-restore`): a fájl kiválasztásakor megjelenik a fájlnév, a formázott méret és a figyelmeztetés; jóváhagyáskor töltésjelzővel indul a visszaállítás, majd automatikus oldalfrissítés történik.
+
+* **Beállítások és mentés fül teljes felújítása és perzisztens tárolás:**
+  - **Fájlok:** [`src/db/settingsRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/settingsRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Új `system_settings` SQLite tábla az értékelési határok és tantermi beállítások perzisztens megőrzésére (`GET /api/admin/settings`, `POST /api/admin/settings`, `POST /api/admin/settings/reset`).
+  - A `.settings-container` felületéről törlésre került a mesterséges `max-width: 1040px` korlát, így 100%-os szélességgel, tökéletesen konzisztensen illeszkedik a tanári portál többi menüpontjához.
+  - Alsó műveleti sáv: **[ ↺ Alapértelmezések visszaállítása ]** és **[ 💾 Beállítások mentése ]** azonnali validációval és visszajelző Toast értesítéssel.
+
+* **Értékelési határok és Calm Learner színskála harmonizáció:**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A tanári beállítások 5-fokozatú határérték-csempéi és a diákoldali fejléc kapszula (`.quiz-metric-score.grade-*`) azonos Calm Learner színeket kaptak:
+    - 5 (Jeles): Smaragdzöld (`#dcfce7` háttér, `#14532d` szöveg, `#16a34a` jelvény)
+    - 4 (Jó): Türkiz / Teal (`#e0f2f1` háttér, `#00695c` szöveg, `#0d9488` jelvény)
+    - 3 (Közepes): Meleg borostyánsárga (`#fef3c7` háttér, `#92400e` szöveg, `#d97706` jelvény)
+    - 2 (Elégséges): Nyugodt, diszkrét szürke (`#f1f5f9` háttér, `#475569` szöveg, `#64748b` jelvény) – *a diákoldalon is megszüntetve a zavaró narancssárga kiemelést!*
+    - 1 (Elégtelen): Lágy pasztell piros (`#fce8e6` háttér, `#991b1b` szöveg, `#dc2626` jelvény)
+  - Szigorú kliens- és szerveroldali sorrend-ellenőrzés: `0 < 2 < 3 < 4 < 5 <= 100`.
+  - Az új dolgozat indításakor a `sessionRepo.startSession()` automatikusan az elmentett egyéni ponthatárokat alkalmazza a jegyek számításához.
+
+* **Anonim mód és Eredménytáblai gyorskapcsoló:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A korábbi megtévesztő „Projektor mód” elnevezés helyett tisztán **„Anonim mód”** került bevezetésre, amely a Beállításokban alapértelmezetten aktív (BE).
+  - Az Élő Eredménytábla fejlécében (`matrixHeadRow`, `Tanuló neve` oszlop) megjelent a `.matrix-anon-wrap` csúszka szem ikonnal (`visibility_off`):
+    - Bekapcsolt állapotban a nevek helyett `PC-X tanulója` vagy `1. diák`, `2. diák` maszk jelenik meg a táblán kivetítéskor.
+    - A tanár egyetlen kattintással bármikor átbillentheti a csúszkát, felfedve a diákok valódi nevét.
+    - A csúszka induló állapota a központi beállításból töltődik be.
+
+* **Központi kérdéskeverés és azonnali visszajelzés-szabályozás:**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A Beállításokban a **Véletlenszerű kérdéssorrend diákokként** alapértelmezetten BE van kapcsolva, így az *Új dolgozat indítása* ablakban a „Kérdések keverése” jelölőnégyzet alapból bepipálva indul.
+  - Az **Azonnali diák-visszajelzés tiltása a dolgozat végéig** opció bekapcsolásakor a diák az Ellenőrzés gomb megnyomásakor nem látja a helyes válasz zöld/piros kiemelését és a tanári magyarázatot (a szerver `submitAnswer` végpontja biztonsági okból nem küldi ki a megoldást), hanem közvetlenül a következő feladatra lép, és csak a teszt végleges beadásakor kap értékelést.
+  - A szoftverben eleve nem létező hangkeltés miatt a felesleges **Csendes vizsgamód kapcsoló véglegesen eltávolításra került**.
+
+#### Javítva (Fixed)
+* **Biztonsági mentés rekurzív méretrobbanásának (9.5+ GB) és önmagába csomagolásának elhárítása:**
+  - **Fájlok:** [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - A korábbi implementáció a teljes `data/uploads/` mappát rekurzívan csomagolta be a ZIP mentésbe. Amennyiben a mentési vagy feltöltési folyamat során a `data/uploads/temp/` könyvtárba egy ZIP fájl íródott (vagy korábbi mentés maradt ott), az `archiver` saját magát kezdte el a végtelen ciklusban becsomagolni, ami 9.5–30 GB-os méretrobbanást és letöltési lefagyást okozott egyetlen teszt esetén is.
+  - A javítás során a `createSystemBackupStream()` szigorításra került: a csomagoló kizárólag a véglegesített kvízképek almappáját (`data/uploads/quizzes/`) és a `ropdolgozat.db` adatbázisfájlt fűzi be az archívumba.
+  - A visszaállítási célú Multer átmeneti fájlfeltöltő az operációs rendszer független `os.tmpdir()` ideiglenes könyvtárába került, így teljesen függetlenné vált az alkalmazás adatkönyvtárától. A letöltött ZIP biztonsági mentés mérete a valós, optimális ~4.46 MB-os tartományban stabilizálódott.
+
+* **Alapértelmezések visszaállítása böngészős alert/confirm helyett Calm Learner modális ablakkal:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A *„Beállítások és mentés”* menüpontban az *„Alapértelmezések visszaállítása”* gomb megnyomásakor korábban felugró idegen natív böngészős megerősítő ablak (`window.confirm()`) megszüntetésre került.
+  - Helyére egy az alkalmazás stílusvilágával 100%-ban harmonizáló, új Calm Learner modális ablak (`#modal-confirm-reset-settings`) készült kerekített ikonjelvénnyel, amely részletesen és tételesen felsorolja a tanárnak a visszaállítandó gyári alapértékeket (KRÉTA határok: 90%, 75%, 55%, 30%; Anonim mód: BE; Kérdések keverése: BE; Azonnali visszajelzés tiltása: KI), kiküszöbölve a véletlen vagy nem szándékos visszaállításokat.
+
+---
+
 ## [1.18.0] – 2026-11-19
 
 ### Kérdésekhez csatolható ábrák és képek feltöltése a Tesztszerkesztőben, kvízenkénti almappák és automatikus szemétgyűjtés, valamint diákfelületi kétkártyás elrendezés és beépített Lightbox képnagyító modál

@@ -3857,9 +3857,9 @@ body.modal-open {
   line-height: 1;
 }
 
-/* Érdemjegyhez igazodó lágy pasztell kapszula színek (nem erős zöld és nem erős piros) */
+/* Érdemjegyhez igazodó lágy pasztell kapszula színek (Calm Learner paletta) */
 .quiz-metric-score.grade-5 {
-  background-color: var(--success-bg, #dcfce7);
+  background-color: #dcfce7;
   color: #14532d;
 }
 
@@ -3874,13 +3874,13 @@ body.modal-open {
 }
 
 .quiz-metric-score.grade-2 {
-  background-color: #ffedd5;
-  color: #9a3412;
+  background-color: #f1f5f9;
+  color: #475569;
 }
 
 .quiz-metric-score.grade-1 {
   background-color: #fce8e6;
-  color: #a51d24;
+  color: #991b1b;
 }
 
 .quiz-progress-track {
@@ -5959,4 +5959,539 @@ body.modal-open {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   BEÁLLÍTÁSOK ÉS BIZTONSÁGI MENTÉS (CALM LEARNER DESIGN SYSTEM)
+   SZABÁLY: Tilos az !important használata!
+   ========================================================================== */
+
+.settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.settings-card {
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.settings-card-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.settings-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background-color: var(--primary-light, #ffede6);
+  color: var(--primary, #a33900);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.settings-card-icon .material-symbols-outlined {
+  font-size: 24px;
+}
+
+.settings-card-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-main, #1e293b);
+  margin: 0;
+}
+
+.settings-card-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted, #64748b);
+  margin: 3px 0 0 0;
+}
+
+/* 1. Biztonsági mentés rács */
+.settings-backup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 16px;
+}
+
+.settings-action-tile {
+  background-color: var(--surface-low, #f8fafc);
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.settings-action-tile:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.settings-action-tile-top {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.settings-action-tile-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.settings-action-tile-icon.download-icon {
+  background-color: #ffede6;
+  color: #a33900;
+}
+
+.settings-action-tile-icon.restore-icon {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+
+.settings-action-tile-icon.roster-icon {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.settings-action-tile-title {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: #1e293b;
+  margin: 0 0 4px 0;
+}
+
+.settings-action-tile-desc {
+  font-size: 0.82rem;
+  color: #64748b;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.settings-action-tile-bottom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 2. Értékelési határok rács */
+.settings-thresholds-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+}
+
+.threshold-card {
+  border-radius: 14px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.threshold-card.grade-5 {
+  background-color: #dcfce7;
+  border-color: #86efac;
+}
+
+.threshold-card.grade-4 {
+  background-color: #e0f2f1;
+  border-color: #80cbc4;
+}
+
+.threshold-card.grade-3 {
+  background-color: #fef3c7;
+  border-color: #fde68a;
+}
+
+.threshold-card.grade-2 {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.threshold-card.grade-1 {
+  background-color: #fce8e6;
+  border-color: #fecaca;
+}
+
+.threshold-card-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.threshold-num {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grade-5 .threshold-num {
+  background-color: #16a34a;
+}
+
+.grade-4 .threshold-num {
+  background-color: #0d9488;
+}
+
+.grade-3 .threshold-num {
+  background-color: #d97706;
+}
+
+.grade-2 .threshold-num {
+  background-color: #64748b;
+}
+
+.grade-1 .threshold-num {
+  background-color: #dc2626;
+}
+
+.threshold-label {
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.grade-5 .threshold-label {
+  color: #14532d;
+}
+
+.grade-4 .threshold-label {
+  color: #00695c;
+}
+
+.grade-3 .threshold-label {
+  color: #92400e;
+}
+
+.grade-2 .threshold-label {
+  color: #475569;
+}
+
+.grade-1 .threshold-label {
+  color: #991b1b;
+}
+
+.threshold-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.threshold-input-group label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.threshold-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.threshold-input {
+  width: 100%;
+  height: 38px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: center;
+  padding-right: 24px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+}
+
+.threshold-input:focus {
+  border-color: var(--primary, #a33900);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(163, 57, 0, 0.15);
+}
+
+.threshold-unit {
+  position: absolute;
+  right: 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.threshold-range-desc {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #64748b;
+  text-align: center;
+  background-color: rgba(255, 255, 255, 0.75);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.threshold-disabled {
+  background-color: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+  border-color: #e2e8f0;
+}
+
+/* 3. Tantermi és felügyeleti beállítások */
+.settings-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-option-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.settings-option-item:hover {
+  background-color: #fff7ed;
+  border-color: #ffedd5;
+}
+
+.settings-option-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.settings-option-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary, #a33900);
+  flex-shrink: 0;
+}
+
+.settings-option-icon .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.settings-option-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.settings-option-desc {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.settings-option-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Toggle Switch */
+.toggle-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  background-color: #cbd5e1;
+  border-radius: 24px;
+  transition: background-color 0.2s;
+  cursor: pointer;
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-checkbox:checked + .toggle-switch {
+  background-color: var(--primary, #a33900);
+}
+
+.toggle-checkbox:checked + .toggle-switch::after {
+  transform: translateX(20px);
+}
+
+.toggle-checkbox:focus + .toggle-switch {
+  box-shadow: 0 0 0 2px rgba(163, 57, 0, 0.2);
+}
+
+/* 4. Visszajelzés és műveleti sáv */
+.settings-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background-color: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 12px;
+  color: #065f46;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.settings-toast-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.toast-icon {
+  font-size: 20px;
+  color: #059669;
+}
+
+.toast-close-btn {
+  background: none;
+  border: none;
+  color: #059669;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+
+.settings-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+}
+
+/* ==========================================================================
+   ÉLŐ MÁTRIX ANONIM MÓD GYORSKAPCSOLÓ
+   SZABÁLY: Tilos az !important használata!
+   ========================================================================== */
+
+.matrix-anon-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 1px solid #cbd5e1;
+  border-radius: 20px;
+  padding: 2px 8px 2px 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  font-weight: normal;
+}
+
+.matrix-anon-wrap:hover {
+  background-color: #ffffff;
+  border-color: var(--primary, #a33900);
+}
+
+.matrix-anon-wrap .material-symbols-outlined {
+  font-size: 16px;
+  color: var(--primary, #a33900);
+  line-height: 1;
+}
+
+.matrix-anon-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #475569;
+  letter-spacing: normal;
+}
+
+.matrix-anon-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.matrix-anon-slider {
+  position: relative;
+  display: inline-block;
+  width: 28px;
+  height: 16px;
+  background-color: #cbd5e1;
+  border-radius: 16px;
+  transition: background-color 0.2s;
+  flex-shrink: 0;
+}
+
+.matrix-anon-slider::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  left: 2px;
+  top: 2px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.matrix-anon-checkbox:checked + .matrix-anon-slider {
+  background-color: var(--primary, #a33900);
+}
+
+.matrix-anon-checkbox:checked + .matrix-anon-slider::after {
+  transform: translateX(12px);
 }
