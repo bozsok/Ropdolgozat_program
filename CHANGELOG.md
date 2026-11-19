@@ -4,6 +4,41 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.18.0] – 2026-11-19
+
+### Kérdésekhez csatolható ábrák és képek feltöltése a Tesztszerkesztőben, kvízenkénti almappák és automatikus szemétgyűjtés, valamint diákfelületi kétkártyás elrendezés és beépített Lightbox képnagyító modál
+
+Jelentős pedagógiai és vizuális funkcióbővítés: a Tesztszerkesztőben minden kérdéshez opcionális ábra vagy kép csatolható (PNG, JPG, WebP, SVG formátumban), azonnali előnézeti bélyegképpel, képcsere és képtörlés lehetőséggel. A feltöltött képek a fájlrendszeren szigorúan kvízenkénti elkülönített almappákban (`data/uploads/quizzes/quiz-{quiz_id}/`) tárolódnak, a korábban elárvult vagy kicserélt felesleges fájlokat pedig beépített szemétgyűjtő mechanizmus (`cleanQuizOrphanImages`) azonnal és véglegesen letakarítja a merevlemezről. A tanulói tesztkitöltési felületen az ábrás kérdések teljes méretű kétkártyás elrendezést kaptak: a kérdéskártya megőrzi megszokott tágas szélességét, a bal oldalán egy ugyanolyan méretű önálló kártyában jelenik meg a kép, felettük a haladási sávval, kattintásra pedig beépített Lightbox nagyító modál nyílik meg.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Kérdéshez csatolható ábrák és képek a Tesztszerkesztőben:**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A kérdésszerkesztő kártyákon megjelent a `.q-image-section` képcsatoló zóna: egy kattintással indítható fájlválasztó (max. 5 MB szerveroldali limit, ajánlott max. 2 MB felirat), azonnali aszinkron feltöltés a szerverre (`POST /api/admin/upload-image`), bélyegkép előnézet, fájlnév megjelenítés, valamint egykattintásos **Csere** és **Törlés** vezérlők.
+  - A kvíz mentésekor (`saveQuiz`) a kérdéshez tartozó kép relatív elérési útvonala automatikusan elmentésre kerül az adatbázisban.
+
+* **Kvízenkénti struktúrált képtárolás és automatikus szemétgyűjtés (Garbage Collection):**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js)
+  - A Multer feltöltés közvetlenül a kvíz saját almappájába ment (`data/uploads/quizzes/quiz-{quizId}/`), vagy még el nem mentett új tesztnél a `data/uploads/quizzes/temp/` átmeneti mappába.
+  - A teszt mentésekor (`createQuiz`, `updateQuiz`) a `finalizeQuizTempImages()` függvény automatikusan átköltözteti az átmeneti vagy gyökérben lévő fájlokat a kvíz végleges almappájába, és frissíti a kérdések `image_path` hivatkozását.
+  - A `cleanQuizOrphanImages()` funkció mentéskor megvizsgálja a kvíz mappájának tartalmát, és azokat a képeket, amelyeket a tanár időközben kicserélt vagy törölt (árva fájlok), automatikusan törli a lemezről, megelőzve a képek felhalmozódását.
+  - Kvíz másolásakor (`duplicateQuiz`) a `copyQuizImages()` átmásolja a képeket az új kvíz almappájába és frissíti az adatbázist, kvíz törlésekor (`deleteQuiz`) pedig a `removeQuizImages()` felszámolja a kapcsolódó képmappát.
+
+* **Diákfelületi teljes méretű kétkártyás elrendezés (Two-Card Split Layout):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Ábrás kérdés esetén a diákfelület munkaterülete kiterjed (`max-width: min(1500px, 96vw)`):
+    - A jobb oldali kérdéskártya (`.quiz-main-card`) maradéktalanul megőrzi eredeti, megszokott kényelmes szélességét (~700 px) és a válaszlehetőségek szellős elrendezését.
+    - A bal oldalon egy ugyanilyen önálló fehér kártya (`.quiz-image-card`) jelenik meg, benne a kérdés ábrájával és jobb alsó „Nagyítás” gyorsgombbal.
+    - Felettük a haladási és állapotjelző sáv (`quiz-progress-header`) végigfut a teljes szélességben.
+    - Kép nélküli kérdéseknél a felület automatikusan a jól bevált egyoszlopos 760 px-es nézetben marad.
+    - 1024 px szélesség alatt a két kártya automatikusan egymás alá rendeződik.
+
+* **Beépített Lightbox képnagyító modál:**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A kérdés ábrájára vagy a Nagyítás gombra kattintva megnyílik a `#modal-image-lightbox` ablak, amely teljes méretben jeleníti meg az ábrát a részletek (térképek, kapcsolási rajzok, diagramok) vizsgálatához.
+  - A nagyító bezárható az X gombbal, a háttérre kattintva, illetve a billentyűzet `Escape` gombjával.
+
+---
+
 ## [1.17.0] – 2026-11-18
 
 ### Diákfelületi beágyazott élő érdemjegy és százalék kapszula érdemjegyhez igazodó Calm színskálával, teljes körű gomb- és dobozmodell-konzisztencia, elmozdulásmentes interakciók és egységes modális ablakok

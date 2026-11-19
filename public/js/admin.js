@@ -2159,6 +2159,7 @@
     const qCorrect = existing ? String(existing.correct_answer || '').trim() : '';
     const qExpl = existing ? existing.explanation : '';
     const qOptions = existing && Array.isArray(existing.options) ? existing.options : ['', '', '', ''];
+    const qImagePath = existing && existing.image_path ? existing.image_path : '';
 
     // Meglévő helyes válaszok feldolgozása SHORT esetén (szinonimák / alternatívák)
     let initialShortAnswers = [''];
@@ -2232,6 +2233,41 @@
               <span class="material-symbols-outlined help-tooltip-icon" title="Kódrészlet, képlet vagy billentyűkombináció kiemeléséhez használd a visszahajló idézőjelet (backtick --> AltGr+9): \`kód\` (pl. \`=SZUM(A1:A10)\` vagy \`Ctrl+C\`).">help</span>
             </label>
             <input type="text" class="form-control q-text" value="${escapeHtml(qText)}" placeholder="pl. Melyik képlet számol összeget?">
+          </div>
+        </div>
+
+        <!-- Képcsatolás szekció (opcionális ábra a kérdéshez) -->
+        <div class="q-image-section">
+          <input type="hidden" class="q-image-path" value="${escapeHtml(qImagePath)}">
+          <input type="file" class="q-image-file-input" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" style="display: none;">
+
+          <div class="q-image-empty-zone" style="${qImagePath ? 'display: none;' : 'display: flex;'}">
+            <button type="button" class="btn btn-secondary q-btn-attach-image" style="font-size: 0.85rem; padding: 6px 14px; gap: 6px;">
+              <span class="material-symbols-outlined" style="font-size: 18px;">add_photo_alternate</span>
+              <span>Kép / ábra csatolása</span>
+            </button>
+            <span class="q-image-hint" style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;">
+              (opcionális, max. 2 MB: PNG, JPG, WebP)
+            </span>
+          </div>
+
+          <div class="q-image-preview-zone" style="${qImagePath ? 'display: flex;' : 'display: none;'}">
+            <div class="q-image-preview-thumb-wrap">
+              <img src="${escapeHtml(qImagePath)}" alt="Kérdéshez csatolt ábra" class="q-image-preview-thumb">
+            </div>
+            <div class="q-image-preview-info">
+              <span class="q-image-preview-name">${qImagePath ? escapeHtml(qImagePath.split('/').pop()) : ''}</span>
+              <div class="q-image-preview-actions">
+                <button type="button" class="btn btn-secondary q-btn-change-image" style="padding: 4px 10px; font-size: 0.8rem;">
+                  <span class="material-symbols-outlined" style="font-size: 16px;">cached</span>
+                  <span>Csere</span>
+                </button>
+                <button type="button" class="btn btn-secondary q-btn-remove-image" style="padding: 4px 10px; font-size: 0.8rem; color: var(--danger);">
+                  <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
+                  <span>Törlés</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2408,6 +2444,75 @@
       renumberQuestions();
     });
 
+    // Képcsatolás eseménykezelői
+    const imgPathInput = item.querySelector('.q-image-path');
+    const fileInput = item.querySelector('.q-image-file-input');
+    const emptyZone = item.querySelector('.q-image-empty-zone');
+    const previewZone = item.querySelector('.q-image-preview-zone');
+    const previewThumb = item.querySelector('.q-image-preview-thumb');
+    const previewName = item.querySelector('.q-image-preview-name');
+    const attachBtn = item.querySelector('.q-btn-attach-image');
+    const changeBtn = item.querySelector('.q-btn-change-image');
+    const removeBtn = item.querySelector('.q-btn-remove-image');
+
+    const triggerFilePick = () => fileInput.click();
+    attachBtn.addEventListener('click', triggerFilePick);
+    changeBtn.addEventListener('click', triggerFilePick);
+
+    removeBtn.addEventListener('click', () => {
+      imgPathInput.value = '';
+      previewThumb.src = '';
+      previewName.textContent = '';
+      previewZone.style.display = 'none';
+      emptyZone.style.display = 'flex';
+      fileInput.value = '';
+    });
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      if (file.size > 5 * 1024 * 1024) {
+        showAdminAlert('⚠️ Túl nagy fájl', 'A kiválasztott kép mérete meghaladja az engedélyezett 5 MB-ot!');
+        fileInput.value = '';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const currentQuizId = editQuizId ? editQuizId.value.trim() : '';
+      const uploadUrl = currentQuizId 
+        ? `/api/admin/upload-image?quizId=${encodeURIComponent(currentQuizId)}` 
+        : '/api/admin/upload-image';
+
+      attachBtn.disabled = true;
+      changeBtn.disabled = true;
+
+      try {
+        const resp = await fetch(uploadUrl, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.success) {
+          throw new Error(data.error || 'A kép feltöltése sikertelen!');
+        }
+
+        imgPathInput.value = data.imagePath;
+        previewThumb.src = data.imagePath;
+        previewName.textContent = data.imagePath.split('/').pop();
+        emptyZone.style.display = 'none';
+        previewZone.style.display = 'flex';
+      } catch (err) {
+        showAdminAlert('❌ Feltöltési hiba', err.message);
+      } finally {
+        attachBtn.disabled = false;
+        changeBtn.disabled = false;
+        fileInput.value = '';
+      }
+    });
+
     // In-line beszúró gomb (ez az elem mögé = a következő elé szúr be)
     item.querySelector('.q-insert-btn').addEventListener('click', () => {
       openQuestionTypePicker(item.nextElementSibling);
@@ -2535,12 +2640,16 @@
         options = [];
       }
 
+      const imagePathInput = b.querySelector('.q-image-path');
+      const image_path = imagePathInput && imagePathInput.value.trim() ? imagePathInput.value.trim() : null;
+
       const qId = b.dataset.questionId ? parseInt(b.dataset.questionId, 10) : undefined;
       questions.push({
         id: qId,
         question_order: qNum,
         question_type: type,
         question_text: text,
+        image_path,
         points,
         options,
         correct_answer: correct,

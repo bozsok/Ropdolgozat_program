@@ -3671,6 +3671,10 @@ body.modal-open {
   transition: max-width 0.25s ease;
 }
 
+.student-entry-inner.quiz-active.has-image {
+  max-width: min(1500px, 96vw);
+}
+
 /* Dolgozat dedikált felső fejléce (Admin Live Badge-dzsel egyező) */
 .quiz-top-bar {
   display: flex;
@@ -3972,20 +3976,156 @@ body.modal-open {
   font-style: italic;
 }
 
-.quiz-image-box {
-  margin: 10px 0 16px 0;
-  padding: 10px;
-  border-radius: var(--radius-md);
-  background-color: var(--surface-low);
-  text-align: center;
-  border: 1px solid var(--border-color);
+/* Kétkártyás elrendezés ábrás kérdésekhez (Teljes szélességű kép kártya és kérdés kártya egymás mellett) */
+.quiz-cards-row {
+  display: block;
+  width: 100%;
+}
+
+.student-entry-inner.quiz-active.has-image .quiz-cards-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 24px;
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+
+.student-entry-inner.quiz-active.has-image .quiz-cards-row .quiz-main-card {
+  margin-bottom: 0;
+  height: 100%;
+}
+
+/* Bal oldali ábra / kép kártya */
+.quiz-image-card {
+  background-color: var(--surface-lowest);
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(27, 27, 30, 0.05);
+  border: 1.5px solid var(--border-color);
+  padding: 22px 24px 20px 24px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  box-sizing: border-box;
+  min-height: 400px;
+}
+
+.student-entry-inner.quiz-active.has-image .quiz-image-card {
+  margin-bottom: 0;
+  height: 100%;
+}
+
+.quiz-image-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 340px;
 }
 
 .quiz-image {
   max-width: 100%;
-  max-height: 220px;
+  max-height: 520px;
+  width: auto;
+  height: auto;
   object-fit: contain;
-  border-radius: var(--radius-sm);
+  border-radius: 10px;
+  cursor: zoom-in;
+  transition: transform 0.2s ease, opacity 0.15s ease;
+}
+
+.quiz-image:hover {
+  opacity: 0.96;
+}
+
+.quiz-image-zoom-btn {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-main);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(4px);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.quiz-image-zoom-btn:hover {
+  background-color: #ffffff;
+  border-color: var(--primary);
+}
+
+.quiz-image-zoom-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+@media (max-width: 1024px) {
+  .student-entry-inner.quiz-active.has-image .quiz-cards-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .quiz-image-card {
+    min-height: 260px;
+  }
+  .quiz-image {
+    max-height: 320px;
+  }
+}
+
+/* Képnagyító Lightbox Modal */
+.calm-lightbox-card {
+  background-color: var(--surface-lowest);
+  border-radius: 16px;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-color);
+}
+
+.calm-lightbox-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background-color: var(--surface-low);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.calm-lightbox-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.calm-lightbox-body {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  background-color: #ffffff;
+}
+
+.calm-lightbox-img {
+  max-width: 100%;
+  max-height: calc(85vh - 70px);
+  object-fit: contain;
+  border-radius: 8px;
 }
 
 /* Választós kérdés (ABCD) kártyák (Szellős, nagy betűméret) */
@@ -5540,6 +5680,69 @@ body.modal-open {
   font-weight: 800;
   color: var(--text-main);
   margin: 0;
+}
+
+/* Kérdésszerkesztő képcsatoló zóna */
+.q-image-section {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background-color: #ffffff;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+}
+
+.q-image-empty-zone {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.q-image-preview-zone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.q-image-preview-thumb-wrap {
+  width: 72px;
+  height: 52px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background-color: var(--surface-low);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.q-image-preview-thumb {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.q-image-preview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.q-image-preview-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.q-image-preview-actions {
+  display: flex;
+  gap: 6px;
 }
 
 /* Kérdésszerkesztő Socrative-stílusú számozott helyes válasz kizöldítés */

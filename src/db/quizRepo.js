@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+const config = require('../../config');
 const db = require('./init');
 
 /**
@@ -162,6 +165,131 @@ function isQuizLocked(quizId) {
 }
 
 /**
+ * ============================================================================
+ * KÉPKEZELŐ ÉS KVÍZ ALMAPPA SEGÉDFÜGGVÉNYEK
+ * ============================================================================
+ */
+
+/**
+ * Temp vagy korábbi mappában lévő képek áthelyezése a kvíz végleges almappájába
+ */
+function finalizeQuizTempImages(quizId) {
+  try {
+    const qRows = db.prepare('SELECT id, image_path FROM questions WHERE quiz_id = ? AND image_path IS NOT NULL').all(quizId);
+    if (!qRows || qRows.length === 0) return;
+
+    const targetDir = path.join(config.uploadsDir, 'quizzes', `quiz-${quizId}`);
+    fs.mkdirSync(targetDir, { recursive: true });
+
+    const updateStmt = db.prepare('UPDATE questions SET image_path = ? WHERE id = ?');
+    for (const row of qRows) {
+      if (!row.image_path) continue;
+      const expectedPrefix = `/uploads/quizzes/quiz-${quizId}/`;
+      if (row.image_path.startsWith(expectedPrefix)) continue;
+
+      const filename = path.basename(row.image_path);
+      const tempPath = path.join(config.uploadsDir, 'quizzes', 'temp', filename);
+      const rootPath = path.join(config.uploadsDir, filename);
+      const newFilePath = path.join(targetDir, filename);
+
+      let found = false;
+      if (fs.existsSync(tempPath)) {
+        fs.renameSync(tempPath, newFilePath);
+        found = true;
+      } else if (fs.existsSync(rootPath)) {
+        fs.renameSync(rootPath, newFilePath);
+        found = true;
+      }
+
+      if (found || fs.existsSync(newFilePath)) {
+        const newRelativePath = `/uploads/quizzes/quiz-${quizId}/${filename}`;
+        updateStmt.run(newRelativePath, row.id);
+      }
+    }
+
+    // Árva (lecserélt vagy törölt) képek automatikus kitakarítása
+    cleanQuizOrphanImages(quizId);
+  } catch (err) {
+    console.error(`Hiba a kvíz (#${quizId}) ideiglenes képeinek véglegesítésekor:`, err);
+  }
+}
+
+/**
+ * A kvíz almappájában lévő árva (már nem használt / lecserélt / törölt) képek automatikus kitakarítása
+ */
+function cleanQuizOrphanImages(quizId) {
+  try {
+    const targetDir = path.join(config.uploadsDir, 'quizzes', `quiz-${quizId}`);
+    if (!fs.existsSync(targetDir)) return;
+
+    // Lekérdezzük a kvízhez jelenleg tartozó összes érvényes képfájl nevét
+    const activeQuestions = db.prepare('SELECT image_path FROM questions WHERE quiz_id = ? AND image_path IS NOT NULL').all(quizId);
+    const activeFilenames = new Set(
+      activeQuestions
+        .map(q => q.image_path ? path.basename(q.image_path) : null)
+        .filter(Boolean)
+    );
+
+    // Végigmegyünk a mappában lévő összes fizikai fájlon
+    const files = fs.readdirSync(targetDir);
+    for (const file of files) {
+      if (!activeFilenames.has(file)) {
+        // Árva fájl: egyetlen kérdés sem hivatkozik rá, biztonságosan letöröljük
+        try {
+          fs.unlinkSync(path.join(targetDir, file));
+        } catch (unlinkErr) {
+          console.error(`Nem sikerült törölni az árva képet (${file}):`, unlinkErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`Hiba a kvíz (#${quizId}) árva képeinek takarításakor:`, err);
+  }
+}
+
+/**
+ * Kvízhez tartozó képek átmásolása duplikáláskor az új kvíz almappájába
+ */
+function copyQuizImages(originalQuizId, newQuizId) {
+  try {
+    const origDir = path.join(config.uploadsDir, 'quizzes', `quiz-${originalQuizId}`);
+    if (!fs.existsSync(origDir)) return;
+
+    const newDir = path.join(config.uploadsDir, 'quizzes', `quiz-${newQuizId}`);
+    fs.mkdirSync(newDir, { recursive: true });
+
+    const entries = fs.readdirSync(origDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile()) {
+        fs.copyFileSync(path.join(origDir, entry.name), path.join(newDir, entry.name));
+      }
+    }
+
+    db.prepare(`
+      UPDATE questions 
+      SET image_path = REPLACE(image_path, '/uploads/quizzes/quiz-' || ?, '/uploads/quizzes/quiz-' || ?)
+      WHERE quiz_id = ?
+    `).run(String(originalQuizId), String(newQuizId), newQuizId);
+  } catch (err) {
+    console.error(`Hiba a kvíz (#${originalQuizId} -> #${newQuizId}) képeinek másolásakor:`, err);
+  }
+}
+
+/**
+ * Kvízhez tartozó képek almappájának törlése
+ */
+function removeQuizImages(quizId) {
+  try {
+    const dir = path.join(config.uploadsDir, 'quizzes', `quiz-${quizId}`);
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } catch (err) {
+    console.error(`Hiba a kvíz (#${quizId}) képeinek törlésekor:`, err);
+  }
+}
+
+/**
  * Új teszt és kérdéseinek mentése tranzakcióban
  */
 function createQuiz({ subject_id = 1, folder_id = null, title, subject_grade = '', default_time_limit_min = 0, questions = [] }) {
@@ -215,6 +343,7 @@ function createQuiz({ subject_id = 1, folder_id = null, title, subject_grade = '
   });
 
   tx();
+  finalizeQuizTempImages(newQuizId);
   return getQuizById(newQuizId, false);
 }
 
@@ -340,6 +469,7 @@ function updateQuiz(quizId, { subject_id, folder_id = null, title, subject_grade
   });
 
   tx();
+  finalizeQuizTempImages(quizId);
   return getQuizById(quizId, false);
 }
 
@@ -352,7 +482,7 @@ function duplicateQuiz(quizId, customTitle = null) {
 
   const newTitle = customTitle || `${original.title} (másolat)`;
 
-  return createQuiz({
+  const newQuiz = createQuiz({
     subject_id: original.subject_id,
     folder_id: original.folder_id,
     title: newTitle,
@@ -369,6 +499,9 @@ function duplicateQuiz(quizId, customTitle = null) {
       points: q.points
     }))
   });
+
+  copyQuizImages(original.id, newQuiz.id);
+  return getQuizById(newQuiz.id, false);
 }
 
 /**
@@ -387,6 +520,7 @@ function deleteQuiz(quizId) {
   });
 
   tx();
+  removeQuizImages(quizId);
   return true;
 }
 

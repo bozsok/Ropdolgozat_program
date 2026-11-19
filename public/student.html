@@ -117,6 +117,21 @@
     </div>
   </div>
 
+  <!-- Képnagyító Lightbox Modal (Kérdéshez csatolt ábra teljes méretű megtekintése) -->
+  <div id="modal-image-lightbox" class="calm-modal-backdrop">
+    <div class="calm-lightbox-card">
+      <div class="calm-lightbox-header">
+        <span class="calm-lightbox-title">Kérdéshez kapcsolódó ábra</span>
+        <button type="button" id="btn-close-lightbox" class="calm-modal-close-btn" title="Bezárás">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="calm-lightbox-body">
+        <img id="lightbox-full-image" src="" alt="Nagyított ábra" class="calm-lightbox-img">
+      </div>
+    </div>
+  </div>
+
   <main class="student-entry-wrapper">
     <div class="student-entry-inner">
 
@@ -364,65 +379,74 @@
           </div>
         </div>
 
-        <!-- 2.2 Fő Kérdéskártya -->
-        <div class="quiz-main-card">
-          <!-- Kérdés fejléce -->
-          <div class="quiz-question-header">
-            <div class="quiz-qnum-badge">
-              <span id="quiz-qnum-text">1</span>
-            </div>
-            <div class="quiz-question-title-wrap">
-              <h1 id="question-text" class="quiz-question-text">Kérdés betöltése...</h1>
-              <p id="question-hint-text" class="quiz-question-hint">Válaszd ki az egyetlen helyes megoldást!</p>
-            </div>
-          </div>
-
-          <!-- Opcionális kérdés-kép / ábra -->
-          <div id="question-image-box" class="quiz-image-box" style="display: none;">
-            <img id="question-image" class="quiz-image" src="" alt="Kérdéshez kapcsolódó ábra">
-          </div>
-
-          <!-- Válaszlehetőségek csoportja (ABCD és TF) -->
-          <div id="options-container" class="quiz-options-group">
-            <!-- Dinamikus tartalom (student.js rendereli) -->
-          </div>
-
-          <!-- SHORT válasz szövegmező -->
-          <div id="short-answer-container" class="quiz-short-wrap" style="display: none;">
-            <div class="quiz-short-input-box">
-              <span class="material-symbols-outlined quiz-short-icon">edit_note</span>
-              <input type="text" id="short-answer-input" class="quiz-short-input" placeholder="Írd be ide a választ..."
-                autocomplete="off">
-            </div>
-          </div>
-
-          <!-- Alsó műveleti és visszajelző sáv (Kompakt 1 soros, nulla scrollozás) -->
-          <div class="quiz-footer-zone">
-            <!-- Műveleti sáv: balra mikro-súgó, jobbra Ellenőrzés gomb -->
-            <div id="action-buttons-box" class="quiz-action-bar">
-              <div class="quiz-action-tip">
-                <span class="material-symbols-outlined">info</span>
-                <span>A válasz az Ellenőrzés gombig módosítható.</span>
-              </div>
-              <button id="btn-submit-answer" class="quiz-btn-submit" type="button" disabled>
-                <span>Ellenőrzés</span>
-                <span class="material-symbols-outlined">check_circle</span>
+        <!-- 2.2 Fő Kérdés és Kép elrendezés (Két kártya egymás mellett, ha van kép) -->
+        <div id="quiz-cards-row" class="quiz-cards-row">
+          <!-- Bal oldali kártya: Kérdéshez tartozó ábra / kép (csak akkor jelenik meg, ha a kérdéshez van kép) -->
+          <div id="question-image-box" class="quiz-image-card" style="display: none;">
+            <div class="quiz-image-container">
+              <img id="question-image" class="quiz-image" src="" alt="Kérdéshez kapcsolódó ábra" title="Kattints ide a kép nagyításához!">
+              <button type="button" id="btn-zoom-image" class="quiz-image-zoom-btn" title="Kép megnyitása teljes méretben">
+                <span class="material-symbols-outlined">zoom_in</span>
+                <span>Nagyítás</span>
               </button>
             </div>
+          </div>
 
-            <!-- Kompakt azonnali visszajelző sáv (Semleges háttér, 2 soros szöveg, Következő gomb) -->
-            <div id="feedback-card" class="quiz-feedback-strip" style="display: none;">
-              <div class="quiz-feedback-strip-info">
-                <span id="feedback-icon" class="material-symbols-outlined quiz-feedback-strip-icon">task_alt</span>
-                <div class="quiz-feedback-strip-text">
-                  <span id="feedback-title" class="quiz-feedback-strip-title">Helyes válasz!</span>
-                  <span id="feedback-body" class="quiz-feedback-strip-body"></span>
+          <!-- Jobb oldali kártya: Fő Kérdéskártya (kérdés fejléce, válaszok és vezérlők) -->
+          <div id="quiz-main-card" class="quiz-main-card">
+            <!-- Kérdés fejléce -->
+            <div class="quiz-question-header">
+              <div class="quiz-qnum-badge">
+                <span id="quiz-qnum-text">1</span>
+              </div>
+              <div class="quiz-question-title-wrap">
+                <h1 id="question-text" class="quiz-question-text">Kérdés betöltése...</h1>
+                <p id="question-hint-text" class="quiz-question-hint">Válaszd ki az egyetlen helyes megoldást!</p>
+              </div>
+            </div>
+
+            <!-- Válaszlehetőségek csoportja (ABCD és TF) -->
+            <div id="options-container" class="quiz-options-group">
+              <!-- Dinamikus tartalom (student.js rendereli) -->
+            </div>
+
+            <!-- SHORT válasz szövegmező -->
+            <div id="short-answer-container" class="quiz-short-wrap" style="display: none;">
+              <div class="quiz-short-input-box">
+                <span class="material-symbols-outlined quiz-short-icon">edit_note</span>
+                <input type="text" id="short-answer-input" class="quiz-short-input" placeholder="Írd be ide a választ..."
+                  autocomplete="off">
+              </div>
+            </div>
+
+            <!-- Alsó műveleti és visszajelző sáv (Kompakt 1 soros, nulla scrollozás) -->
+            <div class="quiz-footer-zone">
+              <!-- Műveleti sáv: balra mikro-súgó, jobbra Ellenőrzés gomb -->
+              <div id="action-buttons-box" class="quiz-action-bar">
+                <div class="quiz-action-tip">
+                  <span class="material-symbols-outlined">info</span>
+                  <span>A válasz az Ellenőrzés gombig módosítható.</span>
                 </div>
+                <button id="btn-submit-answer" class="quiz-btn-submit" type="button" disabled>
+                  <span>Ellenőrzés</span>
+                  <span class="material-symbols-outlined">check_circle</span>
+                </button>
               </div>
-              <button id="btn-next-question" class="quiz-btn-next-compact" type="button">
-                <span>Következő</span>
-                <span class="material-symbols-outlined">arrow_forward</span>
-              </button>
+
+              <!-- Kompakt azonnali visszajelző sáv (Semleges háttér, 2 soros szöveg, Következő gomb) -->
+              <div id="feedback-card" class="quiz-feedback-strip" style="display: none;">
+                <div class="quiz-feedback-strip-info">
+                  <span id="feedback-icon" class="material-symbols-outlined quiz-feedback-strip-icon">task_alt</span>
+                  <div class="quiz-feedback-strip-text">
+                    <span id="feedback-title" class="quiz-feedback-strip-title">Helyes válasz!</span>
+                    <span id="feedback-body" class="quiz-feedback-strip-body"></span>
+                  </div>
+                </div>
+                <button id="btn-next-question" class="quiz-btn-next-compact" type="button">
+                  <span>Következő</span>
+                  <span class="material-symbols-outlined">arrow_forward</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -113,11 +113,17 @@
   const progressTextRemaining = document.getElementById('progress-text-remaining');
 
   // Kérdés kártya elemei
+  const quizCardsRow = document.getElementById('quiz-cards-row');
+  const quizMainCard = document.getElementById('quiz-main-card');
   const quizQnumText = document.getElementById('quiz-qnum-text');
   const questionText = document.getElementById('question-text');
   const questionHintText = document.getElementById('question-hint-text');
   const questionImageBox = document.getElementById('question-image-box');
   const questionImage = document.getElementById('question-image');
+  const btnZoomImage = document.getElementById('btn-zoom-image');
+  const modalImageLightbox = document.getElementById('modal-image-lightbox');
+  const lightboxFullImage = document.getElementById('lightbox-full-image');
+  const btnCloseLightbox = document.getElementById('btn-close-lightbox');
   const optionsContainer = document.getElementById('options-container');
   const shortAnswerContainer = document.getElementById('short-answer-container');
   const shortAnswerInput = document.getElementById('short-answer-input');
@@ -564,6 +570,33 @@
         }
       });
     }
+
+    // Lightbox képnagyító kezelése
+    function openImageLightbox() {
+      if (!questionImage || !questionImage.src || !modalImageLightbox) return;
+      if (lightboxFullImage) lightboxFullImage.src = questionImage.src;
+      openModal('modal-image-lightbox');
+    }
+
+    function closeImageLightbox() {
+      closeModal('modal-image-lightbox');
+      if (lightboxFullImage) lightboxFullImage.src = '';
+    }
+
+    if (questionImage) {
+      questionImage.addEventListener('click', openImageLightbox);
+    }
+    if (btnZoomImage) {
+      btnZoomImage.addEventListener('click', openImageLightbox);
+    }
+    if (btnCloseLightbox) {
+      btnCloseLightbox.addEventListener('click', closeImageLightbox);
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modalImageLightbox && modalImageLightbox.classList.contains('active')) {
+        closeImageLightbox();
+      }
+    });
   }
 
   /**
@@ -1127,9 +1160,16 @@
 
     if (q.image_path) {
       questionImage.src = q.image_path;
-      questionImageBox.style.display = 'block';
+      questionImageBox.style.display = 'flex';
+      if (quizCardsRow) quizCardsRow.classList.add('has-image');
+      if (studentEntryInner) studentEntryInner.classList.add('has-image');
+      if (quizMainCard) quizMainCard.classList.add('has-image');
     } else {
+      questionImage.src = '';
       questionImageBox.style.display = 'none';
+      if (quizCardsRow) quizCardsRow.classList.remove('has-image');
+      if (studentEntryInner) studentEntryInner.classList.remove('has-image');
+      if (quizMainCard) quizMainCard.classList.remove('has-image');
     }
 
     // 4. Reset korábbi állapotokból
@@ -1477,7 +1517,7 @@
       studentEntryWrapper.classList.add('summary-active');
     }
     if (studentEntryInner) {
-      studentEntryInner.classList.remove('quiz-active');
+      studentEntryInner.classList.remove('quiz-active', 'has-image');
       studentEntryInner.classList.add('summary-active');
     }
     if (summaryContainer) {

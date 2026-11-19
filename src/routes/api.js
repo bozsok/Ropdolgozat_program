@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const multer = require('multer');
 const config = require('../../config');
 const { requireAdminAuth, isValidToken, loginAdmin, logoutAdmin } = require('../middleware/auth');
@@ -20,10 +21,19 @@ const uploadMemory = multer({
   limits: { fileSize: 15 * 1024 * 1024 } // max 15 MB
 });
 
-// Multer feltöltési konfiguráció (kérdés-képekhez)
+// Multer feltöltési konfiguráció (kérdés-képekhez kvízenkénti almappákban)
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, config.uploadsDir);
+    const rawQuizId = req.query.quizId || req.body?.quizId || req.params?.id;
+    const quizId = rawQuizId ? parseInt(rawQuizId, 10) : null;
+    let targetDir = path.join(config.uploadsDir, 'quizzes');
+    if (quizId && Number.isInteger(quizId) && quizId > 0) {
+      targetDir = path.join(targetDir, `quiz-${quizId}`);
+    } else {
+      targetDir = path.join(targetDir, 'temp');
+    }
+    fs.mkdirSync(targetDir, { recursive: true });
+    cb(null, targetDir);
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -403,7 +413,8 @@ router.post('/admin/upload-image', requireAdminAuth, upload.single('image'), (re
   if (!req.file) {
     return res.status(400).json({ error: 'Nem érkezett képfájl!' });
   }
-  const relativePath = `/uploads/${req.file.filename}`;
+  const relativeFromUploads = path.relative(config.uploadsDir, req.file.path).replace(/\\/g, '/');
+  const relativePath = `/uploads/${relativeFromUploads}`;
   res.json({ success: true, imagePath: relativePath });
 });
 
