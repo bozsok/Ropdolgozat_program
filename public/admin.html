@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.20.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.21.0">
   <style>
     /* Admin specifikus elrendezés (Tilos az !important) */
     .admin-container {
@@ -925,7 +925,24 @@
               </div>
             </label>
 
-            <!-- 3. Diák visszajelzés tiltása dolgozat alatt -->
+            <!-- 3. Véletlenszerű válaszsorrend -->
+            <label class="settings-option-item" for="setting-shuffle-options">
+              <div class="settings-option-left">
+                <div class="settings-option-icon">
+                  <span class="material-symbols-outlined">alt_route</span>
+                </div>
+                <div class="settings-option-text">
+                  <div class="settings-option-title">Véletlenszerű válaszsorrend diákokként</div>
+                  <div class="settings-option-desc">A feleletválasztós (ABCD) kérdések válaszlehetőségeinek egyéni összekeverése diákokként.</div>
+                </div>
+              </div>
+              <div class="settings-option-control">
+                <input type="checkbox" id="setting-shuffle-options" class="toggle-checkbox" checked>
+                <span class="toggle-switch"></span>
+              </div>
+            </label>
+
+            <!-- 4. Diák visszajelzés tiltása dolgozat alatt -->
             <label class="settings-option-item" for="setting-hide-feedback">
               <div class="settings-option-left">
                 <div class="settings-option-icon">
@@ -1020,10 +1037,10 @@
 
         <div class="form-group" style="display: flex; gap: 20px; margin-top: 14px; padding: 12px 14px; background-color: var(--surface-low, #f5f3f6); border-radius: var(--radius-md, 10px); border: 1px solid var(--border-color, #e4e1e5);">
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 600; color: var(--text-main);">
-            <input type="checkbox" id="start-shuffle-questions"> Kérdések keverése
+            <input type="checkbox" id="start-shuffle-questions" checked> Kérdések keverése
           </label>
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 600; color: var(--text-main);">
-            <input type="checkbox" id="start-shuffle-options"> Válaszok keverése
+            <input type="checkbox" id="start-shuffle-options" checked> Válaszok keverése
           </label>
         </div>
 
@@ -1663,8 +1680,8 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.20.0"></script>
-  <script src="/js/admin.js?v=1.20.0"></script>
+  <script src="/js/utils.js?v=1.21.0"></script>
+  <script src="/js/admin.js?v=1.21.0"></script>
 </body>
 </html>
 

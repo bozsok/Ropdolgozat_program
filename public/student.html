@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.20.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.21.0">
 </head>
 
 <body style="background-color: #ffffff;">
@@ -464,84 +464,96 @@
         </aside>
       </div>
 
-      <!-- 3. LÉPÉS: Dolgozat végi értékelő felület (Sík, szellős, kártyamentes Calm dizájn) -->
+      <!-- 3. LÉPÉS: Dolgozat végi értékelő felület (Kétoszlopos tágas Calm dizájn) -->
       <div id="summary-container" class="calm-summary-view" style="display: none;">
 
-        <!-- 3.1 Felső megnyugtató fejléc (tiszta, sík, sallangmentes) -->
-        <section class="calm-summary-hero">
-          <h1 id="summary-greeting" class="calm-summary-title">Köszönjük a munkádat!</h1>
-          <p class="calm-summary-subtitle">A mai röpdolgozatodat sikeresen leadtad, megkaptuk a válaszaidat.</p>
-        </section>
+        <!-- Bal oldali oszlop: Hero + Eredmény + Vissza gomb -->
+        <div class="calm-summary-col-left">
+          <!-- 3.1 Felső megnyugtató fejléc (tiszta, sík, sallangmentes) -->
+          <section class="calm-summary-hero">
+            <h1 id="summary-greeting" class="calm-summary-title">Köszönjük a munkádat!</h1>
+            <p class="calm-summary-subtitle">A mai röpdolgozatodat sikeresen leadtad, megkaptuk a válaszaidat.</p>
+          </section>
 
-        <!-- 3.2 Elért eredmény sáv (kártyamentes, megnövelt kördiagram + KRÉTA jegy + kitöltési idő) -->
-        <section class="calm-summary-results">
-          <div class="calm-summary-results-top">
-            <span class="calm-summary-section-label">Elért eredményed</span>
-            <span id="summary-performance-badge" class="calm-summary-perf-badge">
-              <span class="material-symbols-outlined">grade</span>
-              <span id="summary-performance-text">Közepes teljesítmény</span>
-            </span>
-          </div>
-
-          <div class="calm-summary-score-layout">
-            <!-- 1. Oszlop: Megszerzett érdemjegy (kiemelt Hero szám + szöveges minősítés) -->
-            <div class="calm-summary-col-grade">
-              <span class="calm-summary-grade-label">Megszerzett érdemjegy</span>
-              <div class="calm-summary-grade-row">
-                <span id="summary-grade-num" class="calm-summary-grade-num">5</span>
-                <span id="final-grade" class="calm-summary-grade-text">(jeles)</span>
-              </div>
+          <!-- 3.2 Elért eredmény sáv (kártyamentes, megnövelt kördiagram + KRÉTA jegy + kitöltési idő) -->
+          <section class="calm-summary-results">
+            <div class="calm-summary-results-top">
+              <span class="calm-summary-section-label">Elért eredményed</span>
+              <span id="summary-performance-badge" class="calm-summary-perf-badge">
+                <span class="material-symbols-outlined">grade</span>
+                <span id="summary-performance-text">Közepes teljesítmény</span>
+              </span>
             </div>
 
-            <!-- 2. Oszlop: Szöveges értékelés (2 sorban) és Kitöltési idő szürke háttérrel -->
-            <div class="calm-summary-col-feedback">
-              <p id="summary-grade-quote" class="calm-summary-grade-quote">Minden kérdésre hibátlanul válaszoltál!</p>
-              <div class="calm-summary-timer-row">
-                <span class="material-symbols-outlined">timer</span>
-                <span>Kitöltési idő:</span>
-                <strong id="summary-time-spent">0p 0mp</strong>
+            <div class="calm-summary-score-layout">
+              <!-- 1. Oszlop: Megszerzett érdemjegy (kiemelt Hero szám + szöveges minősítés) -->
+              <div class="calm-summary-col-grade">
+                <span class="calm-summary-grade-label">Megszerzett érdemjegy</span>
+                <div class="calm-summary-grade-row">
+                  <span id="summary-grade-num" class="calm-summary-grade-num">5</span>
+                  <span id="final-grade" class="calm-summary-grade-text">(jeles)</span>
+                </div>
               </div>
-            </div>
 
-            <!-- 3. Oszlop: Kör alakú százalékos és pontszám tartalom (finomabb, halványabb megjelenés) -->
-            <div class="calm-summary-col-circle">
-              <div class="calm-summary-circle-wrap">
-                <svg class="calm-summary-svg-circle" viewBox="0 0 100 100">
-                  <circle class="calm-circle-bg" cx="50" cy="50" r="42" fill="none" stroke-width="7"></circle>
-                  <circle id="summary-circle-bar" class="calm-circle-bar" cx="50" cy="50" r="42" fill="none"
-                    stroke-width="7" stroke-dasharray="264" stroke-dashoffset="0" stroke-linecap="round"></circle>
-                </svg>
-                <div class="calm-summary-circle-inner">
-                  <span id="summary-percent-val" class="calm-summary-circle-percent">100%</span>
-                  <span id="final-score" class="calm-summary-circle-points">5 / 5 pont</span>
+              <!-- 2. Oszlop: Szöveges értékelés (2 sorban) és Kiemelt pontszám + Kitöltési idő sáv -->
+              <div class="calm-summary-col-feedback">
+                <p id="summary-grade-quote" class="calm-summary-grade-quote">Minden kérdésre hibátlanul válaszoltál!</p>
+                <div class="calm-summary-meta-row">
+                  <div class="calm-summary-score-row">
+                    <span class="material-symbols-outlined">stars</span>
+                    <span>Elért pontszám:</span>
+                    <strong id="final-score">5 / 5 pont</strong>
+                  </div>
+                  <div class="calm-summary-timer-row">
+                    <span class="material-symbols-outlined">timer</span>
+                    <span>Kitöltési idő:</span>
+                    <strong id="summary-time-spent">0p 0mp</strong>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3. Oszlop: Kör alakú százalékos tartalom (tiszta, szellős megjelenés) -->
+              <div class="calm-summary-col-circle">
+                <div class="calm-summary-circle-wrap">
+                  <svg class="calm-summary-svg-circle" viewBox="0 0 100 100">
+                    <circle class="calm-circle-bg" cx="50" cy="50" r="42" fill="none" stroke-width="7"></circle>
+                    <circle id="summary-circle-bar" class="calm-circle-bar" cx="50" cy="50" r="42" fill="none"
+                      stroke-width="7" stroke-dasharray="264" stroke-dashoffset="0" stroke-linecap="round"></circle>
+                  </svg>
+                  <div class="calm-summary-circle-inner">
+                    <span id="summary-percent-val" class="calm-summary-circle-percent">100%</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <!-- 3.3 A kérdések tételes áttekintése -->
-        <section id="summary-questions-section" class="calm-summary-questions-section">
-          <div class="calm-summary-questions-header">
-            <div class="calm-summary-q-header-left">
-              <span class="material-symbols-outlined">task_alt</span>
-              <h2>A kérdések áttekintése</h2>
+          <!-- 3.5 Alsó egyszerű műveleti gomb -->
+          <div class="calm-summary-actions">
+            <button id="btn-restart-student" type="button" class="calm-summary-btn-finish">
+              <span>Kész, vissza a kezdőlapra</span>
+              <span class="material-symbols-outlined">arrow_forward</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Jobb oldali oszlop: A kérdések tételes áttekintése -->
+        <div class="calm-summary-col-right">
+          <!-- 3.3 A kérdések tételes áttekintése -->
+          <section id="summary-questions-section" class="calm-summary-questions-section">
+            <div class="calm-summary-questions-header">
+              <div class="calm-summary-q-header-left">
+                <span class="material-symbols-outlined">task_alt</span>
+                <h2>A kérdések áttekintése</h2>
+              </div>
+              <span id="summary-questions-count" class="calm-summary-q-count">0 / 0 helyes válasz</span>
             </div>
-            <span id="summary-questions-count" class="calm-summary-q-count">0 / 0 helyes válasz</span>
-          </div>
 
-          <!-- Dinamikusan feltöltött kérdéslista -->
-          <div id="summary-questions-list" class="calm-summary-q-list">
-            <!-- JavaScript tölti fel a válaszokat -->
-          </div>
-        </section>
-
-        <!-- 3.5 Alsó egyszerű műveleti gomb -->
-        <div class="calm-summary-actions">
-          <button id="btn-restart-student" type="button" class="calm-summary-btn-finish">
-            <span>Kész, vissza a kezdőlapra</span>
-            <span class="material-symbols-outlined">arrow_forward</span>
-          </button>
+            <!-- Dinamikusan feltöltött kérdéslista -->
+            <div id="summary-questions-list" class="calm-summary-q-list">
+              <!-- JavaScript tölti fel a válaszokat -->
+            </div>
+          </section>
         </div>
 
       </div>
@@ -549,10 +561,21 @@
     </div>
   </main>
 
+  <!-- Lebegő helyes válasz portál popover a kérdésáttekintéshez (Floating UI Portal) -->
+  <div id="summary-portal-popover" class="calm-summary-portal-popover" style="display: none;">
+    <div class="calm-summary-tooltip-header">
+      <span class="material-symbols-outlined">check_circle</span>
+      <span>Helyes válasz:</span>
+    </div>
+    <div id="summary-portal-body" class="calm-summary-tooltip-body"></div>
+    <div id="summary-portal-exp" class="calm-summary-tooltip-explanation" style="display: none;"></div>
+    <div class="calm-summary-portal-arrow"></div>
+  </div>
+
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.20.0"></script>
-  <script src="/js/student.js?v=1.20.0"></script>
+  <script src="/js/utils.js?v=1.21.0"></script>
+  <script src="/js/student.js?v=1.21.0"></script>
 </body>
 
 </html>

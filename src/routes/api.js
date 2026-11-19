@@ -780,12 +780,33 @@ router.get('/student/session-data', (req, res) => {
     const grade = grader.calculateGrade(percentage, thresholds);
     const gradeText = grader.getGradeText(grade);
 
-    // Tanuló leadott válaszai az értékeléshez és áttekintéshez
-    const answers = db.prepare(`
-      SELECT question_id, submitted_answer, is_correct, points_earned, eval_status
-      FROM answers
-      WHERE participant_id = ?
-    `).all(participant.id);
+    // Tanuló leadott válaszai az értékeléshez és áttekintéshez (dolgozat befejezése után a helyes válaszokkal együtt)
+    const showSolutions = (participant.is_finished === 1 || participant.session_status === 'FINISHED') && participant.show_feedback_on_end !== 0;
+
+    let answers = [];
+    if (showSolutions) {
+      answers = db.prepare(`
+        SELECT a.question_id, a.submitted_answer, a.is_correct, a.points_earned, a.eval_status,
+               q.correct_answer, q.explanation
+        FROM answers a
+        JOIN questions q ON q.id = a.question_id
+        WHERE a.participant_id = ?
+      `).all(participant.id);
+
+      const correctMap = new Map(
+        db.prepare('SELECT id, correct_answer, explanation FROM questions WHERE quiz_id = ?').all(participant.quiz_id).map(r => [r.id, r])
+      );
+      orderedQuestions = orderedQuestions.map(q => {
+        const sol = correctMap.get(q.id);
+        return sol ? { ...q, correct_answer: sol.correct_answer, explanation: sol.explanation } : q;
+      });
+    } else {
+      answers = db.prepare(`
+        SELECT question_id, submitted_answer, is_correct, points_earned, eval_status
+        FROM answers
+        WHERE participant_id = ?
+      `).all(participant.id);
+    }
 
     res.json({
       session: {

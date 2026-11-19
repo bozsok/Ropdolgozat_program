@@ -1,2 +1,1 @@
-1. A teszt szerkesztésekor legyen lehetőségem opcionálisan a kérdés szövege alá további fontos tartalmat beírni, pl. " Írd le egyszóval kisbetűs írással toldalékolás nélkül a megoldást! Csak az egyik nevét írd le!"
-
+1. Merge funkciója a teszteknek

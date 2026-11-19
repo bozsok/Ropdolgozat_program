@@ -4,6 +4,35 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.21.0] – 2026-11-19
+
+### Diákösszegző képernyő tágas kétoszlopos Calm Learner elrendezése, kördiagram tisztítása és pontszám kiemelése a körből, kattintható kérdésenkénti helyes válasz popover kitakarásmentes megjelenítéssel, valamint Új dolgozat indítása évfolyamszűrés és véletlenszerű válaszsorrend beállítás
+
+Átfogó diákfelületi élményjavító és tantermi ergonómiai kiadás: a diákok dolgozat végi összegző képernyője tágas, kétoszlopos elrendezést kapott (`max-width: min(1500px, 96vw);`), amely megegyezik a kérdéskitöltő nézet kényelmes, levegős szélességével. A bal oldali oszlopban helyet kapott a személyre szabott megnyugtató fejléc, az érdemjegy, a kitöltési idő, valamint a letisztult SVG kördiagram. A kördiagramból kikerült a korábban a körívre ráúszó pontszám, így a kör közepén kizárólag a domináns, szellős százalékos érték szerepel, míg az elért pontszám egy kiemelt, meleg narancssárga chipként jelenik meg a kitöltési idő mellett. A jobb oldali kérdésáttekintő oszlopban a hibás vagy részpontos kérdések szövegének végén megjelent egy közvetlen, kattintható zöld segítség gomb (`?` ikon), amelyre kattintva egy elegáns, felfelé nyíló buborékban (popover) megtekinthető a helyes válasz és az opcionális tanári magyarázat. A felugró ablak garantáltan a kérdéscím felett helyezkedik el, így a tanuló által leadott `Válaszod: ...` sor 100%-ban látható marad a közvetlen összehasonlításhoz. A szerveroldali biztonság garantálja, hogy a megoldások szigorúan csak a dolgozat befejezése után jutnak el a klienshez. Emellett az Új dolgozat indítása modális ablakban intelligens, kétirányú évfolyamszűrés és csoportosított tesztválasztó (`<optgroup>`) segíti az azonos című feladatsorok megkülönböztetését, a Beállításokban pedig megjelent a „Véletlenszerű válaszsorrend diákokként” csúszka (`shuffle_options`), amely indításkor alapértelmezetten bekapcsolt állapotú.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Diákösszegző felület kétoszlopos tágas elrendezése és kördiagram tisztítása:**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A dolgozat végi Calm Learner értékelő felület (`#summary-container`) a kérdéskitöltő képernyővel azonos méretű, tágas kétoszlopos elrendezést kapott (`grid-template-columns: 1fr 1fr; gap: 24px; max-width: min(1500px, 96vw);`).
+  - A kördiagramban (`#summary-percent-val`) kizárólag a nagy százalékos szám kapott helyet (`1.95rem`), megszüntetve a feliratok körívbe lógását.
+  - Az elért pontszám (`#final-score`, pl. `21.5 / 24 pont`) lekerült a körből az alsó sávba a kitöltési idő mellé egy önálló, figyelemfelhívó meleg narancssárga kártyaként (`.calm-summary-score-row`, `#fff7ed` háttér, finom narancs keret, csillag ikon), így nem szürke és azonnal felhívja a tanuló figyelmét.
+  - Az érdemjegy doboza (`.calm-summary-col-grade`) a tartalomhoz igazodó szélességet és megnövelt betűméretet (`5.2rem` Hero szám és `1.85rem` szöveges minősítés) kapott.
+
+* **Kattintható ? ikon és felugró helyes válasz popover a kérdésáttekintésben:**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A kérdések tételes áttekintésénél a hibás vagy részpontos kérdések esetén a kérdés szövegének végén, közvetlenül az utolsó szó után egy zöld, kattintható segítség gomb (`.calm-summary-help-btn`, `?` ikon) jelenik meg.
+  - Kattintásra egy felfelé nyíló popover ablakban (`.calm-summary-tooltip-popover`) megjelenik a formázott helyes válasz és az opcionális magyarázat.
+  - Kitakarásmentes és levágásmentes lebegő portál (Floating UI Portal): a popover a `<body>` közvetlen gyermekeként kapott helyet (`#summary-portal-popover`), így a görgethető lista `overflow: auto/hidden` szabályai soha nem vágják le a fejlécét. A pozicionálás pixelpontosan a megkattintott `?` gomb felett történik (`top: btnRect.top - popHeight - 8px`), így a `Válaszod: ...` sor 100%-ban látható marad, a kérdéslista görgetésekor vagy külső kattintásra pedig a popover automatikusan bezáródik.
+  - Kattintásvezérelt működés: az ablak nem tűnik el véletlen egérmozdulatra, külső kattintásra pedig automatikusan bezáródik.
+  - Puskázásgátló védelem: a `GET /api/student/session-data` végpont a helyes válaszokat szigorúan csak a dolgozat befejezése után adja át a tanuló kliensének.
+
+* **Új dolgozat indítása évfolyamszűrés és véletlenszerű válaszsorrend beállítás:**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Az Új dolgozat modalban a tesztválasztó `<optgroup>` csoportosítást és évfolyamcímkét kapott az azonos című tesztek megkülönböztetésére, valamint kétirányú intelligens szinkronizációt az évfolyam beviteli mezővel.
+  - A Beállítások felületen megjelent a „Véletlenszerű válaszsorrend diákokként” csúszka (`shuffle_options`), amely az Új dolgozat modalban alapértelmezetten aktív.
+
+---
+
 ## [1.20.0] – 2026-11-19
 
 ### Socrative PDF közvetlen tesztimportálás beágyazott ábrákkal és megoldókulccsal, kérdésenkénti többsoros instrukciók és kétoszlopos szerkesztőkártya, modális ablakok kijelölésvédelme (satírozáskor történő bezáródás elhárítása), valamint a tesztkörnyezeti képtár elszigetelése

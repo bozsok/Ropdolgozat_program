@@ -4764,7 +4764,7 @@ body.modal-open {
 }
 
 .student-entry-inner.summary-active {
-  max-width: 820px;
+  max-width: min(1500px, 96vw);
   width: 100%;
   height: 100%;
   display: flex;
@@ -4776,10 +4776,44 @@ body.modal-open {
 .calm-summary-view {
   width: 100%;
   height: 100%;
+  display: grid;
+  grid-template-columns: minmax(360px, 460px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: stretch;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Bal oldali oszlop: Hero + Eredmény + Kilépés gomb */
+.calm-summary-col-left {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background-color: #ffffff;
+  border: 1px solid var(--border-color, #e4e1e5);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  box-sizing: border-box;
+}
+
+/* Jobb oldali oszlop: Kérdések tételes áttekintése */
+.calm-summary-col-right {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
+  background-color: #ffffff;
+  border: 1px solid var(--border-color, #e4e1e5);
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  box-sizing: border-box;
 }
 
 /* 1. Felső megnyugtató és dicsérő fejléc (sallang- és kapszulamentes) */
@@ -4818,7 +4852,7 @@ body.modal-open {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 40px 0 60px 0;
+  padding: 8px 0 12px 0;
   background-color: transparent;
   border: none;
   box-shadow: none;
@@ -4858,23 +4892,25 @@ body.modal-open {
 }
 
 .calm-summary-score-layout {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px 16px;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 12px 0 16px 0;
+  padding: 8px 0 12px 0;
 }
 
 /* 1. Oszlop: Megszerzett érdemjegy (Hero megjelenés) */
 .calm-summary-col-grade {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 0 0 auto;
+  width: fit-content;
 }
 
 .calm-summary-grade-label {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   color: var(--text-muted, #71717a);
   font-weight: 600;
 }
@@ -4882,28 +4918,29 @@ body.modal-open {
 .calm-summary-grade-row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 12px;
 }
 
 .calm-summary-grade-num {
-  font-size: 4.8rem;
+  font-size: 5.2rem;
   font-weight: 900;
   color: var(--primary, #ea580c);
   line-height: 1;
 }
 
 .calm-summary-grade-text {
-  font-size: 1.6rem;
+  font-size: 1.85rem;
   font-weight: 800;
   color: var(--text-main, #1b1b1e);
 }
 
-/* 2. Oszlop: Szöveges értékelés (2 sor) és szürke hátterű kitöltési idő */
+/* 2. Oszlop: Szöveges értékelés és Kiemelt pontszám + Kitöltési idő sáv */
 .calm-summary-col-feedback {
+  grid-column: 1 / -1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  flex: 1 1 auto;
+  gap: 10px;
 }
 
 .calm-summary-grade-quote {
@@ -4911,6 +4948,39 @@ body.modal-open {
   color: var(--text-main, #27272a);
   margin: 0;
   line-height: 1.45;
+}
+
+.calm-summary-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.calm-summary-score-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #9a3412;
+  width: fit-content;
+  white-space: nowrap;
+}
+
+.calm-summary-score-row .material-symbols-outlined {
+  font-size: 20px;
+  color: var(--primary, #ea580c);
+}
+
+.calm-summary-score-row strong {
+  color: var(--primary, #ea580c);
+  font-weight: 800;
+  font-size: 1.05rem;
 }
 
 .calm-summary-timer-row {
@@ -4936,12 +5006,13 @@ body.modal-open {
   font-weight: 700;
 }
 
-/* 3. Oszlop: Kör alakú százalékos és pontszám tartalom (visszafogott, halványabb megjelenés) */
+/* 3. Oszlop: Kör alakú százalékos tartalom (tiszta, szellős megjelenés) */
 .calm-summary-col-circle {
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
 }
 
 .calm-summary-circle-wrap {
@@ -4981,9 +5052,9 @@ body.modal-open {
 }
 
 .calm-summary-circle-percent {
-  font-size: 1.65rem;
+  font-size: 1.95rem;
   font-weight: 800;
-  color: var(--text-main, #3f3f46);
+  color: var(--text-main, #1b1b1e);
   line-height: 1;
 }
 
@@ -5081,6 +5152,11 @@ body.modal-open {
   border: 1px solid #f1f5f9;
   transition: background-color 0.15s ease;
   flex-shrink: 0;
+  position: relative;
+}
+
+.calm-summary-q-item.has-active-tooltip {
+  z-index: 30;
 }
 
 .calm-summary-q-item:hover {
@@ -5120,6 +5196,117 @@ body.modal-open {
   font-weight: 700;
   color: var(--text-main, #1b1b1e);
   line-height: 1.35;
+}
+
+/* Kattintható segítség (? ikon) és felugró helyes válasz popover a kérdés szövegének végén */
+.calm-summary-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+.calm-summary-help-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #059669;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.calm-summary-help-btn:hover {
+  background-color: #d1fae5;
+  border-color: #6ee7b7;
+  color: #047857;
+  transform: scale(1.08);
+}
+
+.calm-summary-help-btn .material-symbols-outlined {
+  font-size: 15px;
+}
+
+/* Portál lebegtetett popover (Floating UI) - 100%-ban mentes az overflow: hidden/auto levágástól */
+.calm-summary-portal-popover {
+  position: fixed;
+  z-index: 1000;
+  min-width: 200px;
+  max-width: 380px;
+  width: max-content;
+  background-color: #ffffff;
+  border: 1.5px solid #86efac;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.18), 0 4px 6px -2px rgba(0, 0, 0, 0.08);
+  padding: 10px 14px;
+  text-align: left;
+  white-space: normal;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: calmPopoverFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.calm-summary-portal-arrow {
+  position: absolute;
+  top: 100%;
+  left: 12px;
+  width: 0;
+  height: 0;
+  border-width: 6px;
+  border-style: solid;
+  border-color: #86efac transparent transparent transparent;
+}
+
+@keyframes calmPopoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.calm-summary-tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #15803d;
+}
+
+.calm-summary-tooltip-header .material-symbols-outlined {
+  font-size: 16px;
+  color: #16a34a;
+}
+
+.calm-summary-tooltip-body {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #1b1b1e;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.calm-summary-tooltip-explanation {
+  font-size: 0.82rem;
+  color: var(--text-muted, #71717a);
+  line-height: 1.35;
+  border-top: 1px dashed #e2e8f0;
+  padding-top: 5px;
+  margin-top: 2px;
 }
 
 .calm-summary-q-ans {
@@ -5163,11 +5350,11 @@ body.modal-open {
   background-color: #fee2e2;
 }
 
-/* 4. Alsó egyszerű befejezés gomb (Fixen a lap alján, kis térközzel a gombtól és a széltől) */
+/* 4. Alsó egyszerű befejezés gomb (Bal oldali kártya alján teljes szélességben) */
 .calm-summary-actions {
   display: flex;
-  justify-content: flex-end;
-  padding-top: 10px;
+  justify-content: stretch;
+  padding-top: 14px;
   padding-bottom: 2px;
   margin-top: auto;
   flex-shrink: 0;
@@ -5176,12 +5363,14 @@ body.modal-open {
 .calm-summary-btn-finish {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   height: 50px;
-  padding: 0 28px;
+  width: 100%;
+  padding: 0 24px;
   background-color: var(--primary, #ea580c);
   color: #ffffff;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   border-radius: 12px;
   border: none;
@@ -5202,8 +5391,8 @@ body.modal-open {
   font-size: 20px;
 }
 
-/* Reszponzív nézet mobilon */
-@media (max-width: 640px) {
+/* Reszponzív nézet tableten és mobilon */
+@media (max-width: 1024px) {
   .student-entry-wrapper.summary-active {
     height: auto;
     max-height: none;
@@ -5217,23 +5406,17 @@ body.modal-open {
   }
 
   .calm-summary-view {
+    grid-template-columns: 1fr;
     height: auto;
     overflow: visible;
     gap: 16px;
   }
 
-  .calm-summary-score-layout {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 18px;
-  }
-
-  .calm-summary-col-feedback {
-    max-width: 100%;
-  }
-
-  .calm-summary-questions-section {
+  .calm-summary-col-left,
+  .calm-summary-col-right {
+    height: auto;
     overflow: visible;
+    padding: 16px;
   }
 
   .calm-summary-q-list {
@@ -5249,6 +5432,24 @@ body.modal-open {
   .calm-summary-btn-finish {
     width: 100%;
     justify-content: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .calm-summary-score-layout {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .calm-summary-col-grade,
+  .calm-summary-col-circle,
+  .calm-summary-col-feedback {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  .calm-summary-col-circle {
+    justify-content: flex-start;
   }
 }
 

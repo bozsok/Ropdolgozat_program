@@ -1332,19 +1332,39 @@
     if (currentClassroomSettings && currentClassroomSettings.shuffle_questions !== undefined) {
       if (startShuffleQuestions) startShuffleQuestions.checked = Boolean(currentClassroomSettings.shuffle_questions);
     }
+    if (currentClassroomSettings && currentClassroomSettings.shuffle_options !== undefined) {
+      if (startShuffleOptions) startShuffleOptions.checked = Boolean(currentClassroomSettings.shuffle_options);
+    }
   }
 
-  btnOpenStartModal.addEventListener('click', () => {
+  btnOpenStartModal.addEventListener('click', async () => {
+    await updateStartSessionQuizOptions(true);
     syncStartQuizTimeLimit();
     openModal('modal-start-session');
   });
-  btnOpenStartModalAlt.addEventListener('click', () => {
+  btnOpenStartModalAlt.addEventListener('click', async () => {
+    await updateStartSessionQuizOptions(true);
     syncStartQuizTimeLimit();
     openModal('modal-start-session');
   });
 
   if (startQuizId) {
-    startQuizId.addEventListener('change', syncStartQuizTimeLimit);
+    startQuizId.addEventListener('change', () => {
+      syncStartQuizTimeLimit();
+      const selOpt = startQuizId.options[startQuizId.selectedIndex];
+      if (selOpt && selOpt.dataset && selOpt.dataset.grade && startGradeLevel) {
+        const optGrade = selOpt.dataset.grade.trim();
+        if (optGrade && startGradeLevel.value.trim() !== optGrade) {
+          startGradeLevel.value = optGrade;
+        }
+      }
+    });
+  }
+
+  if (startGradeLevel) {
+    startGradeLevel.addEventListener('input', () => {
+      updateStartSessionQuizOptions(false);
+    });
   }
 
   formStartSession.addEventListener('submit', async () => {
@@ -1439,7 +1459,7 @@
       quizzesList = await quizRes.json();
 
       // 3. Dolgozatindító modál legördülő frissítése az összes teszttel
-      await updateStartSessionQuizOptions();
+      await updateStartSessionQuizOptions(true);
 
       // 4. Morzsamenü és navigáció kirajzolása
       renderBreadcrumbs();
@@ -1452,23 +1472,108 @@
     }
   }
 
+  let cachedQuizzesForStart = [];
+
   /**
-   * Dolgozatindító modál kvíz-választó mezőjének frissítése az összes elérhető teszttel
+   * Dolgozatindító modál kvíz-választó mezőjének frissítése:
+   * - Évfolyam szerinti csoportosítás (<optgroup label="X. évfolyam">)
+   * - Egyértelmű felirat: "3. évf. · [Mappa] Cím (X kérdés)"
+   * - Intelligens dinamikus szűrés a beírt évfolyam alapján
+   * - Kétirányú szinkronizáció az évfolyam mezővel
    */
-  async function updateStartSessionQuizOptions() {
+  async function updateStartSessionQuizOptions(forceRefresh = false) {
     if (!startQuizId) return;
     try {
-      const res = await fetch('/api/admin/quizzes');
-      const allQuizzes = await res.json();
+      if (forceRefresh || !cachedQuizzesForStart || cachedQuizzesForStart.length === 0) {
+        const res = await fetch('/api/admin/quizzes');
+        if (res.ok) {
+          cachedQuizzesForStart = await res.json();
+        }
+      }
+
+      const allQuizzes = Array.isArray(cachedQuizzesForStart) ? cachedQuizzesForStart : [];
+      const currentSelectedId = startQuizId.value ? parseInt(startQuizId.value, 10) : null;
+      const rawGradeFilter = startGradeLevel ? startGradeLevel.value.trim() : '';
+      const numGradeFilter = rawGradeFilter.replace(/\D/g, '');
+
+      // Szűrés évfolyamra, ha a tanár beírt egy évfolyamot
+      let matchingQuizzes = allQuizzes;
+      if (numGradeFilter) {
+        const filtered = allQuizzes.filter(q => {
+          const qGradeNum = String(q.subject_grade || '').replace(/\D/g, '');
+          return qGradeNum === numGradeFilter;
+        });
+        if (filtered.length > 0) {
+          matchingQuizzes = filtered;
+        }
+      }
+
       startQuizId.innerHTML = '';
-      allQuizzes.forEach(q => {
-        const opt = document.createElement('option');
-        opt.value = q.id;
-        opt.dataset.timeLimit = (q.default_time_limit_min !== null && q.default_time_limit_min !== undefined) ? q.default_time_limit_min : 0;
-        const folderTag = q.folder_name ? `[${q.folder_name}] ` : '';
-        opt.textContent = `${folderTag}${q.title} (${q.question_count} kérdés)`;
-        startQuizId.appendChild(opt);
+
+      if (matchingQuizzes.length === 0) {
+        const emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.disabled = true;
+        emptyOpt.selected = true;
+        emptyOpt.textContent = 'Nincs elérhető teszt';
+        startQuizId.appendChild(emptyOpt);
+        syncStartQuizTimeLimit();
+        return;
+      }
+
+      // Kvízek csoportosítása évfolyamok szerint
+      const gradeGroups = {};
+      matchingQuizzes.forEach(q => {
+        const gradeKey = q.subject_grade ? `${q.subject_grade}. évfolyam` : 'Egyéb évfolyam';
+        if (!gradeGroups[gradeKey]) gradeGroups[gradeKey] = [];
+        gradeGroups[gradeKey].push(q);
       });
+
+      // Évfolyam kulcsok rendezése növekvő sorrendbe
+      const sortedGradeKeys = Object.keys(gradeGroups).sort((a, b) => {
+        const numA = parseInt(a.replace(/\D/g, ''), 10) || 999;
+        const numB = parseInt(b.replace(/\D/g, ''), 10) || 999;
+        return numA - numB;
+      });
+
+      let foundPreviousSelection = false;
+
+      sortedGradeKeys.forEach(gradeKey => {
+        const groupEl = document.createElement('optgroup');
+        groupEl.label = `▼ ${gradeKey}`;
+
+        // Csoporton belül cím szerint rendezve
+        gradeGroups[gradeKey].sort((a, b) => (a.title || '').localeCompare(b.title || '', 'hu'));
+
+        gradeGroups[gradeKey].forEach(q => {
+          const opt = document.createElement('option');
+          opt.value = q.id;
+          opt.dataset.timeLimit = (q.default_time_limit_min !== null && q.default_time_limit_min !== undefined) ? q.default_time_limit_min : 0;
+          opt.dataset.grade = q.subject_grade || '';
+          opt.dataset.subjectId = q.subject_id || '';
+
+          const gradeBadge = q.subject_grade ? `${q.subject_grade}. évf.` : '';
+          const folderTag = q.folder_name ? `[${q.folder_name}] ` : '';
+          const prefix = gradeBadge ? `${gradeBadge} · ` : '';
+
+          opt.textContent = `${prefix}${folderTag}${q.title} (${q.question_count} kérdés)`;
+
+          if (currentSelectedId && q.id === currentSelectedId) {
+            opt.selected = true;
+            foundPreviousSelection = true;
+          }
+
+          groupEl.appendChild(opt);
+        });
+
+        startQuizId.appendChild(groupEl);
+      });
+
+      // Ha az előző kijelölés nem szerepelt a szűrt listában, akkor az első elem kiválasztása
+      if (!foundPreviousSelection && startQuizId.options.length > 0) {
+        startQuizId.selectedIndex = 0;
+      }
+
       syncStartQuizTimeLimit();
     } catch (err) {
       console.error('Hiba az indító tesztválasztó frissítésekor:', err);
@@ -3560,10 +3665,12 @@
       if (classroom_settings) {
         const anon = document.getElementById('setting-anonym-mode');
         const shuf = document.getElementById('setting-shuffle-questions');
+        const shufOpt = document.getElementById('setting-shuffle-options');
         const hide = document.getElementById('setting-hide-feedback');
 
         if (anon) anon.checked = Boolean(classroom_settings.anonym_mode_default);
         if (shuf) shuf.checked = Boolean(classroom_settings.shuffle_questions);
+        if (shufOpt) shufOpt.checked = Boolean(classroom_settings.shuffle_options);
         if (hide) hide.checked = Boolean(classroom_settings.hide_immediate_feedback);
 
         isMatrixAnonymous = Boolean(classroom_settings.anonym_mode_default);
@@ -3628,6 +3735,7 @@
       classroom_settings: {
         anonym_mode_default: Boolean(document.getElementById('setting-anonym-mode')?.checked),
         shuffle_questions: Boolean(document.getElementById('setting-shuffle-questions')?.checked),
+        shuffle_options: Boolean(document.getElementById('setting-shuffle-options')?.checked),
         hide_immediate_feedback: Boolean(document.getElementById('setting-hide-feedback')?.checked)
       }
     };

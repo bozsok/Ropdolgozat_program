@@ -23,6 +23,7 @@ const DEFAULT_GRADE_THRESHOLDS = {
 const DEFAULT_CLASSROOM_SETTINGS = {
   anonym_mode_default: true,
   shuffle_questions: true,
+  shuffle_options: true,
   hide_immediate_feedback: false
 };
 
@@ -52,6 +53,7 @@ function getSettings() {
   const classroomSettings = {
     anonym_mode_default: anonymMode,
     shuffle_questions: rawClassroom.shuffle_questions !== undefined ? Boolean(rawClassroom.shuffle_questions) : DEFAULT_CLASSROOM_SETTINGS.shuffle_questions,
+    shuffle_options: rawClassroom.shuffle_options !== undefined ? Boolean(rawClassroom.shuffle_options) : DEFAULT_CLASSROOM_SETTINGS.shuffle_options,
     hide_immediate_feedback: rawClassroom.hide_immediate_feedback !== undefined ? Boolean(rawClassroom.hide_immediate_feedback) : DEFAULT_CLASSROOM_SETTINGS.hide_immediate_feedback
   };
 
@@ -106,6 +108,7 @@ function saveSettings({ grade_thresholds, classroom_settings }) {
       const sanitizedClassroom = {
         anonym_mode_default: anonymVal,
         shuffle_questions: Boolean(classroom_settings.shuffle_questions),
+        shuffle_options: Boolean(classroom_settings.shuffle_options),
         hide_immediate_feedback: Boolean(classroom_settings.hide_immediate_feedback)
       };
       upsertStmt.run('classroom_settings', JSON.stringify(sanitizedClassroom));

@@ -157,6 +157,10 @@
   const summaryTimeSpent = document.getElementById('summary-time-spent');
   const summaryQuestionsCount = document.getElementById('summary-questions-count');
   const summaryQuestionsList = document.getElementById('summary-questions-list');
+  const summaryPortalPopover = document.getElementById('summary-portal-popover');
+  const summaryPortalBody = document.getElementById('summary-portal-body');
+  const summaryPortalExp = document.getElementById('summary-portal-exp');
+  let activePortalButton = null;
 
   // Dinamikus eredmény- és jegyszámítási állapot
   let earnedPoints = 0;
@@ -1344,7 +1348,9 @@
         submitted_answer: submittedValue,
         is_correct: result.is_correct,
         points_earned: Number(result.points_earned) || 0,
-        eval_status: result.eval_status || (result.is_correct === 1 ? 'CORRECT' : 'WRONG')
+        eval_status: result.eval_status || (result.is_correct === 1 ? 'CORRECT' : 'WRONG'),
+        correct_answer: result.correctAnswer,
+        explanation: result.explanation
       });
       if (result.is_correct === 1) {
         earnedPoints += Number(result.points_earned) || 1;
@@ -1553,6 +1559,73 @@
   }
 
   /**
+   * Kiemelt lebegő helyes válasz portál bezárása (Floating UI)
+   */
+  function closePortalPopover() {
+    if (!summaryPortalPopover) return;
+    summaryPortalPopover.style.display = 'none';
+    summaryPortalPopover.classList.remove('active');
+    activePortalButton = null;
+  }
+
+  /**
+   * Kiemelt lebegő helyes válasz portál megnyitása pixelpontos gomb-pozicionálással
+   */
+  function openPortalPopover(button, answerText, explanationHtml) {
+    if (!summaryPortalPopover || !button) return;
+    if (activePortalButton === button && summaryPortalPopover.style.display === 'flex') {
+      closePortalPopover();
+      return;
+    }
+
+    if (summaryPortalBody) {
+      summaryPortalBody.textContent = answerText;
+    }
+    if (summaryPortalExp) {
+      if (explanationHtml) {
+        summaryPortalExp.innerHTML = explanationHtml;
+        summaryPortalExp.style.display = 'block';
+      } else {
+        summaryPortalExp.style.display = 'none';
+      }
+    }
+
+    // Először láthatatlanul jelenítjük meg a dobozméret megállapításához
+    summaryPortalPopover.style.visibility = 'hidden';
+    summaryPortalPopover.style.display = 'flex';
+
+    const btnRect = button.getBoundingClientRect();
+    const popWidth = summaryPortalPopover.offsetWidth;
+    const popHeight = summaryPortalPopover.offsetHeight;
+
+    // Vízszintes pozíció: a gombhoz igazítva, képernyőhatárok tiszteletben tartásával
+    let left = btnRect.left - 12;
+    const maxLeft = window.innerWidth - popWidth - 16;
+    if (left > maxLeft) left = maxLeft;
+    if (left < 16) left = 16;
+
+    // Függőleges pozíció: szigorúan a gomb sora felett 8 képponttal (a 'Válaszod:' sor garantáltan szabad)
+    let top = btnRect.top - popHeight - 8;
+    if (top < 10) {
+      top = Math.max(10, btnRect.top - popHeight - 8);
+    }
+
+    summaryPortalPopover.style.top = `${top}px`;
+    summaryPortalPopover.style.left = `${left}px`;
+
+    // Nyíl pozicionálása pontosan a gomb vízszintes közepére
+    const arrow = summaryPortalPopover.querySelector('.calm-summary-portal-arrow');
+    if (arrow) {
+      const arrowLeft = Math.max(12, Math.min(popWidth - 20, btnRect.left + (btnRect.width / 2) - left - 6));
+      arrow.style.left = `${arrowLeft}px`;
+    }
+
+    summaryPortalPopover.style.visibility = 'visible';
+    summaryPortalPopover.classList.add('active');
+    activePortalButton = button;
+  }
+
+  /**
    * Dolgozat végi értékelő felület megjelenítése (Sík, kártyamentes Calm Learner stílus)
    */
   function showSummary(data) {
@@ -1572,7 +1645,7 @@
       studentEntryInner.classList.add('summary-active');
     }
     if (summaryContainer) {
-      summaryContainer.style.display = 'flex';
+      summaryContainer.style.display = 'grid';
     }
 
     if (!data) return;
@@ -1715,6 +1788,10 @@
         const maxQPoints = q.points || 1;
         if (isCorrect) correctCount++;
 
+        const isFullyCorrect = isCorrect && (pointsEarned >= maxQPoints);
+        const rawCorrect = (userAns && (userAns.correct_answer || userAns.correctAnswer)) || q.correct_answer;
+        const rawExplanation = (userAns && (userAns.explanation !== undefined ? userAns.explanation : userAns.explanation)) || q.explanation || '';
+
         const item = document.createElement('div');
         item.className = 'calm-summary-q-item';
 
@@ -1737,11 +1814,46 @@
           if (submittedText === 'false' || submittedText === '0') submittedText = 'Hamis';
         }
 
+        let formattedCorrectAnswer = rawCorrect;
+        if (rawCorrect) {
+          if (q.question_type === 'TF') {
+            const norm = String(rawCorrect || '').trim().toLowerCase();
+            if (['igaz', 'true', 'i', 't', '1'].includes(norm)) formattedCorrectAnswer = 'Igaz';
+            else if (['hamis', 'false', 'h', 'f', '0'].includes(norm)) formattedCorrectAnswer = 'Hamis';
+          } else if (q.question_type === 'ABCD') {
+            try {
+              const parsed = JSON.parse(rawCorrect);
+              if (Array.isArray(parsed)) formattedCorrectAnswer = parsed.join(', ');
+            } catch {
+              // nyersen maradhat
+            }
+          } else if (q.question_type === 'SHORT') {
+            try {
+              const parsed = JSON.parse(rawCorrect);
+              if (Array.isArray(parsed)) formattedCorrectAnswer = parsed.join(' vagy ');
+            } catch {
+              if (String(rawCorrect).includes('|')) {
+                formattedCorrectAnswer = rawCorrect.split('|').map(s => s.trim()).join(' vagy ');
+              } else if (String(rawCorrect).includes(';')) {
+                formattedCorrectAnswer = rawCorrect.split(';').map(s => s.trim()).join(' vagy ');
+              }
+            }
+          }
+        }
+
+        const showHelp = (!isFullyCorrect && Boolean(rawCorrect));
+
         item.innerHTML = `
           <div class="calm-summary-q-left">
             <span class="calm-summary-q-num">${idx + 1}</span>
             <div class="calm-summary-q-info">
-              <span class="calm-summary-q-title">${formatCode(q.question_text)}</span>
+              <span class="calm-summary-q-title">${formatCode(q.question_text)}${showHelp ? `
+                <span class="calm-summary-tooltip-wrap">
+                  <button type="button" class="calm-summary-help-btn" title="Helyes válasz megtekintése" aria-label="Helyes válasz megtekintése">
+                    <span class="material-symbols-outlined">help</span>
+                  </button>
+                </span>
+              ` : ''}</span>
               <span class="calm-summary-q-ans">Válaszod: <strong>${escapeHtml(submittedText)}</strong></span>
             </div>
           </div>
@@ -1750,6 +1862,21 @@
             <span>${badgeText}</span>
           </div>
         `;
+
+        if (showHelp) {
+          const helpBtn = item.querySelector('.calm-summary-help-btn');
+          if (helpBtn) {
+            helpBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              openPortalPopover(
+                helpBtn,
+                formattedCorrectAnswer,
+                rawExplanation ? formatCode(rawExplanation) : ''
+              );
+            });
+          }
+        }
+
         summaryQuestionsList.appendChild(item);
       });
 
@@ -1810,6 +1937,19 @@
         showToast('⚠️ Figyelem! A dolgozat közben az ablak elhagyását a rendszer rögzíti!', 'danger');
       }
     });
+  }
+
+  // Lebegő portál popover automatikus bezárása külső kattintásra
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#summary-portal-popover') && !e.target.closest('.calm-summary-help-btn')) {
+      closePortalPopover();
+    }
+  });
+
+  // Lista görgetésekor és átméretezéskor automatikus bezárás (Floating UI épség)
+  window.addEventListener('resize', closePortalPopover);
+  if (summaryQuestionsList) {
+    summaryQuestionsList.addEventListener('scroll', closePortalPopover);
   }
 
   // Futtatás betöltéskor
