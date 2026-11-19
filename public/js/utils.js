@@ -109,8 +109,17 @@ function closeModal(modalId) {
 }
 
 // Ablakon kívüli kattintás a modal bezárásához
+let modalMouseDownTarget = null;
+
+window.addEventListener('mousedown', (e) => {
+  modalMouseDownTarget = e.target;
+});
+
 window.addEventListener('click', (e) => {
-  if (e.target.classList.contains('modal-backdrop') || e.target.classList.contains('calm-modal-backdrop')) {
+  const isBackdrop = e.target.classList.contains('modal-backdrop') || e.target.classList.contains('calm-modal-backdrop');
+  // Csak akkor zárjuk be a modalt, ha a kattintás közvetlenül a háttéren történt, ÉS az egérlenyomás (mousedown) is ott indult.
+  // Ezzel megelőzzük, hogy belső szövegkijelölés (satírozás) során a modal véletlenül bezáródjon, ha a felengedés kívül történik.
+  if (isBackdrop && modalMouseDownTarget === e.target) {
     // Az admin felületen (admin.html) a login-modal kötelező hitelesítési kapu, ott tilos bezárni mellékattintással
     if (e.target.id === 'login-modal' && e.target.classList.contains('modal-backdrop')) return;
     e.target.classList.remove('active');

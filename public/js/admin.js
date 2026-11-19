@@ -107,6 +107,17 @@
   const quizzesListContainer = document.getElementById('quizzes-list-container');
   const btnNewQuiz = document.getElementById('btn-new-quiz');
   const btnNewFolder = document.getElementById('btn-new-folder');
+  const btnImportQuizPdf = document.getElementById('btn-import-quiz-pdf');
+  const modalImportQuizPdf = document.getElementById('modal-import-quiz-pdf');
+  const importPdfSubjectId = document.getElementById('import-pdf-subject-id');
+  const importPdfGrade = document.getElementById('import-pdf-grade');
+  const quizPdfDropzone = document.getElementById('quiz-pdf-dropzone');
+  const inputQuizPdfFile = document.getElementById('input-quiz-pdf-file');
+  const quizPdfSelectedFileInfo = document.getElementById('quiz-pdf-selected-file-info');
+  const quizPdfSelectedFileName = document.getElementById('quiz-pdf-selected-file-name');
+  const quizPdfImportStatus = document.getElementById('quiz-pdf-import-status');
+  const btnSubmitImportQuizPdf = document.getElementById('btn-submit-import-quiz-pdf');
+  let selectedQuizPdfFile = null;
   const quizBreadcrumbsBar = document.getElementById('quiz-breadcrumbs-bar');
   const quizBreadcrumbsList = document.getElementById('quiz-breadcrumbs-list');
   const quizEditorCard = document.getElementById('quiz-editor-card');
@@ -1378,6 +1389,7 @@
 
       startSubjectId.innerHTML = '';
       editSubjectId.innerHTML = '';
+      if (importPdfSubjectId) importPdfSubjectId.innerHTML = '';
 
       subjectsList.forEach(s => {
         const opt1 = document.createElement('option');
@@ -1391,6 +1403,14 @@
         opt2.textContent = s.name;
         if (s.is_default) opt2.selected = true;
         editSubjectId.appendChild(opt2);
+
+        if (importPdfSubjectId) {
+          const opt3 = document.createElement('option');
+          opt3.value = s.id;
+          opt3.textContent = s.name;
+          if (s.is_default) opt3.selected = true;
+          importPdfSubjectId.appendChild(opt3);
+        }
       });
     } catch (err) {
       console.error('Hiba a tantárgyak betöltésekor:', err);
@@ -2192,6 +2212,15 @@
     const qOptions = existing && Array.isArray(existing.options) ? existing.options : ['', '', '', ''];
     const qImagePath = existing && existing.image_path ? existing.image_path : '';
 
+    const defaultInstructionsMap = {
+      'ABCD': 'Válaszd ki az egyetlen helyes megoldást!',
+      'TF': 'Döntsd el, hogy az állítás igaz vagy hamis!',
+      'SHORT': 'Írd be a helyes választ a szövegmezőbe!'
+    };
+    const qInstructions = existing
+      ? (existing.instructions !== undefined && existing.instructions !== null ? existing.instructions : (defaultInstructionsMap[qType] || ''))
+      : (defaultInstructionsMap[qType] || '');
+
     // Meglévő helyes válaszok feldolgozása SHORT esetén (szinonimák / alternatívák)
     let initialShortAnswers = [''];
     if (qType === 'SHORT' && qCorrect) {
@@ -2267,36 +2296,46 @@
           </div>
         </div>
 
-        <!-- Képcsatolás szekció (opcionális ábra a kérdéshez) -->
-        <div class="q-image-section">
-          <input type="hidden" class="q-image-path" value="${escapeHtml(qImagePath)}">
-          <input type="file" class="q-image-file-input" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" style="display: none;">
-
-          <div class="q-image-empty-zone" style="${qImagePath ? 'display: none;' : 'display: flex;'}">
-            <button type="button" class="btn btn-secondary q-btn-attach-image" style="font-size: 0.85rem; padding: 6px 14px; gap: 6px;">
-              <span class="material-symbols-outlined" style="font-size: 18px;">add_photo_alternate</span>
-              <span>Kép / ábra csatolása</span>
-            </button>
-            <span class="q-image-hint" style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;">
-              (opcionális, max. 2 MB: PNG, JPG, WebP)
-            </span>
+        <!-- Instrukció és kép sáv (2 oszlopos ergonómikus elrendezés) -->
+        <div class="q-instruction-image-row">
+          <div class="q-instruction-col">
+            <label class="form-label" style="font-size: 0.82rem; font-weight: 600; margin-bottom: 4px; display: inline-flex; align-items: center; gap: 4px;">
+              <span>További instrukciók a kérdéshez:</span>
+              <span class="material-symbols-outlined help-tooltip-icon" title="A kérdés alatt megjelenő segédszöveg a diák képernyőjén. Sortöréshez nyomj Entert, kódformázáshoz használj \`kód\` visszahajló idézőjelet.">help</span>
+            </label>
+            <textarea class="form-control q-instructions" rows="2" placeholder="pl. Írd le egy szóval, kisbetűs írással, toldalékolás nélkül a megoldást!">${escapeHtml(qInstructions)}</textarea>
           </div>
 
-          <div class="q-image-preview-zone" style="${qImagePath ? 'display: flex;' : 'display: none;'}">
-            <div class="q-image-preview-thumb-wrap">
-              <img src="${escapeHtml(qImagePath)}" alt="Kérdéshez csatolt ábra" class="q-image-preview-thumb">
+          <div class="q-image-section">
+            <input type="hidden" class="q-image-path" value="${escapeHtml(qImagePath)}">
+            <input type="file" class="q-image-file-input" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" style="display: none;">
+
+            <div class="q-image-empty-zone" style="${qImagePath ? 'display: none;' : 'display: flex;'}">
+              <button type="button" class="btn btn-secondary q-btn-attach-image" style="font-size: 0.85rem; padding: 6px 14px; gap: 6px;">
+                <span class="material-symbols-outlined" style="font-size: 18px;">add_photo_alternate</span>
+                <span>Kép / ábra csatolása</span>
+              </button>
+              <span class="q-image-hint" style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;">
+                (opcionális, max. 2 MB)
+              </span>
             </div>
-            <div class="q-image-preview-info">
-              <span class="q-image-preview-name">${qImagePath ? escapeHtml(qImagePath.split('/').pop()) : ''}</span>
-              <div class="q-image-preview-actions">
-                <button type="button" class="btn btn-secondary q-btn-change-image" style="padding: 4px 10px; font-size: 0.8rem;">
-                  <span class="material-symbols-outlined" style="font-size: 16px;">cached</span>
-                  <span>Csere</span>
-                </button>
-                <button type="button" class="btn btn-secondary q-btn-remove-image" style="padding: 4px 10px; font-size: 0.8rem; color: var(--danger);">
-                  <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
-                  <span>Törlés</span>
-                </button>
+
+            <div class="q-image-preview-zone" style="${qImagePath ? 'display: flex;' : 'display: none;'}">
+              <div class="q-image-preview-thumb-wrap">
+                <img src="${escapeHtml(qImagePath)}" alt="Kérdéshez csatolt ábra" class="q-image-preview-thumb">
+              </div>
+              <div class="q-image-preview-info">
+                <span class="q-image-preview-name">${qImagePath ? escapeHtml(qImagePath.split('/').pop()) : ''}</span>
+                <div class="q-image-preview-actions">
+                  <button type="button" class="btn btn-secondary q-btn-change-image" style="padding: 4px 10px; font-size: 0.8rem;">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">cached</span>
+                    <span>Csere</span>
+                  </button>
+                  <button type="button" class="btn btn-secondary q-btn-remove-image" style="padding: 4px 10px; font-size: 0.8rem; color: var(--danger);">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
+                    <span>Törlés</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2384,11 +2423,21 @@
     const optBox = item.querySelector('.q-options-box');
     const tfBox = item.querySelector('.q-tf-box');
     const shortBox = item.querySelector('.q-short-box');
+    const instructionsTextarea = item.querySelector('.q-instructions');
 
     typeSelect.addEventListener('change', () => {
-      optBox.style.display = typeSelect.value === 'ABCD' ? 'block' : 'none';
-      tfBox.style.display = typeSelect.value === 'TF' ? 'block' : 'none';
-      shortBox.style.display = typeSelect.value === 'SHORT' ? 'block' : 'none';
+      const newType = typeSelect.value;
+      optBox.style.display = newType === 'ABCD' ? 'block' : 'none';
+      tfBox.style.display = newType === 'TF' ? 'block' : 'none';
+      shortBox.style.display = newType === 'SHORT' ? 'block' : 'none';
+
+      if (instructionsTextarea) {
+        const currentVal = instructionsTextarea.value.trim();
+        const defaultVals = Object.values(defaultInstructionsMap);
+        if (!currentVal || defaultVals.includes(currentVal)) {
+          instructionsTextarea.value = defaultInstructionsMap[newType] || '';
+        }
+      }
     });
 
     // ABCD opciók kizöldítése számozott gombra kattintva
@@ -2513,8 +2562,8 @@
       formData.append('image', file);
 
       const currentQuizId = editQuizId ? editQuizId.value.trim() : '';
-      const uploadUrl = currentQuizId 
-        ? `/api/admin/upload-image?quizId=${encodeURIComponent(currentQuizId)}` 
+      const uploadUrl = currentQuizId
+        ? `/api/admin/upload-image?quizId=${encodeURIComponent(currentQuizId)}`
         : '/api/admin/upload-image';
 
       attachBtn.disabled = true;
@@ -2674,12 +2723,16 @@
       const imagePathInput = b.querySelector('.q-image-path');
       const image_path = imagePathInput && imagePathInput.value.trim() ? imagePathInput.value.trim() : null;
 
+      const instructionsInput = b.querySelector('.q-instructions');
+      const instructions = instructionsInput ? instructionsInput.value.trim() : '';
+
       const qId = b.dataset.questionId ? parseInt(b.dataset.questionId, 10) : undefined;
       questions.push({
         id: qId,
         question_order: qNum,
         question_type: type,
         question_text: text,
+        instructions,
         image_path,
         points,
         options,
@@ -3082,6 +3135,136 @@
           rosterImportStatus.style.backgroundColor = 'var(--danger-bg, #fee2e2)';
           rosterImportStatus.style.color = 'var(--danger, #dc2626)';
           rosterImportStatus.textContent = 'Hálózati hiba a fájl feltöltése során!';
+        }
+      }
+    });
+  }
+
+  // ==========================================================================
+  // Socrative PDF Teszt Importálása Kezelő
+  // ==========================================================================
+  function resetQuizPdfImportModal() {
+    selectedQuizPdfFile = null;
+    if (inputQuizPdfFile) inputQuizPdfFile.value = '';
+    if (quizPdfSelectedFileInfo) quizPdfSelectedFileInfo.style.display = 'none';
+    if (quizPdfSelectedFileName) quizPdfSelectedFileName.textContent = '';
+    if (quizPdfImportStatus) {
+      quizPdfImportStatus.style.display = 'none';
+      quizPdfImportStatus.textContent = '';
+    }
+    if (btnSubmitImportQuizPdf) {
+      btnSubmitImportQuizPdf.disabled = true;
+      btnSubmitImportQuizPdf.innerHTML = '<span class="material-symbols-outlined" style="font-size: 19px;">upload_file</span><span>Teszt importálása</span>';
+    }
+    if (importPdfGrade) importPdfGrade.value = '6';
+  }
+
+  function handleQuizPdfFileSelect(file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+      if (quizPdfImportStatus) {
+        quizPdfImportStatus.style.display = 'block';
+        quizPdfImportStatus.style.backgroundColor = 'var(--danger-bg, #fee2e2)';
+        quizPdfImportStatus.style.color = 'var(--danger, #dc2626)';
+        quizPdfImportStatus.textContent = 'Kizárólag PDF (.pdf) kiterjesztésű fájl tölthető fel!';
+      }
+      return;
+    }
+    selectedQuizPdfFile = file;
+    if (quizPdfSelectedFileName) {
+      const sizeKb = (file.size / 1024).toFixed(1);
+      quizPdfSelectedFileName.textContent = `${file.name} (${sizeKb} KB)`;
+    }
+    if (quizPdfSelectedFileInfo) quizPdfSelectedFileInfo.style.display = 'block';
+    if (quizPdfImportStatus) quizPdfImportStatus.style.display = 'none';
+    if (btnSubmitImportQuizPdf) btnSubmitImportQuizPdf.disabled = false;
+  }
+
+  if (btnImportQuizPdf) {
+    btnImportQuizPdf.addEventListener('click', () => {
+      resetQuizPdfImportModal();
+      openModal('modal-import-quiz-pdf');
+    });
+  }
+
+  if (quizPdfDropzone && inputQuizPdfFile) {
+    quizPdfDropzone.addEventListener('click', () => {
+      inputQuizPdfFile.click();
+    });
+
+    inputQuizPdfFile.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleQuizPdfFileSelect(e.target.files[0]);
+      }
+    });
+
+    quizPdfDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      quizPdfDropzone.style.borderColor = 'var(--primary, #ea580c)';
+      quizPdfDropzone.style.backgroundColor = 'var(--primary-light, #fff7ed)';
+    });
+
+    quizPdfDropzone.addEventListener('dragleave', () => {
+      quizPdfDropzone.style.borderColor = 'var(--border-color, #cbd5e1)';
+      quizPdfDropzone.style.backgroundColor = '#ffffff';
+    });
+
+    quizPdfDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      quizPdfDropzone.style.borderColor = 'var(--border-color, #cbd5e1)';
+      quizPdfDropzone.style.backgroundColor = '#ffffff';
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleQuizPdfFileSelect(e.dataTransfer.files[0]);
+      }
+    });
+  }
+
+  if (btnSubmitImportQuizPdf) {
+    btnSubmitImportQuizPdf.addEventListener('click', async () => {
+      if (!selectedQuizPdfFile) return;
+
+      btnSubmitImportQuizPdf.disabled = true;
+      btnSubmitImportQuizPdf.innerHTML = '<span class="material-symbols-outlined" style="font-size: 19px; animation: spin 1s linear infinite;">sync</span><span>Importálás folyamatban...</span>';
+
+      try {
+        const formData = new FormData();
+        formData.append('pdfFile', selectedQuizPdfFile);
+        if (importPdfSubjectId) formData.append('subjectId', importPdfSubjectId.value);
+        if (importPdfGrade) formData.append('gradeLevel', importPdfGrade.value);
+        if (currentFolderId !== null && currentFolderId !== undefined) {
+          formData.append('folderId', currentFolderId);
+        }
+
+        const res = await fetch('/api/admin/quizzes/import-socrative-pdf', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success && data.quiz) {
+          closeModal('modal-import-quiz-pdf');
+          showToast(data.message || 'Sikeres PDF importálás!', 'success');
+          await loadQuizzes(currentFolderId);
+          await openQuizEditor(data.quiz.id);
+        } else {
+          btnSubmitImportQuizPdf.disabled = false;
+          btnSubmitImportQuizPdf.innerHTML = '<span class="material-symbols-outlined" style="font-size: 19px;">upload_file</span><span>Teszt importálása</span>';
+          if (quizPdfImportStatus) {
+            quizPdfImportStatus.style.display = 'block';
+            quizPdfImportStatus.style.backgroundColor = 'var(--danger-bg, #fee2e2)';
+            quizPdfImportStatus.style.color = 'var(--danger, #dc2626)';
+            quizPdfImportStatus.textContent = data.error || 'Hiba történt a PDF importálása során!';
+          }
+        }
+      } catch (err) {
+        console.error('PDF import hiba:', err);
+        btnSubmitImportQuizPdf.disabled = false;
+        btnSubmitImportQuizPdf.innerHTML = '<span class="material-symbols-outlined" style="font-size: 19px;">upload_file</span><span>Teszt importálása</span>';
+        if (quizPdfImportStatus) {
+          quizPdfImportStatus.style.display = 'block';
+          quizPdfImportStatus.style.backgroundColor = 'var(--danger-bg, #fee2e2)';
+          quizPdfImportStatus.style.color = 'var(--danger, #dc2626)';
+          quizPdfImportStatus.textContent = 'Hálózati hiba a PDF feltöltése során!';
         }
       }
     });

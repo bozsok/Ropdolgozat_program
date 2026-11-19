@@ -165,7 +165,21 @@ function initializeDatabase() {
     console.error('Hiba a sessions.class_name migrációjakor:', err);
   }
 
-  // 4. Séma futtatása (táblák, indexek, frissített triggerek)
+  // 4. Questions tábla migrációja: instructions oszlop meglétének biztosítása
+  try {
+    const qTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='questions'").get();
+    if (qTable) {
+      const qCols = db.prepare('PRAGMA table_info(questions)').all();
+      const hasInstructions = qCols.some(c => c.name === 'instructions');
+      if (!hasInstructions) {
+        db.prepare("ALTER TABLE questions ADD COLUMN instructions TEXT DEFAULT ''").run();
+      }
+    }
+  } catch (err) {
+    console.error('Hiba a questions.instructions migrációjakor:', err);
+  }
+
+  // 5. Séma futtatása (táblák, indexek, frissített triggerek)
   db.exec(schemaSql);
 
   // Mintaadatok feltöltése tranzakcióban (ha még üres az adatbázis)

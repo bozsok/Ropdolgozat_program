@@ -103,6 +103,7 @@ function getQuizById(quizId, isStudentView = false) {
       question_order,
       question_type,
       question_text,
+      instructions,
       image_path,
       options_json,
       correct_answer,
@@ -136,6 +137,7 @@ function getQuizById(quizId, isStudentView = false) {
         question_order: q.question_order,
         question_type: q.question_type,
         question_text: q.question_text,
+        instructions: q.instructions || '',
         image_path: q.image_path,
         options: parsedOptions,
         points: q.points
@@ -316,10 +318,10 @@ function createQuiz({ subject_id = 1, folder_id = null, title, subject_grade = '
     if (Array.isArray(questions) && questions.length > 0) {
       const insertQuestion = db.prepare(`
         INSERT INTO questions (
-          quiz_id, question_order, question_type, question_text, 
+          quiz_id, question_order, question_type, question_text, instructions,
           image_path, options_json, correct_answer, explanation, points
         ) VALUES (
-          ?, ?, ?, ?, 
+          ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?
         )
       `);
@@ -332,6 +334,7 @@ function createQuiz({ subject_id = 1, folder_id = null, title, subject_grade = '
           order,
           q.question_type || 'ABCD',
           q.question_text || '',
+          String(q.instructions || '').trim(),
           q.image_path || null,
           optionsJson,
           String(q.correct_answer || '').trim(),
@@ -385,6 +388,7 @@ function updateQuiz(quizId, { subject_id, folder_id = null, title, subject_grade
         question_order = ?,
         question_type = ?,
         question_text = ?,
+        instructions = ?,
         image_path = ?,
         options_json = ?,
         correct_answer = ?,
@@ -395,10 +399,10 @@ function updateQuiz(quizId, { subject_id, folder_id = null, title, subject_grade
 
     const insertQuestionStmt = db.prepare(`
       INSERT INTO questions (
-        quiz_id, question_order, question_type, question_text, 
+        quiz_id, question_order, question_type, question_text, instructions,
         image_path, options_json, correct_answer, explanation, points
       ) VALUES (
-        ?, ?, ?, ?, 
+        ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?
       )
     `);
@@ -409,6 +413,7 @@ function updateQuiz(quizId, { subject_id, folder_id = null, title, subject_grade
         const optionsJson = Array.isArray(q.options) ? JSON.stringify(q.options) : (q.options_json || '[]');
         const qType = q.question_type || 'ABCD';
         const qText = q.question_text || '';
+        const qInstr = String(q.instructions || '').trim();
         const qImage = q.image_path || null;
         const qCorrect = String(q.correct_answer || '').trim();
         const qExpl = String(q.explanation || '').trim();
@@ -427,6 +432,7 @@ function updateQuiz(quizId, { subject_id, folder_id = null, title, subject_grade
             order,
             qType,
             qText,
+            qInstr,
             qImage,
             optionsJson,
             qCorrect,
@@ -442,6 +448,7 @@ function updateQuiz(quizId, { subject_id, folder_id = null, title, subject_grade
             order,
             qType,
             qText,
+            qInstr,
             qImage,
             optionsJson,
             qCorrect,
@@ -492,6 +499,7 @@ function duplicateQuiz(quizId, customTitle = null) {
       question_order: q.question_order,
       question_type: q.question_type,
       question_text: q.question_text,
+      instructions: q.instructions || '',
       image_path: q.image_path,
       options: q.options,
       correct_answer: q.correct_answer,

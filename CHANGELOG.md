@@ -4,6 +4,39 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.20.0] – 2026-11-19
+
+### Socrative PDF közvetlen tesztimportálás beágyazott ábrákkal és megoldókulccsal, kérdésenkénti többsoros instrukciók és kétoszlopos szerkesztőkártya, modális ablakok kijelölésvédelme (satírozáskor történő bezáródás elhárítása), valamint a tesztkörnyezeti képtár elszigetelése
+
+Jelentős funkcióbővítő és tanári ergonómiai kiadás: a Tesztszerkesztőben közvetlen Socrative PDF importáló funkció valósult meg, amely a letöltött feladatsorokból automatikusan kinyeri a kérdések szövegét, a feleletválasztós (ABCD) és igaz/hamis opciókat, a helyes megoldásokat, valamint a beágyazott képeket és ábrákat. A kérdésszerkesztő felületen megjelent a kérdésenként opcionálisan megadható „További instrukciók a kérdéshez” többsoros szövegmező (Enter sortörésekkel és intelligens típusspecifikus sablonokkal), a kérdéskártya pedig helytakarékos, ergonomikus kétoszlopos elrendezést kapott az instrukciók és a képcsatoló zóna számára. A felületen megszűnt a modális ablakok véletlen bezáródása szövegkijelölés („satírozás”) közben, miután a háttérkattintásos bezárás mostantól szigorúan ellenőrzi az egérlenyomás (`mousedown`) kiindulási pontját is. Ezenfelül a tesztfuttatások feltöltési könyvtára teljes elszigetelést kapott, így a tesztek futtatása nem veszélyezteti az éles képtárat.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Socrative PDF tesztimportáló modul:**
+  - **Fájlok:** [`src/services/socrativePdfParser.js`](file:///d:/dev/Röpdolgozat%20program/src/services/socrativePdfParser.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`scratch/test_socrative_import.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_socrative_import.js)
+  - Új `socrativePdfParser` szolgáltatás: a Socrative rendszerből exportált PDF fájlok bináris adatfolyamából és szövegfolyamából kinyeri a kvíz címét, a feladatok sorszámát és szövegét, az opciókat (ABCD, Igaz/Hamis), a zöld pipával megjelölt helyes válaszokat, valamint a kérdésekhez illesztett ábrákat (FlateDecode/DCTDecode képfolyamok felismerése és kimentése).
+  - Új `POST /api/admin/quizzes/import-socrative-pdf` végpont Multer memóriapuffereléssel.
+  - Új felületi gomb a Tesztszerkesztő fejlécében (**[ 📄 PDF importálása ]**) és hozzá tartozó modális ablak (`#modal-import-quiz-pdf`) tantárgy, célmappa, évfolyam és időkorlát kiválasztásával, folyamatjelzővel és automatikus szerkesztő-megnyitással.
+
+* **Kérdésenkénti egyéni instrukciók és kétoszlopos kérdéskártya:**
+  - **Fájlok:** [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql), [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js), [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Új `instructions TEXT DEFAULT ''` mező a `questions` táblában automatikus adatbázis-migrációval.
+  - A kérdéskártyán a képcsatoló zóna nem foglalja el a teljes 100%-os szélességet: helyette modern, 2 oszlopos grid rács (`.q-instruction-image-row`, 1fr és 280px) jött létre, ahol a bal oldalon a többsoros instrukciós szövegmező (`textarea.q-instructions`), a jobb oldalon pedig a kép / Csere / Törlés blokk helyezkedik el.
+  - Többsoros szerkesztés: a tanár az **Enter** billentyűvel tetszőleges sortöréseket vihet be (pl. feladatspecifikus szabályok pontokba szedése).
+  - Intelligens típusváltás: a kérdéstípus módosításakor a rendszer automatikusan javasolja az új típus alapértelmezett instrukcióját (ABCD: *„Válaszd ki az egyetlen helyes megoldást!”*, TF: *„Döntsd el, hogy az állítás Igaz vagy Hamis!”*, SHORT: *„Írd be a helyes választ a szövegmezőbe!”*), ha a mezőt a tanár még nem szerkesztette egyedileg.
+  - Diákfelületi megjelenítés: a kérdéscím alatti `#question-hint-text` elemben megjelenik a megadott formai instrukció a sortörések (`<br>`) és a kódkiemelés (`` `kód` ``) maradéktalan megtartásával.
+
+#### Javítva (Fixed)
+* **Modális ablakok kijelölésvédelme (Overlay Drag / Selection Dismissal):**
+  - **Fájlok:** [`public/js/utils.js`](file:///d:/dev/Röpdolgozat%20program/public/js/utils.js)
+  - Elhárítva a hiba, amely miatt a modális ablakok (pl. az *Új dolgozat indítása* ablak) váratlanul bezáródtak, amikor a tanár egy beviteli mezőben (pl. évfolyam) egérrel szöveget jelölt ki („satírozott”), és az egérkurzort a kijelölés során kihúzta a külső sötétített háttérre (`.modal-backdrop`).
+  - A `window.addEventListener('mousedown')` segítségével a rendszer mostantól rögzíti az egérlenyomás kiinduló célpontját (`modalMouseDownTarget`), és a kattintásos bezárást kizárólag akkor engedélyezi, ha a lenyomás ÉS a felengedés is közvetlenül a háttéren történt.
+
+* **Tesztkörnyezeti képtár elszigetelése:**
+  - **Fájlok:** [`config.js`](file:///d:/dev/Röpdolgozat%20program/config.js), [`scratch/test_full_system.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_full_system.js), [`scratch/test_report12_fixes.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_report12_fixes.js)
+  - A tesztfuttató környezet a `process.env.UPLOADS_DIR` változóval külön ideiglenes könyvtárra (`data/uploads_test`) lett irányítva, megakadályozva, hogy az automatizált tesztek érintsék az éles `data/uploads/` könyvtár állományait.
+
+---
+
 ## [1.19.0] – 2026-11-19
 
 ### Teljes rendszermentés visszaállítása (Restore) SQLite integritás-ellenőrzéssel és hot-reload mechanizmussal, Beállítások és mentés fül megújítása, 5-fokozatú értékelési határok és Calm Learner színskála harmonizáció, Eredménytáblai Anonim mód gyorskapcsoló, központi kérdéskeverés, tanári munkaállomás felismerése (?gep=tanar), valamint a mentési méretrobbanás elhárítása és modális megerősítés

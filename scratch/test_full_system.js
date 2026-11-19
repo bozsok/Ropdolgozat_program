@@ -1,8 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-// Izolált teszt adatbázis használata az éles ropdolgozat.db védelmében
+// Izolált teszt adatbázis és feltöltési mappa használata az éles ropdolgozat.db védelmében
 process.env.DB_PATH = path.join(__dirname, '..', 'data', 'ropdolgozat_test.db');
+process.env.UPLOADS_DIR = path.join(__dirname, '..', 'data', 'uploads_test');
 
 const config = require('../config');
 const db = require('../src/db/init');
@@ -192,6 +193,7 @@ async function runTests() {
   }
 
   rosterRepo.deleteClass('6.a');
+  quizRepo.deleteQuiz(duplicated.id);
 
   console.log('\n================================================================');
   console.log('🎉 MINDEN TESZT (17-BŐL 17) SIKERESEN ÉS HIBÁTLANUL LEFUTOTT! 🎉');
@@ -199,11 +201,12 @@ async function runTests() {
 
   db.close();
 
-  // Teszt adatbázis letakarítása
+  // Teszt adatbázis és feltöltési mappa letakarítása
   try {
     if (fs.existsSync(config.dbPath)) fs.unlinkSync(config.dbPath);
     if (fs.existsSync(config.dbPath + '-wal')) fs.unlinkSync(config.dbPath + '-wal');
     if (fs.existsSync(config.dbPath + '-shm')) fs.unlinkSync(config.dbPath + '-shm');
+    if (fs.existsSync(config.uploadsDir)) fs.rmSync(config.uploadsDir, { recursive: true, force: true });
   } catch (e) {
     // Ignored
   }

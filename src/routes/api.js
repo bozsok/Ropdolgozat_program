@@ -14,6 +14,7 @@ const exporter = require('../services/exporter');
 const backup = require('../services/backup');
 const presenceService = require('../services/presenceService');
 const settingsRepo = require('../db/settingsRepo');
+const socrativePdfParser = require('../services/socrativePdfParser');
 
 const router = express.Router();
 const ExcelJS = require('exceljs');
@@ -413,6 +414,67 @@ router.put('/admin/quizzes/:id/move', requireAdminAuth, (req, res) => {
     res.json({ success: true, quiz: updated });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// Socrative PDF teszt importálása (Kérdések, opciók, megoldókulcs és ábrák kinyerése)
+router.post('/admin/quizzes/import-socrative-pdf', requireAdminAuth, uploadMemory.single('pdfFile'), (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ error: 'Nem érkezett feltöltött PDF fájl!' });
+    }
+
+    const parsed = socrativePdfParser.parseSocrativePdf(req.file.buffer);
+    if (!parsed || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+      return res.status(400).json({ error: 'A megadott PDF fájlból nem sikerült kérdéseket kinyerni! Kérjük ellenőrizd, hogy a fájl érvényes Socrative feladatsor-e.' });
+    }
+
+    // Cél könyvtár az ideiglenes képekhez
+    const tempDir = path.join(config.uploadsDir, 'quizzes', 'temp');
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    // Képek lementése a kérdésekhez
+    const timestamp = Date.now();
+    parsed.questions.forEach((q, idx) => {
+      if (q.imageBuffer && Buffer.isBuffer(q.imageBuffer)) {
+        const imgFileName = `imported_${timestamp}_${idx + 1}.png`;
+        const tempFilePath = path.join(tempDir, imgFileName);
+        fs.writeFileSync(tempFilePath, q.imageBuffer);
+        q.image_path = `/uploads/quizzes/temp/${imgFileName}`;
+      } else {
+        q.image_path = null;
+      }
+      delete q.imageBuffer;
+    });
+
+    const subjectId = req.body.subjectId ? parseInt(req.body.subjectId, 10) : 1;
+    const folderId = req.body.folderId ? parseInt(req.body.folderId, 10) : null;
+    const gradeLevel = req.body.gradeLevel ? String(req.body.gradeLevel).trim() : '6';
+    const defaultTimeLimitMin = req.body.defaultTimeLimitMin ? parseInt(req.body.defaultTimeLimitMin, 10) : 0;
+
+    let quizTitle = parsed.quizTitle && parsed.quizTitle !== 'Socrative Teszt'
+      ? parsed.quizTitle
+      : path.parse(req.file.originalname).name.replace(/[-_]1$/, '').trim();
+
+    if (!quizTitle) quizTitle = 'Socrative importált teszt';
+
+    const newQuiz = quizRepo.createQuiz({
+      subject_id: subjectId,
+      folder_id: folderId,
+      title: quizTitle,
+      subject_grade: gradeLevel,
+      default_time_limit_min: defaultTimeLimitMin,
+      questions: parsed.questions
+    });
+
+    res.json({
+      success: true,
+      quiz: newQuiz,
+      message: `Sikeres importálás: „${newQuiz.title}” (${newQuiz.questions.length} kérdés, ${newQuiz.questions.filter(q => q.image_path).length} ábra beolvasva)!`
+    });
+  } catch (err) {
+    console.error('Hiba a Socrative PDF importálásakor:', err);
+    res.status(500).json({ error: `Hiba a PDF feldolgozása során: ${err.message}` });
   }
 });
 

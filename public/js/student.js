@@ -1173,10 +1173,17 @@
 
     const hintMap = {
       'ABCD': 'Válaszd ki az egyetlen helyes megoldást!',
-      'TF': 'Döntsd el, hogy az állítás Igaz vagy Hamis!',
+      'TF': 'Döntsd el, hogy az állítás igaz vagy hamis!',
       'SHORT': 'Írd be a helyes választ a szövegmezőbe!'
     };
-    if (questionHintText) questionHintText.textContent = hintMap[q.question_type] || 'Válaszolj a kérdésre!';
+    if (questionHintText) {
+      const customHint = q.instructions && q.instructions.trim();
+      if (customHint) {
+        questionHintText.innerHTML = formatCode(customHint).replace(/\n/g, '<br>');
+      } else {
+        questionHintText.textContent = hintMap[q.question_type] || 'Válaszolj a kérdésre!';
+      }
+    }
 
     // 2. Haladási sáv és 3 részes szöveges állapot (a már befejezett válaszok szerint)
     const answeredCount = answeredQuestionIds.size;

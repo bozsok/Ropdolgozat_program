@@ -1,8 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-// Izolált teszt adatbázis használata az éles ropdolgozat.db védelmében
+// Izolált teszt adatbázis és feltöltési mappa használata az éles ropdolgozat.db védelmében
 process.env.DB_PATH = path.join(__dirname, '..', 'data', 'ropdolgozat_test.db');
+process.env.UPLOADS_DIR = path.join(__dirname, '..', 'data', 'uploads_test');
 
 const Database = require('better-sqlite3');
 const config = require('../config');

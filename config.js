@@ -18,8 +18,8 @@ const config = {
 
   // Fájlrendszer elérési utak
   dbPath: process.env.DB_PATH || path.join(__dirname, 'data', 'ropdolgozat.db'),
-  uploadsDir: path.join(__dirname, 'data', 'uploads'),
-  publicDir: path.join(__dirname, 'public'),
+  uploadsDir: process.env.UPLOADS_DIR || path.join(__dirname, 'data', 'uploads'),
+  publicDir: process.env.PUBLIC_DIR || path.join(__dirname, 'public'),
 
   // Munkamenet és Cookie beállítások
   cookieSecret: process.env.COOKIE_SECRET || 'ropdolgozat-titkos-kulcs-2026',

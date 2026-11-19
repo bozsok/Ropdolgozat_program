@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS questions (
     question_order INTEGER NOT NULL DEFAULT 1 CHECK(question_order > 0), -- Kérdés sorszáma a teszten belül
     question_type TEXT NOT NULL CHECK(question_type IN ('ABCD', 'TF', 'SHORT')),
     question_text TEXT NOT NULL,                -- Kérdés szövege (támogatja a `kód` jelölést)
+    instructions TEXT DEFAULT '',               -- Opcionális instrukció / formai útmutató a diákok számára
     image_path TEXT DEFAULT NULL,               -- Opcionális kép relatív elérési útja (pl. "/uploads/kep1.png")
     options_json TEXT DEFAULT '[]',             -- JSON tömb ABCD esetén (pl. '["A válasz","B válasz","C válasz","D válasz"]')
     correct_answer TEXT NOT NULL,               -- Helyes válasz (JSON tömb vagy szöveg)
