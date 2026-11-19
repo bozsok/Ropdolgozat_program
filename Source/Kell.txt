@@ -1,2 +1,2 @@
 1. exportálni a Socrative-ból a teszteket és létrehozni a saját webalkalmazásban azokat
-4. a tanári munkaállomást is ki kellene olvasni, ne csak a tanulói gép számát
+

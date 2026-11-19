@@ -27,6 +27,8 @@
   const studentEntryInner = document.querySelector('.student-entry-inner');
   const pcBadge = document.getElementById('pc-badge');
   const pcNumberText = document.getElementById('pc-number-text');
+  const entryPcBadge = document.getElementById('entry-pc-badge');
+  const entryPcNumberText = document.getElementById('entry-pc-number-text');
   const timerBadge = document.getElementById('timer-badge');
   const timerText = document.getElementById('timer-text');
 
@@ -166,35 +168,66 @@
    * Alkalmazás inicializálása
    */
   async function init() {
-    // 1. Gépszám felismerése az URL-ből (?gep=X)
+    // 1. Gépszám és Tanári munkaállomás felismerése az URL-ből (?gep=X vagy ?gep=tanar)
     const gepParam = getUrlParam('gep');
+    let isTeacherWorkstation = false;
     if (gepParam) {
-      pcNumber = parseInt(gepParam, 10);
-      if (!isNaN(pcNumber) && pcNumber >= 1 && pcNumber <= 42) {
-        if (pcNumberText) pcNumberText.textContent = `${pcNumber}. gép`;
+      const gepLower = gepParam.trim().toLowerCase();
+      if (gepLower === 'tanar' || gepLower === 'tanari') {
+        isTeacherWorkstation = true;
+        if (pcNumberText) pcNumberText.textContent = 'Tanári munkaállomás';
+        if (entryPcNumberText) entryPcNumberText.textContent = 'Tanári munkaállomás';
+        if (entryPcBadge) entryPcBadge.style.display = 'inline-flex';
+      } else {
+        pcNumber = parseInt(gepParam, 10);
+        if (!isNaN(pcNumber) && pcNumber >= 1 && pcNumber <= 42) {
+          if (pcNumberText) pcNumberText.textContent = `${pcNumber}. gép`;
+          if (entryPcNumberText) entryPcNumberText.textContent = `${pcNumber}. gép`;
+          if (entryPcBadge) entryPcBadge.style.display = 'inline-flex';
+        }
       }
     }
 
     // 2. Felületi eseménykezelők azonnali regisztrálása (Modalok, Kilépés gomb, stb.)
     setupCommonUIListeners();
 
-    // 3. Socket.io kapcsolat
+    // 3. Tanári munkaállomás kényelmi automatizmus (?gep=tanar):
+    // Ha a tanári gépről nyitották meg a felületet és nincs folyamatban lévő diák token
+    if (isTeacherWorkstation && !sessionStorage.getItem('ropdolgozat_token')) {
+      try {
+        const authRes = await fetch('/api/auth/check');
+        const authData = await authRes.json();
+        if (authData && authData.isAuthenticated) {
+          window.location.href = '/admin';
+          return;
+        } else {
+          openModal('login-modal');
+          if (inputPin) {
+            setTimeout(() => inputPin.focus(), 150);
+          }
+        }
+      } catch (err) {
+        console.warn('Nem sikerült ellenőrizni a tanári hitelesítést:', err);
+      }
+    }
+
+    // 4. Socket.io kapcsolat
     if (typeof io !== 'undefined') {
       socket = io();
       setupSocketListeners();
     }
 
-    // 4. Fókuszvesztés figyelő regisztrálása
+    // 5. Fókuszvesztés figyelő regisztrálása
     setupFocusListener();
 
-    // 5. Mentett munkamenet ellenőrzése (Session Recovery újranyitás esetén)
+    // 6. Mentett munkamenet ellenőrzése (Session Recovery újranyitás esetén)
     const savedToken = sessionStorage.getItem('ropdolgozat_token');
     if (savedToken) {
       const restored = await tryRestoreSession(savedToken);
       if (restored) return;
     }
 
-    // 6. Tantárgyak és osztályok betöltése az 1. fázishoz
+    // 7. Tantárgyak és osztályok betöltése az 1. fázishoz
     await loadSubjects();
     await loadClasses();
   }

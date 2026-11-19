@@ -191,6 +191,7 @@ A szaktanterem 42 tanulói számítógépén készíts egy asztali parancsikont 
 ### 4.2. Tanári vezérlő és kivetítő monitor elérése
 A tanár a tantermi gépről vagy laptopról bármelyik böngészőből eléri a felületeket:
 * **Privát Tanári Vezérlőpult:** `http://<szerver_ip>:3000/admin` *(PIN: `admin123`)*
+* **Tanári Munkaállomás kényelmi parancsikon:** `http://<szerver_ip>:3000/?gep=tanar` *(automatikusan felkínálja a PIN-t vagy átirányít az adminba)*
 * **Tantermi Kivetítő (Projektor):** `http://<szerver_ip>:3000/projector`
 
 ---
