@@ -16,7 +16,13 @@ if (testSessionIds.length > 0) {
   db.prepare(`DELETE FROM participants WHERE session_id IN (${placeholders})`).run(...testSessionIds);
   db.prepare(`DELETE FROM sessions WHERE id IN (${placeholders})`).run(...testSessionIds);
 }
-const sampleStudents = db.prepare('SELECT id, student_name FROM students LIMIT 2').all();
+let sampleStudents = db.prepare('SELECT id, student_name FROM students LIMIT 2').all();
+if (sampleStudents.length < 2) {
+  const insertStudent = db.prepare("INSERT INTO students (class_name, student_name) VALUES ('9.z', ?)");
+  insertStudent.run('Teszt Diák 1');
+  insertStudent.run('Teszt Diák 2');
+  sampleStudents = db.prepare("SELECT id, student_name FROM students WHERE class_name = '9.z' LIMIT 2").all();
+}
 
 // 1. TESZT: Socrative PDF válaszillesztés és grader kompatibilitás (37. pont)
 console.log('--- 1. TESZT: Grader betűjel és szöveg kompatibilitás (37. pont) ---');
@@ -586,6 +592,131 @@ try {
 }
 assert.strictEqual(noKeyBlocked, true, 'Üres megoldókulcsos feladattal sikerült dolgozatot indítani!');
 console.log('✓ A hiányzó / bizonytalan megoldókulcsú kvíz indítását a szerver biztonságosan megakadályozza');
+
+// 18. TESZT: Sablon szerkesztése futó dolgozat alatt (Report 16 / 2. fejezet)
+console.log('\n--- 18. TESZT: Sablon szerkesztése futó dolgozat alatt (Report 16 / 2. fejezet) ---');
+const liveEditQuiz = quizRepo.createQuiz({
+  subject_id: 1,
+  title: 'Futás közben szerkesztett kvíz',
+  subject_grade: '6',
+  questions: [
+    {
+      question_order: 1,
+      question_type: 'ABCD',
+      question_text: '2+2',
+      options: ['4', '5'],
+      correct_answer: '4',
+      points: 2.0
+    }
+  ]
+});
+
+const liveEditSession = sessionRepo.startSession({
+  subject_id: 1,
+  grade_level: '91',
+  quiz_id: liveEditQuiz.id,
+  class_name: '6.d',
+  mode: 'STUDENT_PACED'
+});
+
+// Diák csatlakozik
+const studentJoin = sessionRepo.joinSession({
+  session_id: liveEditSession.id,
+  student_id: sampleStudents[0].id,
+  student_name: sampleStudents[0].student_name,
+  pc_number: 10
+});
+
+// A tanár a háttérben a tesztszerkesztőben átírja a sablont (questions tábla): 2+3, kulcs: 5, pont: 1.0!
+const liveQ = db.prepare('SELECT id FROM questions WHERE quiz_id = ?').get(liveEditQuiz.id);
+db.prepare("UPDATE questions SET question_text = '2+3', correct_answer = '5', points = 1.0 WHERE id = ?").run(liveQ.id);
+
+// A diák beküldi a nála látható eredeti helyes választ: "4"
+const studentAnswerRes = sessionRepo.submitAnswer({
+  participant_id: studentJoin.participant.id,
+  question_id: liveQ.id,
+  submitted_answer: '4',
+  time_spent_sec: 15
+});
+
+assert.strictEqual(studentAnswerRes.answer.eval_status, 'CORRECT', 'A sablon módosítása miatt a diák helyes válasza hibásnak minősült!');
+assert.strictEqual(studentAnswerRes.answer.points_earned, 2.0, 'A diák nem a rögzített snapshot szerinti pontszámot (2.0) kapta!');
+console.log('✓ Futó dolgozat alatti sablonmódosítás (szöveg, kulcs, pont) nem zavarja meg a dolgozatkori snapshot értékelését');
+
+// 19. TESZT: Space Race üres teremből indított közös rajt és explicit UTC ISO határidő (Report 16 / 3. fejezet)
+console.log('\n--- 19. TESZT: Space Race üres rajt és határidő konzisztencia (Report 16 / 3. fejezet) ---');
+const spaceIsoQuiz = quizRepo.createQuiz({
+  subject_id: 1,
+  title: 'Space Race ISO Teszt',
+  subject_grade: '6',
+  questions: [{ question_order: 1, question_type: 'ABCD', question_text: 'Q1', options: ['A', 'B'], correct_answer: 'A', points: 1 }]
+});
+
+const spaceIsoSession = sessionRepo.startSession({
+  subject_id: 1,
+  grade_level: '90',
+  quiz_id: spaceIsoQuiz.id,
+  class_name: '6.e',
+  mode: 'SPACE_RACE',
+  time_limit_min: 10
+});
+
+// Üres teremből rajtolunk
+sessionRepo.startRace(spaceIsoSession.id);
+
+// Késve csatlakozik az első diák
+const lateStudent1 = sessionRepo.joinSession({
+  session_id: spaceIsoSession.id,
+  student_id: sampleStudents[0].id,
+  student_name: sampleStudents[0].student_name,
+  pc_number: 11,
+  team_color: 'Kék'
+});
+
+assert.ok(lateStudent1.participant.deadline_at, 'Nincs határidő!');
+const remainingMs = new Date(lateStudent1.participant.deadline_at).getTime() - Date.now();
+const remainingSec = Math.round(remainingMs / 1000);
+assert.ok(remainingSec > 580 && remainingSec <= 600, `A hátralévő idő hibás: ${remainingSec} mp (nem 10 perc körüli, 0 mp hiba)!`);
+
+// Második diák csatlakozik kicsit később
+const lateStudent2 = sessionRepo.joinSession({
+  session_id: spaceIsoSession.id,
+  student_id: sampleStudents[1].id,
+  student_name: sampleStudents[1].student_name,
+  pc_number: 12,
+  team_color: 'Piros'
+});
+
+assert.strictEqual(lateStudent2.participant.deadline_at, lateStudent1.participant.deadline_at, 'A két késői diák határideje eltér!');
+console.log(`✓ Space Race üres rajt után a késői diák pontos hátralévő időt kap (${remainingSec} mp), a csapattagok határideje bájtra egyezik`);
+
+// 20. TESZT: Sablon törlése lezárt dolgozat mellett (archívumvédelem és soft-delete) (Report 16 / 2.2)
+console.log('\n--- 20. TESZT: Sablon törlése lezárt dolgozat mellett (Report 16 / 2.2) ---');
+// Lezárjuk a liveEditSession dolgozatot
+sessionRepo.finishSession(liveEditSession.id);
+
+// Tanár törli a kvízt a Tesztszerkesztőben
+const deleteQuizRes = quizRepo.deleteQuiz(liveEditQuiz.id);
+assert.strictEqual(deleteQuizRes, true);
+
+// Ellenőrizzük, hogy a lezárt dolgozat megmaradt az archívumban
+const archivedSession = sessionRepo.getSessionById(liveEditSession.id);
+assert.ok(archivedSession, 'A lezárt dolgozat törlődött a kvíz törlésével!');
+const archivedAnswers = db.prepare('SELECT COUNT(*) AS cnt FROM answers WHERE session_id = ?').get(liveEditSession.id).cnt;
+assert.strictEqual(archivedAnswers, 1, 'A lezárt dolgozat diákválaszai elvesztek!');
+
+// Ellenőrizzük, hogy a kvíz nem jelenik meg az aktív tesztek listájában
+const activeQuizzes = quizRepo.getQuizzes(1, '6');
+const foundDeleted = activeQuizzes.find(q => q.id === liveEditQuiz.id);
+assert.strictEqual(foundDeleted, undefined, 'A törölt sablon még mindig megjelenik a listában!');
+console.log('✓ A sablon törlése a lezárt dolgozatokat, diákválaszokat és az archívumot épen hagyja (soft-delete)');
+
+// Takarítás a tesztadatok után
+sessionRepo.deleteSession(liveEditSession.id);
+db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(liveEditQuiz.id);
+db.prepare('DELETE FROM quizzes WHERE id = ?').run(liveEditQuiz.id);
+sessionRepo.deleteSession(spaceIsoSession.id);
+quizRepo.deleteQuiz(spaceIsoQuiz.id);
 
 // Takarítás a tesztadatok után
 sessionRepo.deleteSession(snapSession.id);

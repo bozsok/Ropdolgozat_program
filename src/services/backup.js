@@ -144,17 +144,25 @@ function restoreSystemBackup(zipFilePath) {
       testDb.close();
     }
 
-    // 4. Jelenlegi adatbázis WAL ürítése és biztonsági snapshot készítése (.bak)
+    // 4. Jelenlegi adatbázis és uploads képek biztonsági snapshotjának elkészítése (.bak és _uploads_bak)
     try {
       db.pragma('wal_checkpoint(TRUNCATE)');
     } catch (e) {
       console.warn('Figyelmeztetés a WAL checkpoint során mentés előtt:', e.message);
     }
     const backupDbPath = config.dbPath + '.bak';
-    let backupCreated = false;
+    let backupDbCreated = false;
     if (fs.existsSync(config.dbPath)) {
       fs.copyFileSync(config.dbPath, backupDbPath);
-      backupCreated = true;
+      backupDbCreated = true;
+    }
+
+    const backupUploadsDir = path.join(path.dirname(config.uploadsDir), '_uploads_restore_bak_' + Date.now());
+    let backupUploadsCreated = false;
+    if (fs.existsSync(config.uploadsDir)) {
+      fs.mkdirSync(backupUploadsDir, { recursive: true });
+      copyRecursiveSync(config.uploadsDir, backupUploadsDir);
+      backupUploadsCreated = true;
     }
 
     try {
@@ -183,9 +191,9 @@ function restoreSystemBackup(zipFilePath) {
 
       return { success: true };
     } catch (restoreErr) {
-      // Automatikus visszagörgetés a biztonsági másolatra (.bak rollback - Report 14 / 42.)
-      console.error('Hiba a restore végrehajtása közben, automatikus visszagörgetés a .bak másolatra:', restoreErr.message);
-      if (backupCreated && fs.existsSync(backupDbPath)) {
+      // Automatikus atomi visszagörgetés mindkét komponensre (Adatbázis + Képek - Report 16 / 4. fejezet)
+      console.error('Hiba a restore végrehajtása közben, atomi visszagörgetés az eredeti állapotra:', restoreErr.message);
+      if (backupDbCreated && fs.existsSync(backupDbPath)) {
         try {
           fs.copyFileSync(backupDbPath, config.dbPath);
           const walPath = config.dbPath + '-wal';
@@ -194,10 +202,32 @@ function restoreSystemBackup(zipFilePath) {
           if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
         } catch {}
       }
+      if (backupUploadsCreated && fs.existsSync(backupUploadsDir)) {
+        try {
+          if (fs.existsSync(config.uploadsDir)) {
+            fs.rmSync(config.uploadsDir, { recursive: true, force: true });
+          }
+          fs.mkdirSync(config.uploadsDir, { recursive: true });
+          copyRecursiveSync(backupUploadsDir, config.uploadsDir);
+        } catch (uErr) {
+          console.error('Hiba a képek visszagörgetésekor:', uErr);
+        }
+      }
       try {
         db.__reopen();
       } catch {}
-      throw new Error(`A rendszer-visszaállítás meghiúsult, az eredeti állapot sikeresen visszaállítva: ${restoreErr.message}`);
+      throw new Error(`A rendszer-visszaállítás meghiúsult, az eredeti állapot (adatbázis és feltöltött képek) sikeresen visszaállítva: ${restoreErr.message}`);
+    } finally {
+      if (backupUploadsCreated && fs.existsSync(backupUploadsDir)) {
+        try {
+          fs.rmSync(backupUploadsDir, { recursive: true, force: true });
+        } catch {}
+      }
+      if (backupDbCreated && fs.existsSync(backupDbPath)) {
+        try {
+          fs.unlinkSync(backupDbPath);
+        } catch {}
+      }
     }
   } finally {
     try {

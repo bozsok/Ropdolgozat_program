@@ -413,7 +413,8 @@ function parseSocrativePdf(pdfBuffer) {
           question_type: isTF ? 'TF' : 'ABCD',
           points: 1,
           options: isTF ? ['Igaz', 'Hamis'] : opts.map(o => o.text),
-          correct_answer: isTF ? 'Igaz' : (opts[0] ? opts[0].text : 'A'), // Alapértelmezett, tanár egy kattintással ellenőrizheti
+          correct_answer: '', // Kulcs nélküli diák PDF esetén nincs megoldókulcs, tanári kitöltést igényel (Report 16 / 5. fejezet)
+          needs_review: true,
           imageBuffer: matchedImage ? matchedImage.pngBuffer : null
         });
       }

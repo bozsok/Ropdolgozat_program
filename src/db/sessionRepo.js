@@ -5,6 +5,25 @@ const settingsRepo = require('./settingsRepo');
 const quizRepo = require('./quizRepo');
 
 /**
+ * Dátum string normalizálása és értelmezése explicit UTC-ként
+ * Megelőzi az SQLite CURRENT_TIMESTAMP (YYYY-MM-DD HH:mm:ss) helyi időzónás félreértelmezését a Node.js-ben (Report 16 / 3. fejezet)
+ */
+function parseUtcDate(dateStr) {
+  if (!dateStr) return new Date();
+  if (dateStr instanceof Date) return dateStr;
+  if (typeof dateStr !== 'string') return new Date(dateStr);
+  let s = dateStr.trim();
+  if (!s.includes('T')) {
+    s = s.replace(' ', 'T');
+  }
+  if (!s.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(s)) {
+    s += 'Z';
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? new Date(dateStr) : d;
+}
+
+/**
  * sessionRepo.js - Órai dolgozatok (sessions), résztvevők és válaszok adatbázis műveletei
  */
 
@@ -447,14 +466,28 @@ function joinSession({ session_id, student_id, student_name, pc_number = null, t
   // ÚJ RÉSZTVEVŐ REGISZTRÁCIÓJA
   const sessionToken = crypto.randomBytes(16).toString('hex');
 
-  // Kérdések sorrendjének generálása (Shuffle kezelése)
-  const questions = db.prepare(`
-    SELECT id FROM questions 
-    WHERE quiz_id = ? AND question_order < 100000
-    ORDER BY question_order ASC
-  `).all(session.quiz_id);
+  // Kérdések sorrendjének generálása a rögzített dolgozatkori pillanatképből (Report 16 / 2. fejezet)
+  let questionIds = [];
+  if (session.quiz_snapshot_json) {
+    try {
+      const snap = JSON.parse(session.quiz_snapshot_json);
+      if (Array.isArray(snap.questions) && snap.questions.length > 0) {
+        questionIds = snap.questions.map(q => q.id);
+      }
+    } catch (err) {
+      console.warn('Hiba a snapshot kérdések betöltésekor joinSession-ben:', err);
+    }
+  }
 
-  let questionIds = questions.map(q => q.id);
+  if (questionIds.length === 0) {
+    const questions = db.prepare(`
+      SELECT id FROM questions 
+      WHERE quiz_id = ? AND question_order < 100000
+      ORDER BY question_order ASC
+    `).all(session.quiz_id);
+    questionIds = questions.map(q => q.id);
+  }
+
   if (session.shuffle_questions === 1) {
     // Fisher-Yates keverés
     for (let i = questionIds.length - 1; i > 0; i--) {
@@ -480,10 +513,10 @@ function joinSession({ session_id, student_id, student_name, pc_number = null, t
         if (existingDeadline && existingDeadline.deadline_at) {
           deadlineAt = existingDeadline.deadline_at;
         } else {
-          // Ha rajtkor üres volt a terem, a session rajtjának idejétől (started_at) számolunk (Report 15 / 1. fejezet)
-          const raceStartMs = session.started_at ? new Date(session.started_at).getTime() : Date.now();
+          // Ha rajtkor üres volt a terem, a session rajtjának explicit UTC idejétől számolunk (Report 16 / 3. fejezet)
+          const raceStartMs = session.started_at ? parseUtcDate(session.started_at).getTime() : Date.now();
           const targetDeadlineMs = raceStartMs + (session.time_limit_min * 60 * 1000);
-          deadlineAt = new Date(Math.max(Date.now(), targetDeadlineMs)).toISOString();
+          deadlineAt = new Date(targetDeadlineMs).toISOString();
         }
       }
     } else {
@@ -680,7 +713,7 @@ function submitAnswer({
 
   // 0. Határidő és alapállapot ellenőrzése a tranzakción kívül (hogy lejáratkor a befejezés tartósan megmaradjon!)
   const preCheck = db.prepare(`
-    SELECT p.id, p.is_finished, p.deadline_at, s.status AS session_status, s.mode AS session_mode, s.current_question_index
+    SELECT p.id, p.is_finished, p.deadline_at, s.status AS session_status, s.mode AS session_mode, s.current_question_index, s.quiz_snapshot_json, s.quiz_id
     FROM participants p
     JOIN sessions s ON s.id = p.session_id
     WHERE p.id = ?
@@ -695,13 +728,29 @@ function submitAnswer({
   `).get(participant_id, question_id);
 
   if (existingAnswer) {
-    const qInfo = db.prepare('SELECT correct_answer, explanation FROM questions WHERE id = ?').get(question_id);
+    let qCorrect = null;
+    let qExp = null;
+    if (preCheck.quiz_snapshot_json) {
+      try {
+        const snap = JSON.parse(preCheck.quiz_snapshot_json);
+        const found = (snap.questions || []).find(q => String(q.id) === String(question_id));
+        if (found) {
+          qCorrect = found.correct_answer;
+          qExp = found.explanation;
+        }
+      } catch {}
+    }
+    if (qCorrect === null) {
+      const qInfo = db.prepare('SELECT correct_answer, explanation FROM questions WHERE id = ?').get(question_id);
+      qCorrect = qInfo ? qInfo.correct_answer : null;
+      qExp = qInfo ? qInfo.explanation : null;
+    }
     return {
       alreadySubmitted: true,
       answer: existingAnswer,
       isFinished: preCheck.is_finished === 1,
-      correctAnswer: qInfo ? qInfo.correct_answer : null,
-      explanation: qInfo ? qInfo.explanation : null
+      correctAnswer: qCorrect,
+      explanation: qExp
     };
   }
 
@@ -730,7 +779,7 @@ function submitAnswer({
     const participant = db.prepare(`
       SELECT 
         p.id, p.session_id, p.is_finished, p.deadline_at,
-        s.status AS session_status, s.quiz_id
+        s.status AS session_status, s.quiz_id, s.quiz_snapshot_json
       FROM participants p
       JOIN sessions s ON s.id = p.session_id
       WHERE p.id = ?
@@ -745,13 +794,29 @@ function submitAnswer({
     `).get(participant_id, question_id);
 
     if (existingAnswer) {
-      const qInfo = db.prepare('SELECT correct_answer, explanation FROM questions WHERE id = ?').get(question_id);
+      let qCorrect = null;
+      let qExp = null;
+      if (participant.quiz_snapshot_json) {
+        try {
+          const snap = JSON.parse(participant.quiz_snapshot_json);
+          const found = (snap.questions || []).find(q => String(q.id) === String(question_id));
+          if (found) {
+            qCorrect = found.correct_answer;
+            qExp = found.explanation;
+          }
+        } catch {}
+      }
+      if (qCorrect === null) {
+        const qInfo = db.prepare('SELECT correct_answer, explanation FROM questions WHERE id = ?').get(question_id);
+        qCorrect = qInfo ? qInfo.correct_answer : null;
+        qExp = qInfo ? qInfo.explanation : null;
+      }
       result = {
         alreadySubmitted: true,
         answer: existingAnswer,
         isFinished: participant.is_finished === 1,
-        correctAnswer: qInfo ? qInfo.correct_answer : null,
-        explanation: qInfo ? qInfo.explanation : null
+        correctAnswer: qCorrect,
+        explanation: qExp
       };
       return;
     }
@@ -761,12 +826,38 @@ function submitAnswer({
       throw new Error('A dolgozat már befejeződött, új válasz nem küldhető be!');
     }
 
-    // 4. Kérdés adatainak lekérése
-    const question = db.prepare(`
-      SELECT id, quiz_id, question_type, options_json, correct_answer, explanation, points
-      FROM questions
-      WHERE id = ? AND quiz_id = ?
-    `).get(question_id, participant.quiz_id);
+    // 4. Kérdés adatainak lekérése a rögzített pillanatképből (Report 16 / 2. fejezet)
+    let question = null;
+    let totalQuestionsCount = 0;
+    if (participant.quiz_snapshot_json) {
+      try {
+        const snap = JSON.parse(participant.quiz_snapshot_json);
+        const qList = snap.questions || [];
+        totalQuestionsCount = qList.length;
+        const found = qList.find(q => String(q.id) === String(question_id));
+        if (found) {
+          question = {
+            id: found.id,
+            quiz_id: participant.quiz_id,
+            question_type: found.question_type,
+            options_json: typeof found.options === 'string' ? found.options : JSON.stringify(found.options || []),
+            correct_answer: found.correct_answer,
+            explanation: found.explanation || '',
+            points: Number(found.points !== undefined ? found.points : 1)
+          };
+        }
+      } catch (err) {
+        console.warn('Hiba a snapshot kérdés lekérésekor submitAnswer-ben:', err);
+      }
+    }
+
+    if (!question) {
+      question = db.prepare(`
+        SELECT id, quiz_id, question_type, options_json, correct_answer, explanation, points
+        FROM questions
+        WHERE id = ? AND quiz_id = ?
+      `).get(question_id, participant.quiz_id);
+    }
 
     if (!question) {
       throw new Error('A kérdés nem található a dolgozat tesztjében!');
@@ -779,7 +870,7 @@ function submitAnswer({
       parsedOptions = [];
     }
 
-    // 5. Gépi kiértékelés (grader)
+    // 5. Gépi kiértékelés (grader) a pillanatfelvétel alapján
     const evaluation = grader.evaluateAnswer(
       question.question_type,
       submitted_answer,
@@ -815,8 +906,11 @@ function submitAnswer({
 
     const savedAnswer = db.prepare('SELECT * FROM answers WHERE id = ?').get(insertRes.lastInsertRowid);
 
-    // 7. Ellenőrizzük, hogy válaszolt-e az összes kérdésre
-    const totalQuestions = db.prepare('SELECT COUNT(*) as cnt FROM questions WHERE quiz_id = ? AND question_order < 100000').get(participant.quiz_id).cnt;
+    // 7. Ellenőrizzük, hogy válaszolt-e az összes kérdésre a snapshot szerint
+    let totalQuestions = totalQuestionsCount;
+    if (totalQuestions <= 0) {
+      totalQuestions = db.prepare('SELECT COUNT(*) as cnt FROM questions WHERE quiz_id = ? AND question_order < 100000').get(participant.quiz_id).cnt;
+    }
     const answeredCount = db.prepare('SELECT COUNT(*) as cnt FROM answers WHERE participant_id = ?').get(participant.id).cnt;
 
     let isNowFinished = false;
@@ -856,9 +950,9 @@ function overrideAnswer({
   }
 
   const answer = db.prepare(`
-    SELECT a.*, q.points AS max_points, s.status AS session_status
+    SELECT a.*, q.points AS db_max_points, s.status AS session_status, s.quiz_snapshot_json
     FROM answers a
-    JOIN questions q ON q.id = a.question_id
+    LEFT JOIN questions q ON q.id = a.question_id
     JOIN sessions s ON s.id = a.session_id
     WHERE a.id = ?
   `).get(answer_id);
@@ -867,6 +961,17 @@ function overrideAnswer({
 
   if (answer.session_status === 'FINISHED') {
     throw new Error('Lezárt dolgozatban a válaszok és pontszámok utólag nem módosíthatók!');
+  }
+
+  let maxPoints = answer.db_max_points !== null && answer.db_max_points !== undefined ? Number(answer.db_max_points) : 1;
+  if (answer.quiz_snapshot_json) {
+    try {
+      const snap = JSON.parse(answer.quiz_snapshot_json);
+      const found = (snap.questions || []).find(q => String(q.id) === String(answer.question_id));
+      if (found && found.points !== undefined) {
+        maxPoints = Number(found.points);
+      }
+    } catch {}
   }
 
   // Pontszám kiszámítása a státusz alapján (ha nincs egyedi pont megadva)
@@ -881,8 +986,8 @@ function overrideAnswer({
     if (numPoints < 0) {
       throw new Error('A megadott pontszám nem lehet negatív!');
     }
-    if (numPoints > Number(answer.max_points)) {
-      throw new Error(`A megadott pontszám (${numPoints} pont) meghaladja a kérdés maximális pontértékét (${answer.max_points} pont)!`);
+    if (numPoints > maxPoints) {
+      throw new Error(`A megadott pontszám (${numPoints} pont) meghaladja a kérdés maximális pontértékét (${maxPoints} pont)!`);
     }
     if (eval_status === 'PARTIAL' && numPoints === 0) {
       throw new Error('Részpontszám (PARTIAL) esetén a pontszámnak nagyobbnak kell lennie 0-nál!');
@@ -1054,8 +1159,9 @@ function startRace(sessionId) {
   }
 
   const now = new Date();
+  const nowIso = now.toISOString();
   const tx = db.transaction(() => {
-    db.prepare('UPDATE sessions SET current_question_index = 1, started_at = CURRENT_TIMESTAMP WHERE id = ?').run(sessionId);
+    db.prepare('UPDATE sessions SET current_question_index = 1, started_at = ? WHERE id = ?').run(nowIso, sessionId);
 
     // Ha van időkorlát, az egyéni visszaszámlálót a közös rajt pillanatától indítjuk a már bent lévő diákoknak
     if (session.time_limit_min > 0) {
@@ -1070,7 +1176,7 @@ function startRace(sessionId) {
   });
 
   tx();
-  return { ...session, current_question_index: 1 };
+  return { ...session, current_question_index: 1, started_at: nowIso };
 }
 
 /**

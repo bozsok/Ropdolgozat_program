@@ -291,7 +291,7 @@
         socket.emit('student:get_occupied', { className: selectedClass });
       }
       if (activeSession && sessionToken) {
-        socket.emit('join:session', { sessionId: activeSession.id, role: 'student' });
+        socket.emit('join:session', { sessionId: activeSession.id, role: 'student', token: sessionToken });
       }
     });
   }
@@ -965,9 +965,9 @@
       sessionToken = data.token;
       sessionStorage.setItem('ropdolgozat_token', sessionToken);
 
-      // Socket szobához csatlakozás
+      // Socket szobához csatlakozás hitelesítő tokennel
       if (socket) {
-        socket.emit('join:session', { sessionId: activeSession.id, role: 'student' });
+        socket.emit('join:session', { sessionId: activeSession.id, role: 'student', token: sessionToken });
       }
 
       // Megválaszolt kérdések eltárolása (ha volt)
@@ -989,7 +989,7 @@
    */
   async function tryRestoreSession(token) {
     try {
-      const res = await fetch(`/api/student/session-data?token=${encodeURIComponent(token)}`, {
+      const res = await fetch('/api/student/session-data', {
         headers: { 'x-session-token': token }
       });
       if (!res.ok) {
@@ -1006,7 +1006,7 @@
       };
 
       if (socket) {
-        socket.emit('join:session', { sessionId: activeSession.id, role: 'student' });
+        socket.emit('join:session', { sessionId: activeSession.id, role: 'student', token: sessionToken });
       }
 
       if (data.participant.is_finished === 1) {
@@ -1039,7 +1039,7 @@
   async function startQuizInterface(cachedData = null) {
     let data = cachedData;
     if (!data) {
-      const res = await fetch(`/api/student/session-data?token=${encodeURIComponent(sessionToken)}`, {
+      const res = await fetch('/api/student/session-data', {
         headers: { 'x-session-token': sessionToken }
       });
       data = await res.json();
@@ -1543,7 +1543,7 @@
 
     let summaryData = null;
     try {
-      const res = await fetch(`/api/student/session-data?token=${encodeURIComponent(sessionToken)}`, {
+      const res = await fetch('/api/student/session-data', {
         headers: { 'x-session-token': sessionToken }
       });
       if (res.ok) {

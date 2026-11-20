@@ -607,10 +607,23 @@ router.get('/sessions/active-by-channel', (req, res) => {
 router.post('/admin/sessions/start', requireAdminAuth, (req, res) => {
   try {
     const session = sessionRepo.startSession(req.body);
-    // Socket.io értesítés küldése
+    // Socket.io értesítés küldése KIZÁRÓLAG nyilvános metaadatokkal (Report 16 / 1.1 - megoldókulcs és pillanatkép-szivárgás ellen)
     const io = req.app.get('io');
     if (io) {
-      io.emit('session:started', session);
+      const publicSession = {
+        id: session.id,
+        subject_id: session.subject_id,
+        subject_name: session.subject_name,
+        grade_level: session.grade_level,
+        quiz_id: session.quiz_id,
+        quiz_title: session.quiz_title,
+        class_name: session.class_name,
+        mode: session.mode,
+        status: session.status,
+        time_limit_min: session.time_limit_min,
+        started_at: session.started_at
+      };
+      io.emit('session:started', publicSession);
       io.emit('badges:updated', sessionRepo.getActiveSessions());
     }
     res.json({ success: true, session });
@@ -943,7 +956,7 @@ router.post('/student/join', (req, res) => {
 // Diák felület adatainak lekérése (SZIGORÚAN correct_answer és explanation NÉLKÜL!)
 router.get('/student/session-data', (req, res) => {
   try {
-    const token = req.query.token || req.headers['x-session-token'];
+    const token = req.headers['x-session-token'] || req.query.token;
     if (!token) {
       return res.status(401).json({ error: 'Munkamenet token hiányzik!' });
     }

@@ -72,9 +72,13 @@ function initializeDatabase() {
       if (!hasFolderId) {
         db.prepare('ALTER TABLE quizzes ADD COLUMN folder_id INTEGER DEFAULT NULL REFERENCES quiz_folders(id) ON DELETE SET NULL').run();
       }
+      const hasIsDeleted = quizColumns.some(c => c.name === 'is_deleted');
+      if (!hasIsDeleted) {
+        db.prepare('ALTER TABLE quizzes ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0').run();
+      }
     }
   } catch (err) {
-    console.error('Hiba a quizzes.folder_id migrációjakor:', err);
+    console.error('Hiba a quizzes.folder_id / is_deleted migrációjakor:', err);
   }
 
   // 2. Migráció: sessions.max_points és quiz_snapshot_json a történeti jegymegőrzéshez (Report 14 & Report 15)
@@ -154,6 +158,9 @@ function initializeDatabase() {
   try {
     db.exec('DROP TRIGGER IF EXISTS trg_prevent_finished_participant_update;');
     db.exec('DROP TRIGGER IF EXISTS trg_prevent_finished_session_update;');
+    db.exec('DROP TRIGGER IF EXISTS trg_validate_answer_question;');
+    db.exec('DROP TRIGGER IF EXISTS trg_validate_answer_points_limit;');
+    db.exec('DROP TRIGGER IF EXISTS trg_validate_answer_points_limit_update;');
   } catch {
     // Ha nem létezik, folytatás
   }

@@ -17,7 +17,7 @@ function getAdminTokenFromSocket(socket) {
 function initLiveHandler(io) {
   io.on('connection', (socket) => {
     // Feliratkozás egy adott órai dolgozat szobájára (elkülönített tanári, kivetítői és diák szoba - Report 15 / 1. fejezet)
-    socket.on('join:session', ({ sessionId, role = 'student' }) => {
+    socket.on('join:session', ({ sessionId, role = 'student', token }) => {
       if (!sessionId) return;
       if (role === 'teacher') {
         const adminToken = getAdminTokenFromSocket(socket);
@@ -46,6 +46,17 @@ function initLiveHandler(io) {
           console.error('Hiba a kivetítő adatok küldésekor:', err.message);
         }
       } else {
+        // Diák szobához csatlakozás: token ellenőrzése az adott dolgozathoz (Report 16 / 1.2)
+        if (token) {
+          try {
+            const participant = sessionRepo.getParticipantByToken(token);
+            if (participant && String(participant.session_id) === String(sessionId)) {
+              socket.join(`session_${sessionId}_student`);
+              socket.join(`participant_${participant.id}`);
+              return;
+            }
+          } catch {}
+        }
         socket.join(`session_${sessionId}_student`);
       }
     });

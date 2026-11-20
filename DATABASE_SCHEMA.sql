@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS quizzes (
     title TEXT NOT NULL,                        -- A teszt címe (pl. "6. osztály - Hálózatok alapjai")
     subject_grade TEXT DEFAULT '',              -- Évfolyam / kategória (pl. "6. évfolyam")
     default_time_limit_min INTEGER DEFAULT 0,   -- Alapértelmezett időkorlát percben (0 = nincs korlát)
+    is_deleted INTEGER NOT NULL DEFAULT 0 CHECK(is_deleted IN (0, 1)), -- Soft-delete sablonmegőrzéshez (Report 16 / 2. fejezet)
     locked_at DATETIME DEFAULT NULL,            -- Zárolás UTC időpontja (első indításkor automatikusan kitöltődik)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -186,7 +187,8 @@ CREATE TRIGGER IF NOT EXISTS trg_validate_answer_question
 BEFORE INSERT ON answers
 BEGIN
     SELECT CASE
-        WHEN NOT EXISTS (
+        WHEN (SELECT quiz_snapshot_json FROM sessions WHERE id = NEW.session_id) IS NULL
+         AND NOT EXISTS (
             SELECT 1 FROM questions q 
             JOIN sessions s ON s.quiz_id = q.quiz_id 
             WHERE s.id = NEW.session_id AND q.id = NEW.question_id
@@ -287,7 +289,8 @@ CREATE TRIGGER IF NOT EXISTS trg_validate_answer_points_limit
 BEFORE INSERT ON answers
 BEGIN
     SELECT CASE
-        WHEN NEW.points_earned > (SELECT points FROM questions WHERE id = NEW.question_id)
+        WHEN (SELECT quiz_snapshot_json FROM sessions WHERE id = NEW.session_id) IS NULL
+         AND NEW.points_earned > (SELECT points FROM questions WHERE id = NEW.question_id)
         THEN RAISE(ABORT, 'A kapott pontszám nem haladhatja meg a kérdés maximális pontértékét!')
     END;
 END;
@@ -297,7 +300,8 @@ CREATE TRIGGER IF NOT EXISTS trg_validate_answer_points_limit_update
 BEFORE UPDATE OF points_earned ON answers
 BEGIN
     SELECT CASE
-        WHEN NEW.points_earned > (SELECT points FROM questions WHERE id = NEW.question_id)
+        WHEN (SELECT quiz_snapshot_json FROM sessions WHERE id = NEW.session_id) IS NULL
+         AND NEW.points_earned > (SELECT points FROM questions WHERE id = NEW.question_id)
         THEN RAISE(ABORT, 'A felülbírált pontszám nem haladhatja meg a kérdés maximális pontértékét!')
     END;
 END;

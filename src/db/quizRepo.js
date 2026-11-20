@@ -39,7 +39,7 @@ function getQuizzes(subjectId = null, gradeLevel = null, folderId = undefined) {
     JOIN subjects s ON s.id = q.subject_id
     LEFT JOIN quiz_folders f ON f.id = q.folder_id
     LEFT JOIN questions qst ON qst.quiz_id = q.id
-    WHERE 1=1
+    WHERE COALESCE(q.is_deleted, 0) = 0
   `;
   const params = [];
 
@@ -661,16 +661,29 @@ function mergeQuizzes(quizId1, quizId2, options = {}) {
 }
 
 /**
- * Teszt törlése (kérdésekkel és esetleges kapcsolódó munkamenetekkel együtt)
+ * Teszt törlése (kérdésekkel, a lezárt dolgozatok előzményeinek megőrzésével - Report 16 / 2. fejezet)
  */
 function deleteQuiz(quizId) {
+  const activeCount = db.prepare("SELECT COUNT(*) AS cnt FROM sessions WHERE quiz_id = ? AND status = 'ACTIVE'").get(quizId).cnt;
+  if (activeCount > 0) {
+    throw new Error('A teszt nem törölhető, mert jelenleg aktív dolgozat fut belőle! Előbb zárd le a dolgozatot.');
+  }
+
+  const finishedCount = db.prepare("SELECT COUNT(*) AS cnt FROM sessions WHERE quiz_id = ? AND status = 'FINISHED'").get(quizId).cnt;
+
+  if (finishedCount > 0) {
+    // Ha van lezárt dolgozat az archívumban, a korábbi eredmények védelmében soft-delete-tel jelöljük töröltnek a sablont!
+    // A kérdéseket nem töröljük, hogy az answers tábla idegen kulcsai (FK RESTRICT) sérülésmentesen megmaradjanak
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE quizzes SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(quizId);
+    });
+    tx();
+    cleanQuizOrphanImages(quizId);
+    return true;
+  }
+
+  // Ha nincs egyetlen korábbi dolgozat sem, a teszt véglegesen törölhető
   const tx = db.transaction(() => {
-    const sessions = db.prepare('SELECT id FROM sessions WHERE quiz_id = ?').all(quizId);
-    for (const s of sessions) {
-      db.prepare('DELETE FROM answers WHERE session_id = ?').run(s.id);
-      db.prepare('DELETE FROM participants WHERE session_id = ?').run(s.id);
-    }
-    db.prepare('DELETE FROM sessions WHERE quiz_id = ?').run(quizId);
     db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(quizId);
     db.prepare('DELETE FROM quizzes WHERE id = ?').run(quizId);
   });

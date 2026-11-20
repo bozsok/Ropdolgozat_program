@@ -4,6 +4,47 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.27.0] – 2026-11-20
+
+### Report 16 megállapítások: Teljes körű dolgozatkori pillanatkép-érvényesítés a pontozásban, globális indítási adatszivárgás megszüntetése, fejléc-alapú diáktoken, Space Race explicit UTC időzítés, archívumvédett sablontörlés és kétoldalú atomi Restore rollback
+
+Kiemelt tantermi adatintegritási, biztonsági és megbízhatósági kiadás a független szakértői felülvizsgálat (Report 16) megállapításainak maradéktalan orvoslására. A dolgozat indításakor a szerver a `session:started` globális eseményből levágja a feladatsor belső pillanatképét (`quiz_snapshot_json`) és a megoldókulcsokat, így a hálózatra kizárólag a nyilvános metaadatok kerülnek ki. A tanulói munkamenet azonosítója kivezetésre került a GET URL query paraméterekből, a kliens kizárólag a védett `x-session-token` kérésfejlécben kommunikál. A dolgozatkori feladat-pillanatkép 100%-osan érvényesül a szerveroldali életciklusban: a kérdéskiosztás (`joinSession`), a gépi pontozás (`submitAnswer`) és a tanári manuális felülbírálás (`overrideAnswer`) kizárólag a dolgozat indításakor rögzített snapshotból olvassa a kérdésszövegeket, opciókat, helyes válaszokat és maximális pontértékeket. Ezzel megszűnt a sablonszerkesztésből fakadó pontozási eltérés kockázata: ha a tanár egy futó dolgozat közben átírja a feladattárban a kérdést vagy a megoldókulcsot, a dolgozatot író tanuló a nála látható kérdés és a dolgozatkori pillanatkép szerint kap hibátlan értékelést. Az SQLite pontplafon és összetartozási triggerek felokosításra kerültek a snapshot támogatására. A Tesztszerkesztő sablontörlése (`deleteQuiz`) szétválasztásra került az archívumtól: lezárt dolgozattal rendelkező kvíz esetén a teszt soft-delete-tel (`is_deleted = 1`) rejtőzik el, megőrizve az archívumban lévő dolgozatokat, diákválaszokat és az illusztrációs képeket. A Space Race üres teremből indított rajtja explicit UTC ISO 8601 időbélyeggel és a `parseUtcDate` normalizálóval rögzül, kizárva a helyi időzónás eltolódást és a 0 másodperces késői belépési hibát. A rendszer-visszaállítás (Restore) kétoldalú biztonsági mentést kapott: adatbázis és feltöltött képek együttes rollbackje szavatolja, hogy meghiúsulás esetén se maradjon vegyes vagy sérült állomány. A Socrative PDF importőr a kulcs nélküli diák PDF ágban is üres kulcsot és kötelező felülvizsgálati jelölést ad, a dolgozatindítás pedig blokkolja a hiányos kvízeket.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Globális indítási adatszivárgás-védelem és fejléc-alapú diák hitelesítés (Report 16 / 1.1 és 1.2):**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`src/sockets/liveHandler.js`](file:///d:/dev/Röpdolgozat%20program/src/sockets/liveHandler.js)
+  - A `POST /admin/sessions/start` végponton a `session:started` eseménybe kizárólag a `publicSession` szűrt objektum kerül, megakadályozva a megoldókulcsok globális kiszivárgását.
+  - A diákfelület a munkamenet-lekérés során a `?token=...` query paramétert elhagyva kizárólag az `x-session-token` HTTP fejlécben továbbítja a tokent.
+  - A diák Socket.IO kapcsolatok `join:session` eseménye szerveroldalon ellenőrzi a token érvényességét a tanulói szobába léptetés előtt.
+
+* **100%-os feladat-pillanatkép érvényesítés és függetlenítés a szerkeszthető sablontól (Report 16 / 2.1):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql), [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js)
+  - A `joinSession` a kérdések azonosítóit és sorrendjét a `session.quiz_snapshot_json`-ból veszi, garantálva, hogy a késve érkező tanuló is a dolgozatkori kérdéssort kapja meg.
+  - A `submitAnswer` mind a kérdés adatait (szöveg, opciók, kulcs, magyarázat, pontérték), mind a teljes kérdésszámot a pillanatképből határozza meg, így a sablon futás alatti módosítása nem befolyásolja a kiértékelést.
+  - Az `overrideAnswer` a snapshotban rögzített kérdés pontértékéhez viszonyítja a felülbírálási maximumot.
+  - A `trg_validate_answer_question`, `trg_validate_answer_points_limit` és `trg_validate_answer_points_limit_update` triggerek a snapshot megléte esetén átadják az ellenőrzést az alkalmazásrétegnek, megelőzve a hamis abort hibákat.
+
+* **Archívumvédett kvíztörlés és soft-delete sablonmegőrzés (Report 16 / 2.2):**
+  - **Fájlok:** [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql), [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js)
+  - A `quizzes` tábla kiegészült az `is_deleted INTEGER NOT NULL DEFAULT 0` oszloppal.
+  - A `deleteQuiz` aktív dolgozat esetén tiltja a teszt törlését. Ha a kvízhez van lezárt dolgozat, a sablon soft-delete-et kap (`is_deleted = 1`), így kikerül a Tesztszerkesztőből, de az archívumban lévő dolgozatok, diákválaszok és illusztrációk maradéktalanul megőrződnek.
+
+* **Space Race közös határidő explicit UTC ISO 8601 időkezeléssel (Report 16 / 3. fejezet):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - A `startRace` explicit `new Date().toISOString()` UTC stringet rögzít a `started_at` mezőben.
+  - A `parseUtcDate` segédfüggvény garantálja, hogy a dátumszövegek UTC-ként legyenek értelmezve, elhárítva a helyi időzónás eltolódást és az üres teremből indított verseny késői csatlakozójának 0 másodperces lejárati anomáliáját.
+
+* **Kétoldalú atomi Restore visszagörgetés adatbázisra és képekre (Report 16 / 4. fejezet):**
+  - **Fájlok:** [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js)
+  - A rendszer-visszaállítás a csere előtt átmeneti biztonsági mentést készít az `uploads` könyvtárról is (`_uploads_restore_bak`). Bármilyen hiba esetén mind az adatbázis (`.bak`), mind a képek automatikusan visszagördülnek az eredeti állapotukba.
+
+* **Socrative PDF import és tiszta regressziós tesztcsomag (Report 16 / 5. és 6. fejezet):**
+  - **Fájlok:** [`src/services/socrativePdfParser.js`](file:///d:/dev/Röpdolgozat%20program/src/services/socrativePdfParser.js), [`scratch/test_report14_fixes.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_report14_fixes.js)
+  - A kulcs nélküli diák PDF ágban is üres kulcs (`correct_answer: ''`) és kötelező felülvizsgálati jelölés (`needs_review: true`) keletkezik.
+  - A tesztcsomag szintetikus tanulókat biztosít üres adatbázis esetén is, és 3 új integrációs teszttel (18., 19., 20.) ellenőrzi a sablonmódosítás függetlenségét, az explicit UTC időzítést és a soft-delete archívumvédelmet.
+
+---
+
 ## [1.26.0] – 2026-11-20
 
 ### Report 15 mélyítés: Dolgozatkori rögzített feladatverzió (Snapshot) és képvédelem, szerveroldali Socket.IO tanári hitelesítés, kivetítői adatszivárgás-védelem, szinkronizált lezárási esemény, 15 perces gépváltási engedélyek, üres termi Space Race közös határidő és atomi Restore sémamigrációval
