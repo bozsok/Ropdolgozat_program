@@ -133,7 +133,22 @@ A javítások helyességét a [`scratch/test_report14_fixes.js`](file:///d:/dev/
 --- 12. TESZT: Elavult temp képfeltöltések takarítása (39. pont) ---
 ✓ Az elavult ideiglenes feltöltések automatikus takarítása sikeresen lefut (39. pont)
 
-🎉 MINDEN REPORT 14 TESZT SIKERESEN LEFUTOTT! (Exit code: 0)
+--- 13. TESZT: Snapshot integritás és képvédelem (Report 15 / 2. fejezet) ---
+✓ A dolgozatkori feladatsor és képek maradéktalanul védettek a kvíz utólagos módosításakor
+
+--- 14. TESZT: Másodlagos kivetítő adatintegritása (Report 15 / 1. fejezet) ---
+✓ A kivetítő aggregált adatai 100%-ban mentesek a diáknevektől és a megoldókulcsoktól
+
+--- 15. TESZT: Space Race közös rajt üres váróval (Report 15 / 1. fejezet) ---
+✓ Üres váróval indított Space Race és késői csatlakozó közös határideje hibátlanul működik
+
+--- 16. TESZT: Gépváltási token 15 perces lejárata (Report 15 / 2. fejezet) ---
+✓ A 15 percen túl lejárt gépváltási engedélyt a rendszer biztonságosan elutasítja
+
+--- 17. TESZT: Üres megoldókulcsos teszt elutasítása (Report 15 / 3. fejezet) ---
+✓ A hiányzó / bizonytalan megoldókulcsú kvíz indítását a szerver biztonságosan megakadályozza
+
+🎉 MINDEN REPORT 14 ÉS REPORT 15 TESZT SIKERESEN LEFUTOTT! (Exit code: 0)
 ```
 
 ---

@@ -4,6 +4,55 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.26.0] – 2026-11-20
+
+### Report 15 mélyítés: Dolgozatkori rögzített feladatverzió (Snapshot) és képvédelem, szerveroldali Socket.IO tanári hitelesítés, kivetítői adatszivárgás-védelem, szinkronizált lezárási esemény, 15 perces gépváltási engedélyek, üres termi Space Race közös határidő és atomi Restore sémamigrációval
+
+Kiemelt tantermi adatintegritási, biztonsági és felügyeleti kiadás a független szakértői audit (Report 15) elmélyítési követelményei alapján. A dolgozat indításakor a rendszer a `sessions.quiz_snapshot_json` mezőbe rögzíti a feladatsor teljes, megváltoztathatatlan állapotát (kérdések szövege, sorrendje, opciói, helyes megoldásai, magyarázatai, pontértékei és képei). Ezzel a dolgozatok történeti integritása véglegesen elválik a dinamikus Tesztszerkesztőtől: a tanár a dolgozat lezárása után szabadon átírhatja a kérdéseket, módosíthatja a pontokat vagy törölhet feladatokat a sablonból, a korábban megírt dolgozatok tanulói nézete, archívuma, valamint az Excel, interaktív HTML, egyéni ZIP és PDF exportjai 100%-ban az eredeti dolgozatkori feladatsort és eredményeket jelenítik meg. Az automatikus képtakarító (`cleanQuizOrphanImages`) védelmet kapott a snapshotokban szereplő képekre, kizárva az archív illusztrációk törlését. A Socket.IO kommunikáció szerveroldali tanári hitelesítéssel egészült ki: a tanári szobához való csatlakozást és a védett műveleteket (`teacher:next_question`, `teacher:kick_participant`) a szerver közvetlenül az aláírt munkamenet-süti alapján ellenőrzi. A másodlagos kivetítő monitor (2. Monitor) külön szobába (`session_${id}_projector`) lép be, és egy dedikált, anonimizált végpontról (`GET /api/sessions/:id/projector-matrix`) kapja az adatokat: a hálózat a kivetítő felé egyetlen diáknevet, tanulói azonosítót, kérdés-megoldókulcsot vagy egyéni diákválaszt sem továbbít. A tanári dolgozatbefejezés (`finishSession`) szinkronizált eseményszórással minden érintett szobába kiküldi a lezárást, azonnal átváltva a diákok képernyőjét az értékelőlapra. A gépváltási engedélyek időbélyeggel ellátott, 15 perces automatikus lejárati időt kaptak. Space Race módban az idempotens rajtütemezés biztosítja, hogy üres termi rajt esetén a késve érkező tanuló is a közös, már ketyegő határidőhöz igazodjon, az ismételt rajtkattintás pedig nem indítja újra az időt. A Socrative PDF importőr a bizonytalan kulcsokat nem fogadja el automatikusan, a dolgozatindítás pedig szigorúan elutasítja a megoldókulcs nélküli tesztek indítását. A rendszer-visszaállítás (Restore) az ideiglenes könyvtárban lefolytatott automatikus sémamigrációval szavatolja a korábbi verziójú mentések zökkenőmentes helyreállítását.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Dolgozatkori rögzített feladatverzió (Snapshot) és képvédelem (Report 15 / 2. fejezet):**
+  - **Fájlok:** [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql), [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - A `sessions` tábla kiegészült a `quiz_snapshot_json TEXT DEFAULT NULL` oszloppal.
+  - A `startSession` a dolgozatindítás pillanatában legenerálja a feladatsor teljes JSON pillanatképét, és rögzíti az adatbázisban.
+  - A `GET /api/student/session-data` és a `getLiveMatrixData` a rögzített snapshotból olvassa a kérdéseket, levágva a megoldókulcsot dolgozatírás közben, és a lezárás után abból állítja elő az egyéni és csoportos értékeléseket.
+  - A `cleanQuizOrphanImages` megkeresi az adott kvízhez tartozó összes `quiz_snapshot_json` rekordot, és megvédi az azokban hivatkozott képeket a törléstől.
+
+* **Szerveroldali Socket.IO tanári hitelesítés és kivetítői adatszivárgás-védelem (Report 15 / 1. fejezet):**
+  - **Fájlok:** [`src/sockets/liveHandler.js`](file:///d:/dev/Röpdolgozat%20program/src/sockets/liveHandler.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/projector.js`](file:///d:/dev/Röpdolgozat%20program/public/js/projector.js)
+  - A `liveHandler.js` a `join:session` során a kapcsolat HTTP cookie fejlécéből kinyert token alapján, az `auth.isValidToken` függvénnyel szigorúan ellenőrzi a tanári bejelentkezést; érvénytelen tokennel a tanári szobához való csatlakozást elutasítja.
+  - A kivetítő számára létrejött a `session_${id}_projector` dedikált szoba és a publikus `GET /api/sessions/:id/projector-matrix` végpont. A `sessionRepo.getProjectorData` függvény garantálja, hogy a kivetítő felé semmilyen diáknév, diákazonosító, kérdés-megoldókulcs vagy egyéni válaszszöveg ne jusson ki a hálózatra.
+  - A `broadcastMatrixUpdate` segédfüggvény révén a diákok válaszai és felülbírálásai egyszerre frissítik a tanári teljes mátrixot és a kivetítő anonimizált nézetét.
+
+* **Szinkronizált lezárási esemény és azonnali képernyőváltás (Report 15 / 1. fejezet):**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `POST /admin/sessions/:id/finish` a `session:finished` eseményt egyszerre sugározza a diákok (`session_${id}_student`), a tanárok (`session_${id}_teacher`), a kivetítő (`session_${id}_projector`) és az alap szobába is.
+  - A diákfelület a lezárási esemény vételekor azonnal meghívja a `finishQuiz()`-t és betölti az értékelőlapot.
+
+* **15 perces lejárati idő a gépváltási engedélyekhez (Report 15 / 2. fejezet):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - Az `authorizeSeatChange` a felhatalmazási tokenbe beágyazza a létrehozási időbélyeget (`PENDING_SEAT_CHANGE:pcTag:timestamp:hex`).
+  - A `joinSession` ellenőrzi az időbélyeget: ha az engedély 15 percnél régebbi, a bejelentkezést biztonsági okokból elutasítja.
+
+* **Space Race üres termi rajt és késői belépő közös határideje (Report 15 / 1. fejezet):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - A `startRace` rögzíti az alkalom szintjén a rajt időpontját (`started_at = CURRENT_TIMESTAMP`).
+  - Ha rajtkor még nem tartózkodott tanuló a szobában, az első késői csatlakozó a rajt idejétől ketyegő határidőt kapja meg, kizárva a plusz idő szerzésének lehetőségét.
+  - A `startRace` idempotens: a tanár kétszeri rajtkattintása nem indítja újra az időt.
+  - A félkész tanári léptetés (`TEACHER_PACED`) indítását a szerver érthető hibaüzenettel megtiltja.
+
+* **Socrative PDF import kulcs-ellenőrzés és diák fejléc-hitelesítés (Report 15 / 3. fejezet):**
+  - **Fájlok:** [`src/services/socrativePdfParser.js`](file:///d:/dev/Röpdolgozat%20program/src/services/socrativePdfParser.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A PDF parser bizonytalan kulcs esetén nem választ ki önkényesen alapértelmezett választ (pl. az A-t), hanem üres kulcsot és `needs_review: true` jelölést ad.
+  - A `startSession` megköveteli az érvényes megoldókulcsot minden kérdésnél; kulcs nélküli kvízzel dolgozat nem indítható el.
+  - A tanulói felület minden API kérésben az `x-session-token` kérésfejlécben is továbbítja a munkamenet-azonosítót.
+
+* **Atomi Restore automatikus sémamigrációval az ideiglenes könyvtárban (Report 15 / 4. fejezet):**
+  - **Fájlok:** [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js)
+  - A `restoreSystemBackup` a kicsomagolt adatbázison az ideiglenes könyvtárban automatikusan lefolytatja a sémamigrációkat (pl. régebbi v1.22-es mentésekhez hozzáadja a `max_points` és `quiz_snapshot_json` oszlopokat), és csak sikeres integritás-vizsgálat után élesíti az adatbázist.
+
+---
+
 ## [1.25.0] – 2026-11-20
 
 ### Report 14 tantermi átvilágítás: Space Race kérdés- és rajtvédelem, gépváltási és reset jelenlét feloldása, HTML exportok XSS védelme, tanári PIN brute-force védelem, atomi SQLite Backup & Restore garancia, Socket.IO szobamenedzsment és robusztus KRÉTA CSV import

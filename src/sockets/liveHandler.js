@@ -1,15 +1,30 @@
 const sessionRepo = require('../db/sessionRepo');
 const presenceService = require('../services/presenceService');
+const auth = require('../middleware/auth');
+const config = require('../../config');
 
 /**
  * liveHandler.js - Socket.io eseménykezelő valós idejű órai kommunikációhoz és jelenléthez
  */
+
+function getAdminTokenFromSocket(socket) {
+  const cookieHeader = socket.request && socket.request.headers ? socket.request.headers.cookie : '';
+  if (!cookieHeader) return null;
+  const match = cookieHeader.match(new RegExp('(?:^|; )' + config.cookieName + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 function initLiveHandler(io) {
   io.on('connection', (socket) => {
-    // Feliratkozás egy adott órai dolgozat szobájára (elkülönített tanári és diák szoba az adatszivárgás ellen)
+    // Feliratkozás egy adott órai dolgozat szobájára (elkülönített tanári, kivetítői és diák szoba - Report 15 / 1. fejezet)
     socket.on('join:session', ({ sessionId, role = 'student' }) => {
       if (!sessionId) return;
-      if (role === 'teacher' || role === 'projector') {
+      if (role === 'teacher') {
+        const adminToken = getAdminTokenFromSocket(socket);
+        if (!auth.isValidToken(adminToken)) {
+          socket.emit('error', { message: 'A tanári szobához érvényes tanári bejelentkezés szükséges!' });
+          return;
+        }
         socket.join(`session_${sessionId}_teacher`);
         try {
           const matrixData = sessionRepo.getLiveMatrixData(sessionId);
@@ -18,6 +33,17 @@ function initLiveHandler(io) {
           }
         } catch (err) {
           console.error('Hiba a mátrix adatok küldésekor:', err.message);
+        }
+      } else if (role === 'projector') {
+        // Másodlagos kivetítő: csak anonimizált, kulcsmentes adatokat kap!
+        socket.join(`session_${sessionId}_projector`);
+        try {
+          const projectorData = sessionRepo.getProjectorData(sessionId);
+          if (projectorData) {
+            socket.emit('matrix:updated', projectorData);
+          }
+        } catch (err) {
+          console.error('Hiba a kivetítő adatok küldésekor:', err.message);
         }
       } else {
         socket.join(`session_${sessionId}_student`);
@@ -28,20 +54,34 @@ function initLiveHandler(io) {
     socket.on('leave:session', ({ sessionId }) => {
       if (!sessionId) return;
       socket.leave(`session_${sessionId}_teacher`);
+      socket.leave(`session_${sessionId}_projector`);
       socket.leave(`session_${sessionId}_student`);
     });
 
-    // Tanári Teacher Paced léptetés (együtt haladás a feladatokon)
+    // Tanári Teacher Paced léptetés (együtt haladás a feladatokon, védett szerveroldali ellenőrzéssel)
     socket.on('teacher:next_question', ({ sessionId, questionIndex }) => {
       if (!sessionId || questionIndex === undefined) return;
-      io.to(`session_${sessionId}`).emit('session:question_changed', { questionIndex });
+      const adminToken = getAdminTokenFromSocket(socket);
+      if (!auth.isValidToken(adminToken)) {
+        socket.emit('error', { message: 'A léptetéshez tanári jogosultság szükséges!' });
+        return;
+      }
+      sessionRepo.updateCurrentQuestionIndex(sessionId, questionIndex);
+      io.to(`session_${sessionId}_student`).emit('session:question_changed', { questionIndex });
+      io.to(`session_${sessionId}_teacher`).emit('session:question_changed', { questionIndex });
+      io.to(`session_${sessionId}_projector`).emit('session:question_changed', { questionIndex });
     });
 
-    // Tanári diák kizárás / feloldás esemény
+    // Tanári diák kizárás / feloldás esemény (védett tanári munkamenet vizsgálattal)
     socket.on('teacher:kick_participant', ({ sessionId, participantId }) => {
       if (!sessionId || !participantId) return;
+      const adminToken = getAdminTokenFromSocket(socket);
+      if (!auth.isValidToken(adminToken)) {
+        socket.emit('error', { message: 'A diák feloldásához tanári jogosultság szükséges!' });
+        return;
+      }
       try {
-        const participant = sessionRepo.getParticipantById(participantId);
+        const participant = sessionRepo.getParticipantById ? sessionRepo.getParticipantById(participantId) : null;
         sessionRepo.unlockParticipant(participantId);
         if (participant && participant.student_id) {
           const affectedClasses = presenceService.releaseStudent(participant.student_id);
@@ -56,6 +96,8 @@ function initLiveHandler(io) {
         io.to(`session_${sessionId}_teacher`).emit('participant:kicked', { participantId });
         const matrixData = sessionRepo.getLiveMatrixData(sessionId);
         io.to(`session_${sessionId}_teacher`).emit('matrix:updated', matrixData);
+        const projectorData = sessionRepo.getProjectorData(sessionId);
+        io.to(`session_${sessionId}_projector`).emit('matrix:updated', projectorData);
         io.emit('badges:updated', sessionRepo.getActiveSessions());
       } catch (err) {
         socket.emit('error', { message: err.message });

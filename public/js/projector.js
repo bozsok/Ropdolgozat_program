@@ -158,16 +158,23 @@
       projQuizTitle.textContent = target.quiz_title;
       projMetaInfo.textContent = `${target.subject_name} – ${target.grade_level}. évfolyam (${formatSessionMode(target.mode)})`;
 
-      // Csatlakozás a Socket szobához
+      // Csatlakozás a Socket szobához (kifejezett kivetítői szerepkör, Report 15 / 1. fejezet)
       if (socket) {
-        socket.emit('join:session', { sessionId: activeSessionId, role: 'teacher' });
+        socket.emit('join:session', { sessionId: activeSessionId, role: 'projector' });
       }
 
-      // Kezdeti mátrix adatok lekérése
-      const mRes = await fetch(`/api/admin/sessions/${activeSessionId}/matrix`);
+      // Kezdeti anonim és aggregált adatok lekérése a dedikált kivetítői végpontról
+      const mRes = await fetch(`/api/sessions/${activeSessionId}/projector-matrix`);
       if (mRes.ok) {
         const matrixData = await mRes.json();
         updateProjector(matrixData);
+      } else {
+        // Fallback admin mátrixra, ha a tanár van bejelentkezve
+        const adminRes = await fetch(`/api/admin/sessions/${activeSessionId}/matrix`);
+        if (adminRes.ok) {
+          const matrixData = await adminRes.json();
+          updateProjector(matrixData);
+        }
       }
 
     } catch (err) {

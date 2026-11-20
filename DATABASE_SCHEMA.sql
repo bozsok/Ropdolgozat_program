@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     current_question_index INTEGER DEFAULT 0 CHECK(current_question_index >= 0), -- Teacher Paced kérdés index
     grade_thresholds_json TEXT NOT NULL DEFAULT '{"2":30,"3":55,"4":75,"5":90}', -- Ponthatárok százalékban
     max_points REAL DEFAULT NULL,               -- Rögzített maximális pontszám a történeti jegymegőrzéshez (Report 14 / 25. pont)
+    quiz_snapshot_json TEXT DEFAULT NULL,       -- Dolgozatkori rögzített feladatsor pillanatkép (Report 15 / 2. fejezet)
     started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     ended_at DATETIME DEFAULT NULL,
     CHECK((status = 'ACTIVE' AND ended_at IS NULL) OR (status = 'FINISHED' AND ended_at IS NOT NULL)), -- Státusz és lezárási idő összhangja

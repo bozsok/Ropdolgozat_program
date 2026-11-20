@@ -9,7 +9,7 @@ const config = require('../config');
 console.log('=== REPORT 14 JAVÍTÁSOK RENDSZERTESZTJE ===\n');
 
 const db = new Database(path.join(__dirname, '..', 'data', 'ropdolgozat.db'));
-const testSessionIds = db.prepare("SELECT id FROM sessions WHERE grade_level IN ('95', '96', '97', '98', '99')").all().map(s => s.id);
+const testSessionIds = db.prepare("SELECT id FROM sessions WHERE grade_level IN ('90', '91', '92', '93', '94', '95', '96', '97', '98', '99')").all().map(s => s.id);
 if (testSessionIds.length > 0) {
   const placeholders = testSessionIds.map(() => '?').join(',');
   db.prepare(`DELETE FROM answers WHERE session_id IN (${placeholders})`).run(...testSessionIds);
@@ -440,6 +440,159 @@ assert.ok(fs.existsSync(mockTempFile), 'A mock temp fájl nem jött létre!');
 quizRepo.cleanExpiredTempImages(0);
 assert.strictEqual(fs.existsSync(mockTempFile), false, 'A cleanExpiredTempImages nem törölte az elavult temp fájlt!');
 console.log('✓ Az elavult ideiglenes feltöltések automatikus takarítása sikeresen lefut (39. pont)');
+
+// 13. TESZT: Snapshot integritás és képvédelem a kvíz módosítása / törlése után (Report 15 / 2. fejezet)
+console.log('\n--- 13. TESZT: Snapshot integritás és képvédelem (Report 15 / 2. fejezet) ---');
+const snapQuiz = quizRepo.createQuiz({
+  subject_id: 1,
+  title: 'Snapshot Teszt Kvíz',
+  subject_grade: '6',
+  questions: [
+    { question_order: 1, question_type: 'ABCD', question_text: 'Snap Q1', options: ['A', 'B'], correct_answer: 'A', points: 2.0, image_path: '/uploads/quizzes/quiz-9999/snap_img.png' },
+    { question_order: 2, question_type: 'ABCD', question_text: 'Snap Q2', options: ['A', 'B'], correct_answer: 'B', points: 3.0 }
+  ]
+});
+
+const snapSession = sessionRepo.startSession({
+  subject_id: 1,
+  grade_level: '94',
+  quiz_id: snapQuiz.id,
+  class_name: '6.a',
+  mode: 'STUDENT_PACED'
+});
+
+// Mockoljuk a képet a kvíz almappájában
+const snapImgDir = path.join(config.uploadsDir, 'quizzes', `quiz-${snapQuiz.id}`);
+fs.mkdirSync(snapImgDir, { recursive: true });
+const mockSnapImg = path.join(snapImgDir, 'snap_img.png');
+fs.writeFileSync(mockSnapImg, 'mock_image_bytes');
+
+// Most frissítjük a kvízt úgy, hogy töröljük az 1. kérdést a képpel együtt!
+quizRepo.updateQuiz(snapQuiz.id, {
+  title: 'Snapshot Teszt Kvíz - Átírva',
+  subject_grade: '6',
+  questions: [
+    { question_order: 1, question_type: 'ABCD', question_text: 'Snap Q2 Only', options: ['A', 'B'], correct_answer: 'B', points: 5.0 }
+  ]
+});
+
+// Takarítás futtatása a kvíz almappájára
+quizRepo.cleanQuizOrphanImages(snapQuiz.id);
+// A képnek MEG KELL MARADNIA, mert a snapSession quiz_snapshot_json-ja hivatkozik rá!
+assert.strictEqual(fs.existsSync(mockSnapImg), true, 'A cleanQuizOrphanImages letörölte a múltbeli dolgozat által használt képet!');
+try { fs.unlinkSync(mockSnapImg); fs.rmdirSync(snapImgDir); } catch {}
+
+// Ellenőrizzük, hogy a dolgozat élő mátrixa továbbra is az eredeti 2 kérdést és 5.0 összpontot látja-e!
+const snapMatrix = sessionRepo.getLiveMatrixData(snapSession.id);
+assert.strictEqual(snapMatrix.questions.length, 2, 'A dolgozat mátrixából eltűnt a kvízből utólag törölt kérdés!');
+assert.strictEqual(snapMatrix.totalMaxPoints, 5.0, 'A dolgozat mátrixának totalMaxPoints-ja megváltozott!');
+console.log('✓ A dolgozatkori feladatsor és képek maradéktalanul védettek a kvíz utólagos módosításakor');
+
+// 14. TESZT: Másodlagos kivetítő adatintegritása (Report 15 / 1. fejezet)
+console.log('\n--- 14. TESZT: Másodlagos kivetítő adatintegritása (Report 15 / 1. fejezet) ---');
+const projData = sessionRepo.getProjectorData(snapSession.id);
+assert.ok(projData, 'getProjectorData nem adott vissza adatot!');
+assert.strictEqual(projData.session.id, snapSession.id);
+projData.questions.forEach(q => {
+  assert.strictEqual(q.correct_answer, undefined, 'A kivetítő kérdései kiszivárogtatják a megoldókulcsot!');
+  assert.strictEqual(q.options, undefined, 'A kivetítő kérdései kiszivárogtatják az opciókat!');
+});
+projData.participants.forEach(p => {
+  assert.strictEqual(p.student_name, undefined, 'A kivetítő kiszivárogtatja a diák nevét!');
+  assert.strictEqual(p.student_id, undefined, 'A kivetítő kiszivárogtatja a diák azonosítóját!');
+});
+console.log('✓ A kivetítő aggregált adatai 100%-ban mentesek a diáknevektől és a megoldókulcsoktól');
+
+// 15. TESZT: Space Race közös rajt üres váróval és késői belépővel (Report 15 / 1. fejezet)
+console.log('\n--- 15. TESZT: Space Race közös rajt üres váróval (Report 15 / 1. fejezet) ---');
+const emptyRaceQuiz = quizRepo.createQuiz({
+  subject_id: 1,
+  title: 'Empty Race Quiz',
+  subject_grade: '6',
+  questions: [{ question_order: 1, question_type: 'ABCD', question_text: 'Q1', options: ['A', 'B'], correct_answer: 'A', points: 1 }]
+});
+const emptyRaceSession = sessionRepo.startSession({
+  subject_id: 1,
+  grade_level: '93',
+  quiz_id: emptyRaceQuiz.id,
+  class_name: '6.b',
+  mode: 'SPACE_RACE',
+  time_limit_min: 10
+});
+
+// Tanár elindítja a rajtot, miközben senki sincs a szobában
+const emptyStarted = sessionRepo.startRace(emptyRaceSession.id);
+assert.strictEqual(emptyStarted.current_question_index, 1);
+
+// Ismételt rajt kattintás (idempotens ellenőrzés)
+const repeatStarted = sessionRepo.startRace(emptyRaceSession.id);
+assert.strictEqual(repeatStarted.current_question_index, 1);
+
+// Késői diák csatlakozik
+const lateJoin = sessionRepo.joinSession({
+  session_id: emptyRaceSession.id,
+  student_id: sampleStudents[1] ? sampleStudents[1].id : null,
+  student_name: 'Késői Űrhajós',
+  session_token: 'late_tok_' + Date.now()
+});
+assert.ok(lateJoin.participant.deadline_at !== null, 'A késői belépő nem kapott határidőt!');
+console.log('✓ Üres váróval indított Space Race és késői csatlakozó közös határideje hibátlanul működik');
+
+// 16. TESZT: Gépváltási token 15 perces lejárata (Report 15 / 2. fejezet)
+console.log('\n--- 16. TESZT: Gépváltási token 15 perces lejárata (Report 15 / 2. fejezet) ---');
+const seatAuthExpired = sessionRepo.authorizeSeatChange(lateJoin.participant.id, 5);
+assert.strictEqual(seatAuthExpired.success, true);
+
+// Szimulálunk egy 20 perccel ezelőtti (lejárt) állapotjelző tokent
+const expiredToken = `PENDING_SEAT_CHANGE:5:${Date.now() - (20 * 60 * 1000)}:expiredhex`;
+db.prepare('UPDATE participants SET session_token = ? WHERE id = ?').run(expiredToken, lateJoin.participant.id);
+
+let seatChangeExpiredBlocked = false;
+try {
+  sessionRepo.joinSession({
+    session_id: emptyRaceSession.id,
+    student_id: lateJoin.participant.student_id,
+    student_name: lateJoin.participant.student_name,
+    pc_number: 5
+  });
+} catch (err) {
+  seatChangeExpiredBlocked = true;
+  assert.ok(err.message.includes('lejárt'), 'Nem a várt lejárati hiba: ' + err.message);
+}
+assert.strictEqual(seatChangeExpiredBlocked, true, 'A 20 perces lejárt gépváltási engedélyt elfogadta a szerver!');
+console.log('✓ A 15 percen túl lejárt gépváltási engedélyt a rendszer biztonságosan elutasítja');
+
+// 17. TESZT: Üres megoldókulcsos teszt indításának elutasítása (Report 15 / 3. fejezet)
+console.log('\n--- 17. TESZT: Üres megoldókulcsos teszt elutasítása (Report 15 / 3. fejezet) ---');
+const noKeyQuiz = quizRepo.createQuiz({
+  subject_id: 1,
+  title: 'Kulcs nélküli kvíz',
+  subject_grade: '6',
+  questions: [{ question_order: 1, question_type: 'ABCD', question_text: 'Kulcs nélküli Q1', options: ['A', 'B'], correct_answer: ' ', points: 1 }]
+});
+
+let noKeyBlocked = false;
+try {
+  sessionRepo.startSession({
+    subject_id: 1,
+    grade_level: '92',
+    quiz_id: noKeyQuiz.id,
+    class_name: '6.c',
+    mode: 'STUDENT_PACED'
+  });
+} catch (err) {
+  noKeyBlocked = true;
+  assert.ok(err.message.includes('hiányzik a megoldókulcs'), 'Nem a várt kulcshiány hiba: ' + err.message);
+}
+assert.strictEqual(noKeyBlocked, true, 'Üres megoldókulcsos feladattal sikerült dolgozatot indítani!');
+console.log('✓ A hiányzó / bizonytalan megoldókulcsú kvíz indítását a szerver biztonságosan megakadályozza');
+
+// Takarítás a tesztadatok után
+sessionRepo.deleteSession(snapSession.id);
+quizRepo.deleteQuiz(snapQuiz.id);
+sessionRepo.deleteSession(emptyRaceSession.id);
+quizRepo.deleteQuiz(emptyRaceQuiz.id);
+quizRepo.deleteQuiz(noKeyQuiz.id);
 
 // Takarítás a tesztadatok után
 sessionRepo.deleteSession(retrySession.id);

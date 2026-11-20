@@ -619,13 +619,30 @@ router.post('/admin/sessions/start', requireAdminAuth, (req, res) => {
   }
 });
 
+// Szobák és kivetítő szinkronizált frissítése (Report 15 / 1. fejezet)
+function broadcastMatrixUpdate(io, sessionId) {
+  if (!io || !sessionId) return;
+  const matrixData = sessionRepo.getLiveMatrixData(sessionId);
+  if (matrixData) {
+    io.to(`session_${sessionId}_teacher`).emit('matrix:updated', matrixData);
+  }
+  const projectorData = sessionRepo.getProjectorData(sessionId);
+  if (projectorData) {
+    io.to(`session_${sessionId}_projector`).emit('matrix:updated', projectorData);
+  }
+}
+
 // Dolgozat befejezése / lezárása (Admin)
 router.post('/admin/sessions/:id/finish', requireAdminAuth, (req, res) => {
   try {
     const finished = sessionRepo.finishSession(req.params.id);
     const io = req.app.get('io');
     if (io) {
-      io.to(`session_${req.params.id}`).emit('session:finished', { sessionId: req.params.id });
+      const payload = { sessionId: req.params.id };
+      io.to(`session_${req.params.id}_student`).emit('session:finished', payload);
+      io.to(`session_${req.params.id}_teacher`).emit('session:finished', payload);
+      io.to(`session_${req.params.id}_projector`).emit('session:finished', payload);
+      io.to(`session_${req.params.id}`).emit('session:finished', payload);
       io.emit('badges:updated', sessionRepo.getActiveSessions());
     }
     res.json({ success: true, session: finished });
@@ -656,12 +673,23 @@ router.post('/admin/sessions/:id/start-race', requireAdminAuth, (req, res) => {
     if (io) {
       io.to(`session_${req.params.id}_student`).emit('race:started', { sessionId: req.params.id });
       io.to(`session_${req.params.id}_teacher`).emit('race:started', { sessionId: req.params.id });
-      const matrixData = sessionRepo.getLiveMatrixData(req.params.id);
-      io.to(`session_${req.params.id}_teacher`).emit('matrix:updated', matrixData);
+      io.to(`session_${req.params.id}_projector`).emit('race:started', { sessionId: req.params.id });
+      broadcastMatrixUpdate(io, req.params.id);
     }
     res.json({ success: true, session });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// Kivetítő anonimizált és kulcsmentes adatainak lekérése (Report 15 / 1. fejezet)
+router.get('/sessions/:id/projector-matrix', (req, res) => {
+  try {
+    const projectorData = sessionRepo.getProjectorData(req.params.id);
+    if (!projectorData) return res.status(404).json({ error: 'A dolgozat nem található!' });
+    res.json(projectorData);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -686,11 +714,10 @@ router.post('/admin/answers/:id/override', requireAdminAuth, (req, res) => {
       custom_points
     });
 
-    // Frissült mátrix adatok kiküldése Socket.io-n (kizárólag a tanári szobának)
+    // Frissült mátrix adatok kiküldése Socket.io-n (tanári szobának teljes, kivetítőnek anonimizált)
     const io = req.app.get('io');
     if (io) {
-      const matrixData = sessionRepo.getLiveMatrixData(updatedAnswer.session_id);
-      io.to(`session_${updatedAnswer.session_id}_teacher`).emit('matrix:updated', matrixData);
+      broadcastMatrixUpdate(io, updatedAnswer.session_id);
     }
 
     res.json({ success: true, answer: updatedAnswer });
@@ -741,9 +768,8 @@ router.post('/admin/participants/:id/authorize-seat-change', requireAdminAuth, (
         });
       }
 
-      // Mátrix frissítése a tanári felületen
-      const matrixData = sessionRepo.getLiveMatrixData(result.sessionId);
-      io.to(`session_${result.sessionId}_teacher`).emit('matrix:updated', matrixData);
+      // Mátrix frissítése a tanári felületen és a kivetítőn
+      broadcastMatrixUpdate(io, result.sessionId);
     }
 
     const targetMsg = result.targetPcNumber ? ` a(z) ${result.targetPcNumber}. gépre` : '';
@@ -800,9 +826,8 @@ router.post('/admin/participants/:id/reset', requireAdminAuth, (req, res) => {
         });
       }
 
-      // Mátrix frissítése a tanári felületen
-      const matrixData = sessionRepo.getLiveMatrixData(participant.session_id);
-      io.to(`session_${participant.session_id}_teacher`).emit('matrix:updated', matrixData);
+      // Mátrix frissítése a tanári felületen és a kivetítőn
+      broadcastMatrixUpdate(io, participant.session_id);
     }
 
     res.json({ success: true, message: 'A diák téves rekordja és válaszai sikeresen törölve!' });
@@ -855,8 +880,7 @@ router.post('/admin/participants/:id/unlock', requireAdminAuth, (req, res) => {
         });
       }
 
-      const matrixData = sessionRepo.getLiveMatrixData(participant.session_id);
-      io.to(`session_${participant.session_id}_teacher`).emit('matrix:updated', matrixData);
+      broadcastMatrixUpdate(io, participant.session_id);
     }
 
     res.json({ success: true, message: 'A diák sikeresen feloldva!' });
@@ -929,8 +953,40 @@ router.get('/student/session-data', (req, res) => {
       return res.status(404).json({ error: 'Érvénytelen vagy lejárt munkamenet!' });
     }
 
-    // Diák nézet: isStudentView = true (NINCS correct_answer és explanation!)
-    const quiz = quizRepo.getQuizById(participant.quiz_id, true);
+    // Kvíz adatok beolvasása: elsősorban a rögzített snapshotból (Report 15 / 2. fejezet), fallbackként az élő kvízből
+    let quiz = null;
+    let fullSnapshotQuestions = [];
+    if (participant.quiz_snapshot_json) {
+      try {
+        const snap = JSON.parse(participant.quiz_snapshot_json);
+        if (snap && Array.isArray(snap.questions) && snap.questions.length > 0) {
+          fullSnapshotQuestions = snap.questions;
+          // Diák nézet a snapshotból: helyes válasz és magyarázat kitakarása a dolgozatírás közben
+          quiz = {
+            id: snap.id || participant.quiz_id,
+            title: snap.title || participant.quiz_title,
+            total_points: snap.total_points || 0,
+            questions: snap.questions.map(q => ({
+              id: q.id,
+              quiz_id: q.quiz_id,
+              question_order: q.question_order,
+              question_type: q.question_type,
+              question_text: q.question_text,
+              instructions: q.instructions || '',
+              image_path: q.image_path || null,
+              options: Array.isArray(q.options) ? q.options : [],
+              points: Number(q.points) || 1.0
+            }))
+          };
+        }
+      } catch {
+        quiz = null;
+      }
+    }
+
+    if (!quiz) {
+      quiz = quizRepo.getQuizById(participant.quiz_id, true);
+    }
 
     // Kérdések sorrendezése a résztvevő egyedi question_order_json-ja szerint
     let questionOrder = [];
@@ -964,7 +1020,9 @@ router.get('/student/session-data', (req, res) => {
     // Tanuló pontszámának és jegyének kalkulációja
     const pointsRow = db.prepare('SELECT COALESCE(SUM(points_earned), 0.0) AS total_points FROM answers WHERE participant_id = ?').get(participant.id);
     const totalPoints = pointsRow ? Number(pointsRow.total_points.toFixed(2)) : 0;
-    const totalMax = quiz.total_points || 0;
+    const totalMax = (participant.max_points !== null && participant.max_points !== undefined && Number(participant.max_points) > 0)
+      ? Number(participant.max_points)
+      : (quiz.total_points || 0);
     const percentage = totalMax > 0 ? Math.round((totalPoints / totalMax) * 100) : 0;
     const thresholds = JSON.parse(participant.grade_thresholds_json || '{"2":30,"3":55,"4":75,"5":90}');
     const grade = grader.calculateGrade(percentage, thresholds);
@@ -975,17 +1033,30 @@ router.get('/student/session-data', (req, res) => {
 
     let answers = [];
     if (showSolutions) {
-      answers = db.prepare(`
-        SELECT a.question_id, a.submitted_answer, a.is_correct, a.points_earned, a.eval_status,
-               q.correct_answer, q.explanation
-        FROM answers a
-        JOIN questions q ON q.id = a.question_id
-        WHERE a.participant_id = ?
+      const rawAnswers = db.prepare(`
+        SELECT question_id, submitted_answer, is_correct, points_earned, eval_status
+        FROM answers
+        WHERE participant_id = ?
       `).all(participant.id);
 
-      const correctMap = new Map(
-        db.prepare('SELECT id, correct_answer, explanation FROM questions WHERE quiz_id = ?').all(participant.quiz_id).map(r => [r.id, r])
-      );
+      let correctMap = new Map();
+      if (fullSnapshotQuestions.length > 0) {
+        correctMap = new Map(fullSnapshotQuestions.map(q => [q.id, q]));
+      } else {
+        correctMap = new Map(
+          db.prepare('SELECT id, correct_answer, explanation FROM questions WHERE quiz_id = ?').all(participant.quiz_id).map(r => [r.id, r])
+        );
+      }
+
+      answers = rawAnswers.map(a => {
+        const sol = correctMap.get(a.question_id);
+        return {
+          ...a,
+          correct_answer: sol ? sol.correct_answer : null,
+          explanation: sol ? sol.explanation : null
+        };
+      });
+
       orderedQuestions = orderedQuestions.map(q => {
         const sol = correctMap.get(q.id);
         return sol ? { ...q, correct_answer: sol.correct_answer, explanation: sol.explanation } : q;
@@ -1069,8 +1140,7 @@ router.post('/student/submit-answer', (req, res) => {
     // Értesítés a tanári mátrixnak valós időben (csak tanári szobába)
     const io = req.app.get('io');
     if (io) {
-      const matrixData = sessionRepo.getLiveMatrixData(participant.session_id);
-      io.to(`session_${participant.session_id}_teacher`).emit('matrix:updated', matrixData);
+      broadcastMatrixUpdate(io, participant.session_id);
     }
 
     const session = sessionRepo.getSessionById(participant.session_id);
@@ -1138,8 +1208,7 @@ router.post('/student/finish', (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      const matrixData = sessionRepo.getLiveMatrixData(participant.session_id);
-      io.to(`session_${participant.session_id}_teacher`).emit('matrix:updated', matrixData);
+      broadcastMatrixUpdate(io, participant.session_id);
     }
 
     res.json({ success: true, participant: finished });

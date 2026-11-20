@@ -989,7 +989,9 @@
    */
   async function tryRestoreSession(token) {
     try {
-      const res = await fetch(`/api/student/session-data?token=${encodeURIComponent(token)}`);
+      const res = await fetch(`/api/student/session-data?token=${encodeURIComponent(token)}`, {
+        headers: { 'x-session-token': token }
+      });
       if (!res.ok) {
         sessionStorage.removeItem('ropdolgozat_token');
         return false;
@@ -1037,7 +1039,9 @@
   async function startQuizInterface(cachedData = null) {
     let data = cachedData;
     if (!data) {
-      const res = await fetch(`/api/student/session-data?token=${encodeURIComponent(sessionToken)}`);
+      const res = await fetch(`/api/student/session-data?token=${encodeURIComponent(sessionToken)}`, {
+        headers: { 'x-session-token': sessionToken }
+      });
       data = await res.json();
     }
 
@@ -1324,7 +1328,10 @@
     try {
       const res = await fetch('/api/student/submit-answer', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-token': sessionToken
+        },
         body: JSON.stringify({
           session_token: sessionToken,
           question_id: q.id,
@@ -1524,7 +1531,10 @@
     try {
       await fetch('/api/student/finish', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-token': sessionToken
+        },
         body: JSON.stringify({ session_token: sessionToken })
       });
     } catch {
@@ -1533,7 +1543,9 @@
 
     let summaryData = null;
     try {
-      const res = await fetch(`/api/student/session-data?token=${encodeURIComponent(sessionToken)}`);
+      const res = await fetch(`/api/student/session-data?token=${encodeURIComponent(sessionToken)}`, {
+        headers: { 'x-session-token': sessionToken }
+      });
       if (res.ok) {
         const data = await res.json();
         summaryData = {
@@ -1927,7 +1939,10 @@
       if (document.hidden && sessionToken && quizContainer.style.display === 'block') {
         fetch('/api/student/focus-lost', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-session-token': sessionToken
+          },
           body: JSON.stringify({ session_token: sessionToken })
         }).catch(() => { });
 

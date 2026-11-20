@@ -105,7 +105,24 @@ function restoreSystemBackup(zipFilePath) {
       throw new Error('Érvénytelen mentésfájl: a csomag nem tartalmazza a ropdolgozat.db adatbázist!');
     }
 
-    // 3. Integritás- és sémakompatibilitás-ellenőrzés a kicsomagolt adatbázison (Report 14 / 43.)
+    // 3. Automatikus sémamigráció a korábbi mentésekhez az ideiglenes könyvtárban (Report 15 / 4. fejezet)
+    const migrateDb = new Database(extractedDbPath);
+    try {
+      const sessionCols = migrateDb.prepare("PRAGMA table_info(sessions)").all().map(c => c.name);
+      if (sessionCols.length > 0) {
+        if (!sessionCols.includes('max_points')) {
+          migrateDb.prepare('ALTER TABLE sessions ADD COLUMN max_points REAL DEFAULT NULL').run();
+        }
+        if (!sessionCols.includes('quiz_snapshot_json')) {
+          migrateDb.prepare('ALTER TABLE sessions ADD COLUMN quiz_snapshot_json TEXT DEFAULT NULL').run();
+        }
+      }
+      migrateDb.pragma('wal_checkpoint(TRUNCATE)');
+    } finally {
+      migrateDb.close();
+    }
+
+    // 4. Integritás- és sémakompatibilitás-ellenőrzés a kicsomagolt adatbázison (Report 14 / 43.)
     const testDb = new Database(extractedDbPath, { readonly: true });
     try {
       const integrity = testDb.prepare('PRAGMA integrity_check').get();

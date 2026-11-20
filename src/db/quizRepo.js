@@ -232,6 +232,25 @@ function cleanQuizOrphanImages(quizId) {
         .filter(Boolean)
     );
 
+    // Megőrizzük a korábbi dolgozatok (sessions) pillanatképeiben szereplő képeket is (Report 15 / 2. fejezet)
+    try {
+      const sessionRows = db.prepare('SELECT quiz_snapshot_json FROM sessions WHERE quiz_id = ? AND quiz_snapshot_json IS NOT NULL').all(quizId);
+      for (const sRow of sessionRows) {
+        if (!sRow.quiz_snapshot_json) continue;
+        try {
+          const snapshot = JSON.parse(sRow.quiz_snapshot_json);
+          const snapQuestions = Array.isArray(snapshot) ? snapshot : (snapshot.questions || []);
+          if (Array.isArray(snapQuestions)) {
+            for (const sq of snapQuestions) {
+              if (sq && sq.image_path) {
+                activeFilenames.add(path.basename(sq.image_path));
+              }
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+
     // Végigmegyünk a mappában lévő összes fizikai fájlon
     const files = fs.readdirSync(targetDir);
     for (const file of files) {
@@ -811,6 +830,7 @@ module.exports = {
   createFolder,
   renameFolder,
   deleteFolder,
-  cleanExpiredTempImages
+  cleanExpiredTempImages,
+  cleanQuizOrphanImages
 };
 

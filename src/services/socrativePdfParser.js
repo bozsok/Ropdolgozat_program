@@ -336,9 +336,14 @@ function parseSocrativePdf(pdfBuffer) {
                 correctText = opts[letterIndex].text;
               }
             }
-            if (!correctText) correctText = opts[0].text;
+            if (!correctText) {
+              // Bizonytalan vagy hiányzó kulcs: ne válasszon ki önkényesen opciót, tanári ellenőrzést igényel (Report 15 / 3. fejezet)
+              correctText = '';
+            }
           }
         }
+
+        const needsReview = !correctText;
 
         let matchedImage = null;
         if (pageImages.length === qKeyMatches.length) {
@@ -358,6 +363,7 @@ function parseSocrativePdf(pdfBuffer) {
           points: 1,
           options: isTF ? ['Igaz', 'Hamis'] : opts.map(o => o.text),
           correct_answer: correctText,
+          needs_review: needsReview,
           imageBuffer: matchedImage ? matchedImage.pngBuffer : null
         });
       }

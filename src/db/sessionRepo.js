@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const db = require('./init');
 const grader = require('../services/grader');
 const settingsRepo = require('./settingsRepo');
+const quizRepo = require('./quizRepo');
 
 /**
  * sessionRepo.js - Órai dolgozatok (sessions), résztvevők és válaszok adatbázis műveletei
@@ -223,6 +224,9 @@ function startSession({
   const trimmedGrade = String(grade_level || '').trim();
   if (!trimmedGrade) throw new Error('Az évfolyam megadása kötelező!');
   if (!quiz_id) throw new Error('A teszt kiválasztása kötelező!');
+  if (mode === 'TEACHER_PACED') {
+    throw new Error('A Tanári léptetés mód fejlesztés alatt áll. Kérjük, válaszd a Diák-tempó vagy Űrhajós verseny módot!');
+  }
 
   // Ellenőrizzük, hogy fut-e már aktív dolgozat ezen a csatornán
   const existingActive = getActiveSessionByChannel(subject_id, trimmedGrade);
@@ -246,18 +250,30 @@ function startSession({
 
   let sessionId = null;
   const tx = db.transaction(() => {
-    const quizPointsRow = db.prepare('SELECT COALESCE(SUM(points), 0.0) as mp FROM questions WHERE quiz_id = ?').get(Number(quiz_id));
-    const initialMaxPoints = quizPointsRow ? Number(quizPointsRow.mp) || 0.0 : 0.0;
+    // Kvíz teljes állapotának rögzítése indításkor (Snapshot a Report 15 / 2. fejezet alapján)
+    const currentQuiz = quizRepo.getQuizById(Number(quiz_id), false);
+    if (!currentQuiz) throw new Error('A megadott teszt nem található!');
+    if (!currentQuiz.questions || currentQuiz.questions.length === 0) {
+      throw new Error('Üres teszt nem indítható el dolgozatként!');
+    }
+    // Ellenőrizzük, hogy minden feladathoz tartozik-e érvényes megoldókulcs (Report 15 / 3. fejezet)
+    for (const q of currentQuiz.questions) {
+      if (!q.correct_answer || String(q.correct_answer).trim() === '') {
+        throw new Error(`A(z) ${q.question_order || ''}. kérdésnél hiányzik a megoldókulcs! Kérjük, add meg a helyes választ a Tesztszerkesztőben az indítás előtt.`);
+      }
+    }
+    const initialMaxPoints = Number(currentQuiz.total_points) || 0.0;
+    const quizSnapshotJson = JSON.stringify(currentQuiz);
 
     const insertStmt = db.prepare(`
       INSERT INTO sessions (
         subject_id, grade_level, quiz_id, class_name, mode, status,
         time_limit_min, shuffle_questions, shuffle_options, show_feedback_on_end,
-        grade_thresholds_json, max_points, started_at, ended_at
+        grade_thresholds_json, max_points, quiz_snapshot_json, started_at, ended_at
       ) VALUES (
         ?, ?, ?, ?, ?, 'ACTIVE',
         ?, ?, ?, ?,
-        ?, ?, CURRENT_TIMESTAMP, NULL
+        ?, ?, ?, CURRENT_TIMESTAMP, NULL
       )
     `);
 
@@ -272,7 +288,8 @@ function startSession({
       shuffle_options ? 1 : 0,
       effectiveShowFeedback ? 1 : 0,
       thresholdsJson,
-      initialMaxPoints
+      initialMaxPoints,
+      quizSnapshotJson
     );
 
     sessionId = result.lastInsertRowid;
@@ -342,9 +359,18 @@ function joinSession({ session_id, student_id, student_name, pc_number = null, t
     // 1. Eset: A tanár engedélyezte a gépváltást (Report 12 & Report 13 - korábbi válaszok megtartásával és opcionális célgép-követeléssel!)
     const isPendingSeatChange = existingParticipant.session_token && existingParticipant.session_token.startsWith('PENDING_SEAT_CHANGE:');
     if (isPendingSeatChange) {
-      // Report 13 / 1.2: Célgép ellenőrzése, ha a tanár konkrét munkaállomáshoz kötötte
+      // Report 13 / 1.2 & Report 15 / 2. fejezet: Célgép és 15 perces engedély-lejárat ellenőrzése
       const tokenParts = existingParticipant.session_token.split(':');
-      if (tokenParts.length >= 3) {
+      if (tokenParts.length >= 4) {
+        const requiredPc = parseInt(tokenParts[1], 10);
+        if (!isNaN(requiredPc) && requiredPc > 0 && pc_number !== requiredPc) {
+          throw new Error(`A tanár a(z) ${requiredPc}. munkaállomásra engedélyezte a gépváltást! Ez a gép a(z) ${pc_number || 'ismeretlen'}.`);
+        }
+        const createdAtMs = parseInt(tokenParts[2], 10);
+        if (!isNaN(createdAtMs) && (Date.now() - createdAtMs) > 15 * 60 * 1000) {
+          throw new Error('A gépváltási engedély lejárt (15 perces időkeret). Kérj új engedélyt a tanártól!');
+        }
+      } else if (tokenParts.length >= 3) {
         const requiredPc = parseInt(tokenParts[1], 10);
         if (!isNaN(requiredPc) && requiredPc > 0 && pc_number !== requiredPc) {
           throw new Error(`A tanár a(z) ${requiredPc}. munkaállomásra engedélyezte a gépváltást! Ez a gép a(z) ${pc_number || 'ismeretlen'}.`);
@@ -454,7 +480,10 @@ function joinSession({ session_id, student_id, student_name, pc_number = null, t
         if (existingDeadline && existingDeadline.deadline_at) {
           deadlineAt = existingDeadline.deadline_at;
         } else {
-          deadlineAt = new Date(Date.now() + (session.time_limit_min * 60 * 1000)).toISOString();
+          // Ha rajtkor üres volt a terem, a session rajtjának idejétől (started_at) számolunk (Report 15 / 1. fejezet)
+          const raceStartMs = session.started_at ? new Date(session.started_at).getTime() : Date.now();
+          const targetDeadlineMs = raceStartMs + (session.time_limit_min * 60 * 1000);
+          deadlineAt = new Date(Math.max(Date.now(), targetDeadlineMs)).toISOString();
         }
       }
     } else {
@@ -520,7 +549,9 @@ function getParticipantByToken(sessionToken) {
       s.time_limit_min,
       s.shuffle_options,
       s.show_feedback_on_end,
-      s.grade_thresholds_json
+      s.grade_thresholds_json,
+      s.max_points,
+      s.quiz_snapshot_json
     FROM participants p
     JOIN sessions s ON s.id = p.session_id
     JOIN subjects sub ON sub.id = s.subject_id
@@ -582,8 +613,8 @@ function authorizeSeatChange(participantId, targetPcNumber = null) {
   }
 
   const pcTag = (targetPcNumber && parseInt(targetPcNumber, 10) > 0) ? parseInt(targetPcNumber, 10) : 'ANY';
-  // A meglévő token érvénytelenítése egy ideiglenes állapotjelző tokenre (egyszer használatos)
-  const pendingToken = `PENDING_SEAT_CHANGE:${pcTag}:${crypto.randomBytes(8).toString('hex')}`;
+  // A meglévő token érvénytelenítése egy ideiglenes állapotjelző tokenre (egyszer használatos, 15 percig érvényes)
+  const pendingToken = `PENDING_SEAT_CHANGE:${pcTag}:${Date.now()}:${crypto.randomBytes(8).toString('hex')}`;
   db.prepare(`
     UPDATE participants 
     SET session_token = ? 
@@ -897,26 +928,49 @@ function getLiveMatrixData(sessionId) {
 
   const thresholds = JSON.parse(session.grade_thresholds_json || '{"2":30,"3":55,"4":75,"5":90}');
 
-  // Teszt kérdései
-  const rawQuestions = db.prepare(`
-    SELECT id, question_order, question_type, question_text, options_json, correct_answer, explanation, points, image_path
-    FROM questions
-    WHERE quiz_id = ?
-    ORDER BY question_order ASC
-  `).all(session.quiz_id);
-
-  const questions = rawQuestions.map(q => {
-    let options = [];
+  // Teszt kérdései: elsősorban a rögzített pillanatképből (Snapshotból), fallbackként a questions táblából
+  let questions = [];
+  if (session.quiz_snapshot_json) {
     try {
-      options = JSON.parse(q.options_json || '[]');
+      const snapshot = JSON.parse(session.quiz_snapshot_json);
+      if (Array.isArray(snapshot.questions) && snapshot.questions.length > 0) {
+        questions = snapshot.questions.map(q => {
+          let options = Array.isArray(q.options) ? q.options : [];
+          if (!options.length && q.options_json) {
+            try { options = JSON.parse(q.options_json); } catch { options = []; }
+          }
+          return {
+            ...q,
+            options
+          };
+        });
+      }
     } catch {
-      options = [];
+      questions = [];
     }
-    return {
-      ...q,
-      options
-    };
-  });
+  }
+
+  if (questions.length === 0) {
+    const rawQuestions = db.prepare(`
+      SELECT id, question_order, question_type, question_text, instructions, options_json, correct_answer, explanation, points, image_path
+      FROM questions
+      WHERE quiz_id = ? AND question_order < 100000
+      ORDER BY question_order ASC
+    `).all(session.quiz_id);
+
+    questions = rawQuestions.map(q => {
+      let options = [];
+      try {
+        options = JSON.parse(q.options_json || '[]');
+      } catch {
+        options = [];
+      }
+      return {
+        ...q,
+        options
+      };
+    });
+  }
 
   const totalMaxPoints = (session.max_points !== null && session.max_points !== undefined && Number(session.max_points) > 0)
     ? Number(session.max_points)
@@ -994,9 +1048,14 @@ function startRace(sessionId) {
   if (session.status !== 'ACTIVE') throw new Error('Csak aktív dolgozat versenye indítható el!');
   if (session.mode !== 'SPACE_RACE') throw new Error('Csak űrverseny (Space Race) módban indítható közös rajt!');
 
+  // Idempotens kezelés: az ismételt rajt nem indítja újra az időt (Report 15 / 1. fejezet)
+  if (session.current_question_index && session.current_question_index >= 1) {
+    return session;
+  }
+
   const now = new Date();
   const tx = db.transaction(() => {
-    db.prepare('UPDATE sessions SET current_question_index = 1 WHERE id = ?').run(sessionId);
+    db.prepare('UPDATE sessions SET current_question_index = 1, started_at = CURRENT_TIMESTAMP WHERE id = ?').run(sessionId);
 
     // Ha van időkorlát, az egyéni visszaszámlálót a közös rajt pillanatától indítjuk a már bent lévő diákoknak
     if (session.time_limit_min > 0) {
@@ -1012,6 +1071,48 @@ function startRace(sessionId) {
 
   tx();
   return { ...session, current_question_index: 1 };
+}
+
+/**
+ * Másodlagos kivetítő monitorhoz aggregált, anonimizált adatok lekérése (Report 15 / 1. fejezet)
+ * Kizárólag csapatállást és statisztikákat tartalmaz, semmilyen diáknevet vagy megoldókulcsot NEM!
+ */
+function getProjectorData(sessionId) {
+  const data = getLiveMatrixData(sessionId);
+  if (!data) return null;
+
+  return {
+    session: {
+      id: data.session.id,
+      quiz_title: data.session.quiz_title,
+      subject_name: data.session.subject_name,
+      grade_level: data.session.grade_level,
+      mode: data.session.mode,
+      current_question_index: data.session.current_question_index
+    },
+    participants: data.participants.map(p => ({
+      team_color: p.team_color || 'Kék',
+      total_points: p.total_points || 0
+    })),
+    questions: data.questions.map(q => ({
+      id: q.id,
+      question_text: q.question_text
+    })),
+    answers: data.answers.map(a => ({
+      question_id: a.question_id,
+      is_correct: a.is_correct
+    })),
+    totalMaxPoints: data.totalMaxPoints
+  };
+}
+
+/**
+ * Tanári léptetés kérdésindexének mentése
+ */
+function updateCurrentQuestionIndex(sessionId, questionIndex) {
+  const idx = Math.max(0, parseInt(questionIndex, 10) || 0);
+  db.prepare('UPDATE sessions SET current_question_index = ? WHERE id = ?').run(idx, sessionId);
+  return idx;
 }
 
 /**
@@ -1049,6 +1150,8 @@ module.exports = {
   unlockParticipant,
   submitAnswer,
   overrideAnswer,
-  getLiveMatrixData
+  getLiveMatrixData,
+  getProjectorData,
+  updateCurrentQuestionIndex
 };
 
