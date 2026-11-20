@@ -172,8 +172,8 @@
    * Alkalmazás inicializálása
    */
   async function init() {
-    // 1. Gépszám és Tanári munkaállomás felismerése az URL-ből (?gep=X vagy ?gep=tanar)
-    const gepParam = getUrlParam('gep');
+    // 1. Gépszám és Tanári munkaállomás felismerése az URL-ből (?gep=X vagy ?pc=X vagy ?gep=tanar)
+    const gepParam = getUrlParam('gep') || getUrlParam('pc');
     let isTeacherWorkstation = false;
     if (gepParam) {
       const gepLower = gepParam.trim().toLowerCase();
@@ -1910,9 +1910,8 @@
 
       if (remainingSec <= 0) {
         clearInterval(timerInterval);
-        showCalmAlert('Az időkorlát lejárt! A dolgozat automatikusan lezárásra kerül.', 'Időkorlát lejárt', 'warning', () => {
-          finishQuiz();
-        });
+        finishQuiz();
+        showCalmAlert('Az időkorlát lejárt! A dolgozat automatikusan lezárásra kerül.', 'Időkorlát lejárt', 'warning');
       }
     }
 

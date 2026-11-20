@@ -54,6 +54,11 @@ Kiemelt tantermi biztonsági, versenyfelügyeleti, hálózati szinkronizációs 
   - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
   - Duplikált válaszküldés (pl. kliens retry hálózati timeout esetén) esetén a szerver akkor is hiba nélkül, idempotensen adja vissza a korábbi mentett értékelést, helyes választ és magyarázatot, ha a diák a válasz leadásával már befejezte a dolgozatot (`isFinished = true`).
 
+* **Diákfelület és időzítő szinkronizáció (22., 50. pont):**
+  - **Fájlok:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Az időkorlát lejárásakor a kliens azonnal és automatikusan lezárja a dolgozatot a háttérben (`finishQuiz`), nem várakozva a modális ablak tanulói nyugtázására (22. pont).
+  - A gépszám felismerése a tanulói munkaállomásokon mind a `?gep=X`, mind a `?pc=X` URL paramétert egyenértékűen támogatja (50. pont).
+
 * **Képfeltöltés és médiafájlok szigorú védelme (09., 10., 13., 39. pont):**
   - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`server.js`](file:///d:/dev/Röpdolgozat%20program/server.js), [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js)
   - Szigorú fehérlistás kiterjesztés- és MIME-típus ellenőrzés a kérdésképek feltöltésekor (JPG, PNG, GIF, WEBP, SVG).
