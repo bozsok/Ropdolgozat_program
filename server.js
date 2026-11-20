@@ -33,6 +33,12 @@ app.use(cookieParser(config.cookieSecret));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Közvetlen print-report.html elérés átirányítása a védett /print végpontra (Report 14 / 13. pont)
+app.get('/print-report.html', (req, res) => {
+  const queryStr = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+  res.redirect('/print' + queryStr);
+});
+
 // Statikus fájlok kiszolgálása (Offline frontend és feltöltött képek, LAN cache beállításokkal)
 app.use(express.static(config.publicDir, {
   setHeaders: (res, filePath) => {
@@ -45,7 +51,16 @@ app.use(express.static(config.publicDir, {
     }
   }
 }));
-app.use('/uploads', express.static(config.uploadsDir, { maxAge: '7d' }));
+app.use('/uploads', express.static(config.uploadsDir, {
+  maxAge: '7d',
+  setHeaders: (res, filePath) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (filePath.endsWith('.svg')) {
+      // SVG esetén szigorú Content-Security-Policy, hogy beágyazott script ne futhasson az origin-en (Report 14 / 09. pont)
+      res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+    }
+  }
+}));
 
 // Útvonalak (API és Oldalnézetek)
 app.use('/api', apiRoutes);
@@ -76,6 +91,14 @@ function getNetworkAddresses() {
 
 // Szerver indítása az alapértelmezett 3000-es porton minden IPv4 hálózati csatolón (0.0.0.0)
 server.listen(config.port, '0.0.0.0', () => {
+  // Elavult ideiglenes képfeltöltések takarítása induláskor (Report 14 / 39. pont)
+  try {
+    const quizRepo = require('./src/db/quizRepo');
+    quizRepo.cleanExpiredTempImages();
+  } catch (e) {
+    console.warn('Elavult temp képek takarításakor figyelmeztetés:', e.message);
+  }
+
   const ips = getNetworkAddresses();
   console.log('================================================================');
   console.log(`  Röpdolgozat program szerver elindult a(z) ${config.port}-es porton!`);

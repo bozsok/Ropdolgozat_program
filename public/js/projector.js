@@ -103,6 +103,10 @@
   }
 
   function setupSocket() {
+    socket.on('connect', async () => {
+      await findAndConnectSession();
+    });
+
     socket.on('badges:updated', async (badges) => {
       if (!activeSessionId && badges.length > 0) {
         await findAndConnectSession();
@@ -144,6 +148,10 @@
       if (urlSession) {
         const found = activeSessions.find(s => String(s.id) === String(urlSession));
         if (found) target = found;
+      }
+
+      if (activeSessionId && String(activeSessionId) !== String(target.id) && socket) {
+        socket.emit('leave:session', { sessionId: activeSessionId });
       }
 
       activeSessionId = target.id;

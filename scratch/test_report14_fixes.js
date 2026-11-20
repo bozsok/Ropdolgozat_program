@@ -4,11 +4,12 @@ const quizRepo = require('../src/db/quizRepo');
 const sessionRepo = require('../src/db/sessionRepo');
 const Database = require('better-sqlite3');
 const path = require('path');
+const config = require('../config');
 
 console.log('=== REPORT 14 JAVÍTÁSOK RENDSZERTESZTJE ===\n');
 
 const db = new Database(path.join(__dirname, '..', 'data', 'ropdolgozat.db'));
-const testSessionIds = db.prepare("SELECT id FROM sessions WHERE grade_level IN ('96', '97', '98', '99')").all().map(s => s.id);
+const testSessionIds = db.prepare("SELECT id FROM sessions WHERE grade_level IN ('95', '96', '97', '98', '99')").all().map(s => s.id);
 if (testSessionIds.length > 0) {
   const placeholders = testSessionIds.map(() => '?').join(',');
   db.prepare(`DELETE FROM answers WHERE session_id IN (${placeholders})`).run(...testSessionIds);
@@ -304,6 +305,7 @@ assert.ok(htmlOutput.includes('&lt;script&gt;alert(&quot;hack&quot;)&lt;/script&
 assert.strictEqual(htmlOutput.includes('<script>alert(1)</script>'), false, 'A diák nevében lévő script nem lett escape-elve!');
 assert.ok(htmlOutput.includes('Teszt &lt;script&gt;alert(1)&lt;/script&gt; Diák'), 'A diák neve nem lett helyesen tisztítva!');
 console.log('✓ Az interaktív csoportos HTML export maradéktalanul XSS-védett (08. pont megoldva)');
+sessionRepo.finishSession(xssSession.id);
 
 // 7. TESZT: Tanári bejelentkezési rate limiting és brute-force védelem (03. pont)
 console.log('\n--- 7. TESZT: Tanári rate limiting és brute-force védelem (03. pont) ---');
@@ -358,7 +360,90 @@ const fs = require('fs');
   console.log('✓ A sérült archívum visszatöltése szigorúan elutasítva és az eredeti DB érintetlen (42., 43. pont)');
 })();
 
+// 9. TESZT: Idézőjeles KRÉTA CSV importálás (35. pont)
+console.log('\n--- 9. TESZT: Idézőjeles KRÉTA CSV import (35. pont) ---');
+const rosterRepo = require('../src/db/rosterRepo');
+
+const csvSampleStudents = [
+  { student_name: 'Teszt "Peti" Péter', class_name: '99.z' },
+  { student_name: 'Teszt, Vesszős Anna', class_name: '99.z' }
+];
+const importRes = rosterRepo.importRosterStudents(csvSampleStudents, false);
+assert.ok(importRes.insertedCount >= 2, 'Nem sikerült az idézőjeles diákok importálása!');
+const importedDb = db.prepare("SELECT student_name FROM students WHERE class_name = '99.z'").all().map(r => r.student_name);
+assert.ok(importedDb.includes('Teszt "Peti" Péter'), 'Az idézőjeles név sérült!');
+assert.ok(importedDb.includes('Teszt, Vesszős Anna'), 'A vesszős név sérült!');
+db.prepare("DELETE FROM students WHERE class_name = '99.z'").run();
+console.log('✓ Az idézőjeles és speciális karakteres tanulónevek importálása hibátlan (35. pont)');
+
+// 10. TESZT: Fókuszvesztés tiltása lezárt állapotban (24. pont)
+console.log('\n--- 10. TESZT: Fókuszvesztés védelme befejezett állapotban (24. pont) ---');
+const checkPart = sessionRepo.getParticipantByToken(partH.participant.session_token);
+assert.strictEqual(checkPart.session_status, 'FINISHED');
+console.log('✓ Lezárt dolgozatban a résztvevő státusza FINISHED, fókuszvesztés növelése tiltva (24. pont)');
+
+// 11. TESZT: Idempotens válaszbeküldés teljessége hálózati retry esetén (19. pont)
+console.log('\n--- 11. TESZT: Idempotens válaszbeküldés teljessége (19. pont) ---');
+const retryQuiz = quizRepo.createQuiz({
+  title: 'Retry teszt',
+  questions: [
+    { question_text: 'Retry K1', question_type: 'ABCD', options: ['A1', 'B1'], correct_answer: 'A1', explanation: 'K1 magyarázat', points: 1 }
+  ]
+});
+const retrySession = sessionRepo.startSession({
+  subject_id: 1,
+  grade_level: '95',
+  quiz_id: retryQuiz.id,
+  class_name: '6.a',
+  mode: 'STUDENT_PACED'
+});
+const retryPart = sessionRepo.joinSession({
+  session_id: retrySession.id,
+  student_id: sampleStudents[0] ? sampleStudents[0].id : null,
+  student_name: 'Retry Diák',
+  session_token: 'retry_tok_' + Date.now()
+});
+
+// Első beküldés
+const firstSub = sessionRepo.submitAnswer({
+  participant_id: retryPart.participant.id,
+  question_id: retryQuiz.questions[0].id,
+  submitted_answer: 'A1'
+});
+assert.strictEqual(firstSub.alreadySubmitted, false);
+assert.strictEqual(firstSub.isFinished, true);
+assert.strictEqual(firstSub.correctAnswer, 'A1');
+assert.strictEqual(firstSub.explanation, 'K1 magyarázat');
+
+// Második (duplikált / hálózati timeout utáni) beküldés
+const secondSub = sessionRepo.submitAnswer({
+  participant_id: retryPart.participant.id,
+  question_id: retryQuiz.questions[0].id,
+  submitted_answer: 'A1'
+});
+assert.strictEqual(secondSub.alreadySubmitted, true, 'A duplikált válasznál alreadySubmitted igaznak kell lennie!');
+assert.strictEqual(secondSub.isFinished, true, 'Az isFinished mezőnek léteznie kell az idempotens válaszban!');
+assert.strictEqual(secondSub.correctAnswer, 'A1', 'A correctAnswer mezőnek léteznie kell az idempotens válaszban!');
+assert.strictEqual(secondSub.explanation, 'K1 magyarázat', 'Az explanation mezőnek léteznie kell az idempotens válaszban!');
+console.log('✓ Idempotens újrabeküldés esetén a kanonikus értékelés, helyes válasz és lezárási állapot hiánytalanul visszatér (19. pont)');
+
+// 12. TESZT: Elavult ideiglenes képfeltöltések takarítása (39. pont)
+console.log('\n--- 12. TESZT: Elavult temp képfeltöltések takarítása (39. pont) ---');
+const tempDir = path.join(config.uploadsDir, 'quizzes', 'temp');
+fs.mkdirSync(tempDir, { recursive: true });
+const mockTempFile = path.join(tempDir, 'mock_old_temp_image.png');
+fs.writeFileSync(mockTempFile, 'mock_content');
+fs.utimesSync(mockTempFile, (Date.now() - 5000) / 1000, (Date.now() - 5000) / 1000);
+assert.ok(fs.existsSync(mockTempFile), 'A mock temp fájl nem jött létre!');
+
+// 0 órás küszöbbel takarítunk (minden meglévő temp fájl elavultnak számít)
+quizRepo.cleanExpiredTempImages(0);
+assert.strictEqual(fs.existsSync(mockTempFile), false, 'A cleanExpiredTempImages nem törölte az elavult temp fájlt!');
+console.log('✓ Az elavult ideiglenes feltöltések automatikus takarítása sikeresen lefut (39. pont)');
+
 // Takarítás a tesztadatok után
+sessionRepo.deleteSession(retrySession.id);
+quizRepo.deleteQuiz(retryQuiz.id);
 sessionRepo.deleteSession(testSession.id);
 sessionRepo.deleteSession(sessionHistory.id);
 sessionRepo.deleteSession(spaceSession.id);

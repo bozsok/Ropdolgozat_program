@@ -308,6 +308,15 @@
     if (socket || typeof io === 'undefined') return;
     socket = io();
 
+    // Újracsatlakozáskor automatikus állapot-újraszinkronizálás (Report 14 / 20.)
+    socket.on('connect', () => {
+      loadActiveSessions();
+      if (currentSessionId) {
+        socket.emit('join:session', { sessionId: currentSessionId, role: 'teacher' });
+        switchSession(currentSessionId);
+      }
+    });
+
     socket.on('badges:updated', (badges) => {
       activeSessionsList = badges;
       renderBadges();
@@ -320,7 +329,17 @@
     });
 
     socket.on('participant:focus_lost', (data) => {
-      showToast(`⚠️ Fókuszvesztés: ${escapeHtml(data.studentName)} (${data.focusLostCount}x)`, 'danger');
+      // Csak az aktuálisan kezelt dolgozat fókuszvesztéseit jelezzük ki (Report 14 / 21.)
+      if (!data || !currentSessionId || String(data.sessionId) === String(currentSessionId)) {
+        showToast(`⚠️ Fókuszvesztés: ${escapeHtml(data.studentName)} (${data.focusLostCount}x)`, 'danger');
+      }
+    });
+
+    socket.on('session:finished', (data) => {
+      if (currentSessionId && (!data || !data.sessionId || String(data.sessionId) === String(currentSessionId))) {
+        showToast('A dolgozat befejeződött!', 'info');
+        switchSession(currentSessionId);
+      }
     });
 
     socket.on('race:started', () => {
@@ -386,6 +405,10 @@
    * Váltás egy adott munkamenet élő mátrixára
    */
   async function switchSession(sessionId) {
+    // Ha volt előző dolgozat, kilépünk annak a szobájából (Report 14 / 20.)
+    if (currentSessionId && String(currentSessionId) !== String(sessionId) && socket) {
+      socket.emit('leave:session', { sessionId: currentSessionId });
+    }
     currentSessionId = sessionId;
     renderBadges();
 
@@ -471,6 +494,9 @@
   }
 
   function showNoSessionView() {
+    if (currentSessionId && socket) {
+      socket.emit('leave:session', { sessionId: currentSessionId });
+    }
     currentSessionId = null;
     noActiveSessionBox.style.display = 'flex';
     activeSessionPanel.style.display = 'none';

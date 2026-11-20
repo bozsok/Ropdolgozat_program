@@ -58,18 +58,28 @@ const storage = multer.diskStorage({
   }
 });
 
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']);
+const ALLOWED_IMAGE_MIMETYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']);
+
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // max 5 MB
   fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|gif|webp|svg/;
-    const extname = allowed.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowed.test(file.mimetype);
-    if (extname && mimetype) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const mime = (file.mimetype || '').toLowerCase();
+    if (ALLOWED_IMAGE_EXTENSIONS.has(ext) && ALLOWED_IMAGE_MIMETYPES.has(mime)) {
       return cb(null, true);
     }
-    cb(new Error('Csak képfájlok (JPG, PNG, GIF, WEBP, SVG) tölthetők fel!'));
+    cb(new Error('Csak érvényes képfájlok (JPG, PNG, GIF, WEBP, SVG) tölthetők fel!'));
   }
+});
+
+// Globális no-store cache fejléc minden dinamikus API végponthoz (Report 14 / 10. pont)
+router.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
 });
 
 /* ==========================================================================
@@ -262,13 +272,39 @@ router.post('/admin/roster/import', requireAdminAuth, uploadMemory.single('file'
         }
       });
     } else {
-      // CSV vagy szöveges formátum
+      // CSV vagy szöveges formátum (Idézőjelek és határolók robusztus kezelésével - Report 14 / 35.)
       const content = req.file.buffer.toString('utf-8');
       const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
+      function parseCsvLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        const delim = line.includes(';') ? ';' : (line.includes('\t') ? '\t' : ',');
+
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+              current += '"';
+              i++;
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (char === delim && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        result.push(current.trim());
+        return result;
+      }
+
       let isFirst = true;
       for (const line of lines) {
-        const parts = line.split(/[;\t,]/).map(p => p.trim());
+        const parts = parseCsvLine(line);
         if (isFirst && (line.toLowerCase().includes('osztály') || line.toLowerCase().includes('név'))) {
           isFirst = false;
           continue;
@@ -1056,7 +1092,7 @@ router.post('/student/submit-answer', (req, res) => {
   }
 });
 
-// Fókuszvesztés rögzítése
+// Fókuszvesztés rögzítése (Report 14 / 21., 24.)
 router.post('/student/focus-lost', (req, res) => {
   try {
     const token = req.body.session_token || req.headers['x-session-token'];
@@ -1065,12 +1101,18 @@ router.post('/student/focus-lost', (req, res) => {
     const participant = sessionRepo.getParticipantByToken(token);
     if (!participant) return res.status(404).json({ error: 'Érvénytelen munkamenet!' });
 
+    // Ha a dolgozat már lezárult vagy a diák önállóan befejezte, nem növeljük tovább a számlálót
+    if (participant.session_status === 'FINISHED' || participant.is_finished === 1) {
+      return res.json({ success: true, count: participant.focus_lost_count, ignored: true });
+    }
+
     const updated = sessionRepo.recordFocusLost(participant.id);
 
-    // Értesítés a tanári felületnek
+    // Értesítés kizárólag az adott dolgozat tanári szobájának
     const io = req.app.get('io');
     if (io) {
       io.to(`session_${participant.session_id}_teacher`).emit('participant:focus_lost', {
+        sessionId: participant.session_id,
         participantId: participant.id,
         studentName: participant.student_name,
         focusLostCount: updated.focus_lost_count

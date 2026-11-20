@@ -285,10 +285,13 @@
       }
     });
 
-    // Újracsatlakozáskor a foglaltsági állapot lekérdezése
+    // Újracsatlakozáskor a foglaltsági állapot és az aktív szobatagság megújítása (Report 14 / 20.)
     socket.on('connect', () => {
       if (selectedClass && loginStep2 && loginStep2.style.display !== 'none') {
         socket.emit('student:get_occupied', { className: selectedClass });
+      }
+      if (activeSession && sessionToken) {
+        socket.emit('join:session', { sessionId: activeSession.id, role: 'student' });
       }
     });
   }

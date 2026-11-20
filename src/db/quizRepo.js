@@ -250,6 +250,33 @@ function cleanQuizOrphanImages(quizId) {
 }
 
 /**
+ * 24 óránál régebbi, elvetett ideiglenes képfeltöltések automatikus takarítása (Report 14 / 39. pont)
+ */
+function cleanExpiredTempImages(maxAgeHours = 24) {
+  try {
+    const tempDir = path.join(config.uploadsDir, 'quizzes', 'temp');
+    if (!fs.existsSync(tempDir)) return;
+
+    const now = Date.now();
+    const maxAgeMs = maxAgeHours * 60 * 60 * 1000;
+    const files = fs.readdirSync(tempDir);
+    for (const file of files) {
+      const fullPath = path.join(tempDir, file);
+      try {
+        const stat = fs.statSync(fullPath);
+        if (stat.isFile() && (now - stat.mtimeMs >= maxAgeMs)) {
+          fs.unlinkSync(fullPath);
+        }
+      } catch {
+        // Egyedi fájlhiba figyelmen kívül hagyása
+      }
+    }
+  } catch (err) {
+    console.error('Hiba az elavult ideiglenes képek takarításakor:', err);
+  }
+}
+
+/**
  * Kvízhez tartozó képek átmásolása duplikáláskor az új kvíz almappájába
  */
 function copyQuizImages(originalQuizId, newQuizId) {
@@ -783,6 +810,7 @@ module.exports = {
   getFolderBreadcrumbs,
   createFolder,
   renameFolder,
-  deleteFolder
+  deleteFolder,
+  cleanExpiredTempImages
 };
 

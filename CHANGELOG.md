@@ -4,11 +4,11 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
-## [1.24.0] – 2026-11-20
+## [1.25.0] – 2026-11-20
 
-### Report 14 tantermi átvilágítás: Space Race kérdés- és rajtvédelem, gépváltási és reset jelenlét feloldása, HTML exportok XSS védelme, tanári PIN brute-force védelem és atomi SQLite Backup & Restore garancia
+### Report 14 tantermi átvilágítás: Space Race kérdés- és rajtvédelem, gépváltási és reset jelenlét feloldása, HTML exportok XSS védelme, tanári PIN brute-force védelem, atomi SQLite Backup & Restore garancia, Socket.IO szobamenedzsment és robusztus KRÉTA CSV import
 
-Kiemelt tantermi biztonsági, versenyfelügyeleti és üzemeltetési kiadás az éles próba előtti átvilágítás (Report 14) alapján. A Space Race (Csapatverseny) közös rajtja szerveroldalon is teljes védelmet kapott: a tanulói felület a tanári indítás (`start-race`) előtt egyáltalán nem kapja meg a kérdéseket (`questions: []`), a rajt előtti válaszküldés szigorúan tiltott, az egyéni időkorlát pedig nem a várótermi belépéstől, hanem kizárólag a tanári rajt pillanatától indul el. A tantermi gépváltás (`authorize-seat-change`) és a téves névfoglalás törlése (`reset`) mostantól azonnal feloldja a memóriabeli és adatbázis-jelenlétet a célgépen, így az áthelyezett diák a lenyíló névsorban nem ragad benn foglaltként, a régi gép pedig célzott Socket.IO értesítésre automatikusan kilép a munkamenetből anélkül, hogy a többi tanulót megzavarná. Az interaktív csoportos HTML és az egyéni ZIP értékelőlap exportok teljes körű XSS és attribútum-tisztítást (`escapeHtml`) kaptak, valamint a ZIP fájlnevek egyediségi védelmet élveznek azonos nevű diákok esetén. A tanári belépési felület intelligens próbálkozáskorlátot (Rate Limiting) kapott az illetéktelen PIN próbálgatások (brute-force) ellen (5 sikertelen kísérlet után 1 perces zárolás lép életbe). Végül a rendszermentés és -visszaállítás az SQLite Online Backup API-val konzisztens pillanatképet készít, a visszatöltés pedig előzetes integritás-, séma- és idegenkulcs-vizsgálattal, valamint hiba esetén automatikus biztonsági másolatra való visszagörgetéssel (Rollback) garantálja a 100%-os adatbiztonságot.
+Kiemelt tantermi biztonsági, versenyfelügyeleti, hálózati szinkronizációs és üzemeltetési kiadás az éles próba előtti átvilágítás (Report 14) alapján. A Space Race (Csapatverseny) közös rajtja szerveroldalon is teljes védelmet kapott: a tanulói felület a tanári indítás (`start-race`) előtt egyáltalán nem kapja meg a kérdéseket (`questions: []`), a rajt előtti válaszküldés szigorúan tiltott, az egyéni időkorlát pedig nem a várótermi belépéstől, hanem kizárólag a tanári rajt pillanatától indul el. A tantermi gépváltás (`authorize-seat-change`) és a téves névfoglalás törlése (`reset`) mostantól azonnal feloldja a memóriabeli és adatbázis-jelenlétet a célgépen, így az áthelyezett diák a lenyíló névsorban nem ragad benn foglaltként, a régi gép pedig célzott Socket.IO értesítésre automatikusan kilép a munkamenetből anélkül, hogy a többi tanulót megzavarná. Az interaktív csoportos HTML és az egyéni ZIP értékelőlap exportok teljes körű XSS és attribútum-tisztítást (`escapeHtml`) kaptak, valamint a ZIP fájlnevek egyediségi védelmet élveznek azonos nevű diákok esetén. A tanári belépési felület intelligens próbálkozáskorlátot (Rate Limiting) kapott az illetéktelen PIN próbálgatások (brute-force) ellen (5 sikertelen kísérlet után 1 perces zárolás lép életbe). A rendszermentés és -visszaállítás az SQLite Online Backup API-val konzisztens pillanatképet készít, a visszatöltés pedig előzetes integritás-, séma- és idegenkulcs-vizsgálattal, valamint hiba esetén automatikus biztonsági másolatra való visszagörgetéssel (Rollback) garantálja a 100%-os adatbiztonságot. A Socket.IO szobakezelés teljes tisztítást kapott csatornaváltásokkor (`leave:session`), hálózati mikromegszakadások után a kliensek automatikusan újra feliratkoznak és szinkronizálják az élő mátrixot és a Live Badge-eket, a KRÉTA CSV importáló pedig összetett idézőjelezett mezőket is hibátlanul feldolgoz.
 
 #### Hozzáadva és megújítva (Added and Redesigned)
 * **Space Race közös rajt és kérdésvédelem (16. pont):**
@@ -39,6 +39,32 @@ Kiemelt tantermi biztonsági, versenyfelügyeleti és üzemeltetési kiadás az 
   - A mentés az SQLite hivatalos Online Backup API-ját használja, így az élő adatbázisról garantáltan konzisztens pillanatkép kerül a ZIP csomagba.
   - A visszaállítás (Restore) a kicsomagolt adatbázison `integrity_check`, `foreign_key_check` és kötelező táblamegléti vizsgálatot végez.
   - Bármilyen fájlcsere vagy képmásolási hiba esetén a rendszer automatikusan visszagörgeti a `.bak` másolatot a helyére és újranyitja a kapcsolatot, kizárva az adatbázis keveredését vagy elvesztését.
+
+* **Socket.IO szobakezelés és újracsatlakozási szinkronizáció (20., 21., 24. pont):**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/js/projector.js`](file:///d:/dev/Röpdolgozat%20program/public/js/projector.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A tanár és a kivetítő csatornaváltásakor a rendszer explicit elhagyja az előző munkamenet szobáját (`leave:session`), megszüntetve a felesleges hálózati forgalmat és a korábbi dolgozatok eseményeinek keveredését.
+  - Hálózati szakadás után az újracsatlakozáskor (`connect` esemény) az admin, a kivetítő és a diák kliens azonnal újraküldi a szoba-feliratkozást, és frissíti a Live Badge állapotokat, illetve az élő mátrixot.
+  - A `participant:focus_lost` fókuszvesztési értesítés kizárólag az éppen aktív munkamenet képernyőjén jelenít meg tanári figyelmeztetést, és lezárt dolgozatban a szerver már nem rögzít felesleges fókuszvesztést.
+
+* **Robusztus KRÉTA CSV import idézőjel-védelemmel (35. pont):**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - Bevezetésre került a beépített `parseCsvLine` RFC 4180 szabvány szerinti tokenizáló, amely megbízhatóan kezeli az idézőjelbe zárt mezőket, pontosvesszőt, vesszőt, tabulátort és a dupla idézőjeles escape-elést.
+
+* **Idempotens válaszbeküldés teljessége hálózati mikromegszakadások ellen (19. pont):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - Duplikált válaszküldés (pl. kliens retry hálózati timeout esetén) esetén a szerver akkor is hiba nélkül, idempotensen adja vissza a korábbi mentett értékelést, helyes választ és magyarázatot, ha a diák a válasz leadásával már befejezte a dolgozatot (`isFinished = true`).
+
+* **Képfeltöltés és médiafájlok szigorú védelme (09., 10., 13., 39. pont):**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`server.js`](file:///d:/dev/Röpdolgozat%20program/server.js), [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js)
+  - Szigorú fehérlistás kiterjesztés- és MIME-típus ellenőrzés a kérdésképek feltöltésekor (JPG, PNG, GIF, WEBP, SVG).
+  - Az `/uploads` statikus kiszolgálónál bevezetésre került az `X-Content-Type-Options: nosniff` fejléc, valamint SVG esetén szigorú `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'` fejléc, megakadályozva a beágyazott szkriptek futását az alkalmazás eredetén közvetlen megnyitáskor is.
+  - Minden dinamikus API végpont globális `Cache-Control: no-store, no-cache, must-revalidate` fejlécet kapott, védve a diák- és tanári adatokat a böngésző vagy proxy gyorsítótárazásától.
+  - A közvetlen `/print-report.html` statikus elérés automatikusan átirányításra kerül a hitelesített `/print` útvonalra.
+  - A szerver indulásakor automatikusan kitakarításra kerülnek a 24 óránál régebbi, elvetett ideiglenes képfeltöltések (`cleanExpiredTempImages`).
+
+* **Átfogó tantermi regressziós tesztcsomag (Report 14 ellenőrzések):**
+  - **Fájlok:** [`scratch/test_report14_fixes.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_report14_fixes.js)
+  - 12 új szigorú automatizált integrációs teszt igazolja a Space Race közös rajtját, a gépváltást, a HTML XSS védelmet, a tanári PIN Rate Limitinget, az SQLite konzisztens mentést és visszaállítást, a KRÉTA CSV importot, az idempotens újrabeküldést és az elavult képek takarítását.
 
 ---
 

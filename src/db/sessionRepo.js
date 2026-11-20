@@ -656,6 +656,24 @@ function submitAnswer({
   `).get(participant_id);
 
   if (!preCheck) throw new Error('A résztvevő nem található!');
+
+  // Idempotens védelem: ha erre a kérdésre már mentve van válasz, azt hiba nélkül visszaadjuk (befejezett dolgozatnál is!)
+  const existingAnswer = db.prepare(`
+    SELECT * FROM answers
+    WHERE participant_id = ? AND question_id = ?
+  `).get(participant_id, question_id);
+
+  if (existingAnswer) {
+    const qInfo = db.prepare('SELECT correct_answer, explanation FROM questions WHERE id = ?').get(question_id);
+    return {
+      alreadySubmitted: true,
+      answer: existingAnswer,
+      isFinished: preCheck.is_finished === 1,
+      correctAnswer: qInfo ? qInfo.correct_answer : null,
+      explanation: qInfo ? qInfo.explanation : null
+    };
+  }
+
   if (preCheck.session_status !== 'ACTIVE' || preCheck.is_finished === 1) {
     throw new Error('A dolgozat már befejeződött, új válasz nem küldhető be!');
   }
@@ -696,9 +714,13 @@ function submitAnswer({
     `).get(participant_id, question_id);
 
     if (existingAnswer) {
+      const qInfo = db.prepare('SELECT correct_answer, explanation FROM questions WHERE id = ?').get(question_id);
       result = {
         alreadySubmitted: true,
-        answer: existingAnswer
+        answer: existingAnswer,
+        isFinished: participant.is_finished === 1,
+        correctAnswer: qInfo ? qInfo.correct_answer : null,
+        explanation: qInfo ? qInfo.explanation : null
       };
       return;
     }
