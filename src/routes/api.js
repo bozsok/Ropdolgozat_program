@@ -397,6 +397,26 @@ router.post('/admin/quizzes/:id/duplicate', requireAdminAuth, (req, res) => {
   }
 });
 
+// Tesztek egyesítése (Merge)
+router.post('/admin/quizzes/merge', requireAdminAuth, (req, res) => {
+  try {
+    const { quiz_id_1, quiz_id_2, title, folder_id, subject_id, subject_grade, default_time_limit_min } = req.body;
+    if (!quiz_id_1 || !quiz_id_2) {
+      return res.status(400).json({ error: 'Mindkét teszt azonosítójának megadása kötelező!' });
+    }
+    const merged = quizRepo.mergeQuizzes(quiz_id_1, quiz_id_2, {
+      title,
+      folder_id,
+      subject_id,
+      subject_grade,
+      default_time_limit_min
+    });
+    res.json({ success: true, quiz: merged });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.delete('/admin/quizzes/:id', requireAdminAuth, (req, res) => {
   try {
     quizRepo.deleteQuiz(req.params.id);

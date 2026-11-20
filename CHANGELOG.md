@@ -4,6 +4,25 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.22.0] – 2026-11-20
+
+### Tesztek egyesítése (Merge) funkció a Tesztszerkesztőben, nem-destruktív kérdésmásolás ütközésmentes áthelyezéssel és összegző modális ablakkal
+
+Kiemelt tanári kényelmi és tananyag-szervezési kiadás: a Tesztszerkesztő felületen megjelent a tesztek egyesítése („Merge”) lehetősége. A pedagógus két tetszőleges korábbi dolgozatból (például félévi vagy év végi összefoglalókhoz, témazárókhoz) egyetlen gombnyomással egy új, harmadik feladatsort hozhat létre. Az egyesítés teljesen nem-destruktív (az eredeti dolgozatok és feladataik érintetlenek maradnak), az összes kérdés (ABCD, TF, SHORT típusok, magyarázatok, instrukciók és pontszámok) folytonos sorszámozással kerül át a célkvízbe. A kérdésekhez csatolt ábrák és diagramok fájlütközésmentes biztonsági prefixeléssel másolódnak át az új teszt médiakönyvtárába. A funkció elérhető közvetlenül a tesztkártyák műveleti gombsorából (zöld `call_merge` gyorsgomb), valamint a szerkesztő fejlécében található **[ 🔀 Tesztek egyesítése ]** eszköztárgombbal. A műveletet támogató Calm modális ablak intelligens évfolyam-csoportosítással (`<optgroup>`), önmagával való egyesítés elleni védelemmel, automatikus címajánlással, célmappa-választással és dinamikus kérdésszám/összpontszám statisztikai összegzővel rendelkezik. A sikeres összevonást követően a rendszer azonnal megnyitja a szerkesztőben a frissen létrejött új dolgozatot.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Tesztek egyesítése (Merge) funkció és nem-destruktív kérdésmásolás:**
+  - **Fájlok:** [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`scratch/test_merge_quizzes.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_merge_quizzes.js)
+  - Új `mergeQuizzes(quizId1, quizId2, options)` és `copyMergedQuizImages(sourceQuizIds, newQuizId)` adatbázis-szintű metódusok tranzakcióbiztos, ütközésmentes kérdés- és képmásolással.
+  - Új `POST /api/admin/quizzes/merge` REST végpont szigorú tanári jogosultság-ellenőrzéssel, bemeneti validációval és hibaág-kezeléssel.
+  - Új felületi Calm modális ablak (`#modal-merge-quizzes`) forrásteszt-választókkal, célmappa-kiválasztással, időkorláttal és dinamikus összegző dobozzal (`#merge-quiz-summary-box`), amely mutatja a leendő összpontszámot és a kérdések számát.
+  - Új gyorsgomb minden tesztkártyán (`.quiz-btn-merge`, zöld kiemelés, `call_merge` ikon), amely előre kiválasztja az adott kvízt 1. kiindulási tesztként.
+  - Új eszköztárgomb a Tesztszerkesztő fejlécében (`#btn-merge-quizzes`).
+  - Automatikus navigáció: az új dolgozat létrehozása után az admin felület azonnal megnyitja azt a szerkesztőben.
+  - Automatikus rendszerteszt (`scratch/test_merge_quizzes.js`), integrálva az `npm test` tesztcsomagba.
+
+---
+
 ## [1.21.0] – 2026-11-19
 
 ### Diákösszegző képernyő tágas kétoszlopos Calm Learner elrendezése, kördiagram tisztítása és pontszám kiemelése a körből, kattintható kérdésenkénti helyes válasz popover kitakarásmentes megjelenítéssel, valamint Új dolgozat indítása évfolyamszűrés és véletlenszerű válaszsorrend beállítás

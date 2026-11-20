@@ -1,12 +1,12 @@
 {
   "name": "ropdolgozat-program",
-  "version": "1.21.0",
+  "version": "1.22.0",
   "description": "Offline Iskolai Helyi Hálózatos Röpdolgozat Rendszer",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "init-db": "node src/db/init.js",
-    "test": "node scratch/test_full_system.js && node scratch/test_report12_fixes.js && node scratch/test_socrative_import.js"
+    "test": "node scratch/test_full_system.js && node scratch/test_report12_fixes.js && node scratch/test_socrative_import.js && node scratch/test_merge_quizzes.js"
   },
   "engines": {
     "node": ">=22.11.0",

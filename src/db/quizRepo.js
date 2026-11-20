@@ -513,6 +513,108 @@ function duplicateQuiz(quizId, customTitle = null) {
 }
 
 /**
+ * Több forráskvízhez tartozó képek átmásolása az új kvíz almappájába (névütközés-mentesen)
+ */
+function copyMergedQuizImages(sourceQuizIds, newQuizId) {
+  try {
+    const newDir = path.join(config.uploadsDir, 'quizzes', `quiz-${newQuizId}`);
+    fs.mkdirSync(newDir, { recursive: true });
+
+    for (const srcId of sourceQuizIds) {
+      const origDir = path.join(config.uploadsDir, 'quizzes', `quiz-${srcId}`);
+      if (fs.existsSync(origDir)) {
+        const entries = fs.readdirSync(origDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isFile()) {
+            const destName = `src_${srcId}_${entry.name}`;
+            fs.copyFileSync(path.join(origDir, entry.name), path.join(newDir, destName));
+
+            // Frissítjük az új kvíz kérdéseiben a hivatkozást
+            db.prepare(`
+              UPDATE questions 
+              SET image_path = REPLACE(image_path, '/uploads/quizzes/quiz-' || ? || '/' || ?, '/uploads/quizzes/quiz-' || ? || '/' || ?)
+              WHERE quiz_id = ?
+            `).run(String(srcId), entry.name, String(newQuizId), destName, newQuizId);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`Hiba a kvízek (${sourceQuizIds.join(', ')} -> #${newQuizId}) képeinek másolásakor:`, err);
+  }
+}
+
+/**
+ * Két meglévő teszt kérdéseinek egyesítése egyetlen új tesztté (Merge)
+ * @param {number} quizId1 - Első teszt (alap)
+ * @param {number} quizId2 - Második teszt (hozzáfűzendő)
+ * @param {object} options - Új teszt metaadatai (title, subject_id, subject_grade, folder_id, default_time_limit_min)
+ */
+function mergeQuizzes(quizId1, quizId2, options = {}) {
+  const q1 = getQuizById(Number(quizId1), false);
+  const q2 = getQuizById(Number(quizId2), false);
+
+  if (!q1) throw new Error('Az első kiválasztott teszt nem található!');
+  if (!q2) throw new Error('A második kiválasztott teszt nem található!');
+  if (Number(quizId1) === Number(quizId2)) {
+    throw new Error('Egy tesztet nem lehet önmagával egyesíteni!');
+  }
+
+  const title = String(options.title || `${q1.title} + ${q2.title}`).trim();
+  if (!title) throw new Error('Az egyesített teszt címe kötelező!');
+
+  const subject_id = options.subject_id !== undefined ? Number(options.subject_id) : q1.subject_id;
+  const folder_id = options.folder_id !== undefined ? (options.folder_id ? Number(options.folder_id) : null) : q1.folder_id;
+  const subject_grade = options.subject_grade !== undefined ? String(options.subject_grade).trim() : (q1.subject_grade || q2.subject_grade || '');
+  const default_time_limit_min = options.default_time_limit_min !== undefined
+    ? Number(options.default_time_limit_min)
+    : Math.max(Number(q1.default_time_limit_min) || 0, Number(q2.default_time_limit_min) || 0);
+
+  const combinedQuestions = [];
+  let currentOrder = 1;
+
+  for (const q of (q1.questions || [])) {
+    combinedQuestions.push({
+      question_order: currentOrder++,
+      question_type: q.question_type,
+      question_text: q.question_text,
+      instructions: q.instructions || '',
+      image_path: q.image_path,
+      options: q.options,
+      correct_answer: q.correct_answer,
+      explanation: q.explanation,
+      points: q.points
+    });
+  }
+
+  for (const q of (q2.questions || [])) {
+    combinedQuestions.push({
+      question_order: currentOrder++,
+      question_type: q.question_type,
+      question_text: q.question_text,
+      instructions: q.instructions || '',
+      image_path: q.image_path,
+      options: q.options,
+      correct_answer: q.correct_answer,
+      explanation: q.explanation,
+      points: q.points
+    });
+  }
+
+  const newQuiz = createQuiz({
+    subject_id,
+    folder_id,
+    title,
+    subject_grade,
+    default_time_limit_min,
+    questions: combinedQuestions
+  });
+
+  copyMergedQuizImages([q1.id, q2.id], newQuiz.id);
+  return getQuizById(newQuiz.id, false);
+}
+
+/**
  * Teszt törlése (kérdésekkel és esetleges kapcsolódó munkamenetekkel együtt)
  */
 function deleteQuiz(quizId) {
@@ -673,6 +775,7 @@ module.exports = {
   createQuiz,
   updateQuiz,
   duplicateQuiz,
+  mergeQuizzes,
   deleteQuiz,
   moveQuiz,
   getFolders,
