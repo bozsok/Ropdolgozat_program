@@ -243,6 +243,13 @@ function startSession({
   const trimmedGrade = String(grade_level || '').trim();
   if (!trimmedGrade) throw new Error('Az évfolyam megadása kötelező!');
   if (!quiz_id) throw new Error('A teszt kiválasztása kötelező!');
+
+  // Ellenőrizzük, hogy a kiválasztott teszt létezik-e és nincs-e törölve (Report 17 / 1.3 fejezet)
+  const quizCheck = db.prepare('SELECT id, is_deleted FROM quizzes WHERE id = ?').get(quiz_id);
+  if (!quizCheck || quizCheck.is_deleted === 1) {
+    throw new Error('A kiválasztott teszt nem található vagy korábban törlésre került!');
+  }
+
   if (mode === 'TEACHER_PACED') {
     throw new Error('A Tanári léptetés mód fejlesztés alatt áll. Kérjük, válaszd a Diák-tempó vagy Űrhajós verseny módot!');
   }
@@ -851,7 +858,8 @@ function submitAnswer({
       }
     }
 
-    if (!question) {
+    if (!question && !participant.quiz_snapshot_json) {
+      // Csak pillanatkép nélküli történeti sessionök esetén megengedett a fallback a sablonra (Report 17 / 1.2 fejezet)
       question = db.prepare(`
         SELECT id, quiz_id, question_type, options_json, correct_answer, explanation, points
         FROM questions
@@ -860,7 +868,7 @@ function submitAnswer({
     }
 
     if (!question) {
-      throw new Error('A kérdés nem található a dolgozat tesztjében!');
+      throw new Error('A kérdés nem található a dolgozatban!');
     }
 
     let parsedOptions = [];
@@ -999,10 +1007,10 @@ function overrideAnswer({
     isCorrect = newPoints > 0 ? 1 : 0;
   } else {
     if (eval_status === 'CORRECT') {
-      newPoints = Number(answer.max_points) || 1.0;
+      newPoints = maxPoints;
       isCorrect = 1;
     } else if (eval_status === 'PARTIAL') {
-      newPoints = (Number(answer.max_points) || 1.0) / 2.0;
+      newPoints = maxPoints / 2.0;
       isCorrect = 1;
     } else {
       newPoints = 0.0;

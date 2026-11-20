@@ -1,21 +1,30 @@
+const path = require('path');
+const fs = require('fs');
+
+// Report 17 / 4. fejezet: Izolált szintetikus tesztkörnyezet, az éles ropdolgozat.db teljes védelme
+const testDbPath = path.join(__dirname, '..', 'data', 'test_isolated_report17.db');
+const testUploadsDir = path.join(__dirname, '..', 'data', 'test_uploads_report17');
+
+process.env.DB_PATH = testDbPath;
+process.env.UPLOADS_DIR = testUploadsDir;
+
+// Ha korábbról maradt volna, kitakarítjuk
+if (fs.existsSync(testDbPath)) { try { fs.unlinkSync(testDbPath); } catch {} }
+if (fs.existsSync(testDbPath + '-wal')) { try { fs.unlinkSync(testDbPath + '-wal'); } catch {} }
+if (fs.existsSync(testDbPath + '-shm')) { try { fs.unlinkSync(testDbPath + '-shm'); } catch {} }
+if (fs.existsSync(testUploadsDir)) { try { fs.rmSync(testUploadsDir, { recursive: true, force: true }); } catch {} }
+
 const assert = require('assert');
 const grader = require('../src/services/grader');
 const quizRepo = require('../src/db/quizRepo');
 const sessionRepo = require('../src/db/sessionRepo');
 const Database = require('better-sqlite3');
-const path = require('path');
 const config = require('../config');
+const db = require('../src/db/init');
 
-console.log('=== REPORT 14 JAVÍTÁSOK RENDSZERTESZTJE ===\n');
+console.log('=== REPORT 14-17 JAVÍTÁSOK RENDSZERTESZTJE (IZOLÁLT KÖRNYEZET) ===\n');
 
-const db = new Database(path.join(__dirname, '..', 'data', 'ropdolgozat.db'));
-const testSessionIds = db.prepare("SELECT id FROM sessions WHERE grade_level IN ('90', '91', '92', '93', '94', '95', '96', '97', '98', '99')").all().map(s => s.id);
-if (testSessionIds.length > 0) {
-  const placeholders = testSessionIds.map(() => '?').join(',');
-  db.prepare(`DELETE FROM answers WHERE session_id IN (${placeholders})`).run(...testSessionIds);
-  db.prepare(`DELETE FROM participants WHERE session_id IN (${placeholders})`).run(...testSessionIds);
-  db.prepare(`DELETE FROM sessions WHERE id IN (${placeholders})`).run(...testSessionIds);
-}
+(async () => {
 let sampleStudents = db.prepare('SELECT id, student_name FROM students LIMIT 2').all();
 if (sampleStudents.length < 2) {
   const insertStudent = db.prepare("INSERT INTO students (class_name, student_name) VALUES ('9.z', ?)");
@@ -344,27 +353,24 @@ console.log('✓ 5 hibás PIN kísérlet után a bejelentkezés automatikusan z�
 // 8. TESZT: SQLite Online Backup és Restore integritás és rollback védelem (41., 42., 43. pont)
 console.log('\n--- 8. TESZT: SQLite Backup & Restore garancia (41., 42., 43. pont) ---');
 const backupService = require('../src/services/backup');
-const fs = require('fs');
 
-(async () => {
-  // 1. Online backup készítése
-  const archive = await backupService.createSystemBackupStream();
-  assert.ok(archive, 'createSystemBackupStream nem adott vissza archívumot!');
-  console.log('✓ SQLite Online Backup API konzisztens pillanatkép-mentés sikeresen lefutott (41. pont)');
+// 1. Online backup készítése
+const archive = await backupService.createSystemBackupStream();
+assert.ok(archive, 'createSystemBackupStream nem adott vissza archívumot!');
+console.log('✓ SQLite Online Backup API konzisztens pillanatkép-mentés sikeresen lefutott (41. pont)');
 
-  // 2. Sérült mentés visszaállításának elutasítása
-  const corruptZip = path.join(__dirname, 'corrupt_test.zip');
-  fs.writeFileSync(corruptZip, 'Ez nem egy érvényes zip fájl');
-  let restoreFailed = false;
-  try {
-    backupService.restoreSystemBackup(corruptZip);
-  } catch (err) {
-    restoreFailed = true;
-  }
-  assert.strictEqual(restoreFailed, true, 'A sérült zip visszaállítását engedte lefutni!');
-  try { fs.unlinkSync(corruptZip); } catch {}
-  console.log('✓ A sérült archívum visszatöltése szigorúan elutasítva és az eredeti DB érintetlen (42., 43. pont)');
-})();
+// 2. Sérült mentés visszaállításának elutasítása
+const corruptZip = path.join(__dirname, 'corrupt_test.zip');
+fs.writeFileSync(corruptZip, 'Ez nem egy érvényes zip fájl');
+let restoreFailed = false;
+try {
+  backupService.restoreSystemBackup(corruptZip);
+} catch (err) {
+  restoreFailed = true;
+}
+assert.strictEqual(restoreFailed, true, 'A sérült zip visszaállítását engedte lefutni!');
+try { fs.unlinkSync(corruptZip); } catch {}
+console.log('✓ A sérült archívum visszatöltése szigorúan elutasítva és az eredeti DB érintetlen (42., 43. pont)');
 
 // 9. TESZT: Idézőjeles KRÉTA CSV importálás (35. pont)
 console.log('\n--- 9. TESZT: Idézőjeles KRÉTA CSV import (35. pont) ---');
@@ -711,7 +717,140 @@ const foundDeleted = activeQuizzes.find(q => q.id === liveEditQuiz.id);
 assert.strictEqual(foundDeleted, undefined, 'A törölt sablon még mindig megjelenik a listában!');
 console.log('✓ A sablon törlése a lezárt dolgozatokat, diákválaszokat és az archívumot épen hagyja (soft-delete)');
 
+// 21. TESZT: Normál tanári felülbírálás többpontos kérdésnél (Report 17 / 1.1 fejezet)
+console.log('\n--- 21. TESZT: Normál tanári felülbírálás többpontos kérdésnél (Report 17 / 1.1 fejezet) ---');
+const multiPointQuiz = quizRepo.createQuiz({
+  subject_id: 1,
+  title: 'Négypontos teszt',
+  subject_grade: '6',
+  questions: [{ question_order: 1, question_type: 'SHORT', question_text: 'Írj esszét', options: [], correct_answer: 'Kulcs', points: 4.0 }]
+});
+
+const multiPointSession = sessionRepo.startSession({
+  subject_id: 1,
+  grade_level: '88',
+  quiz_id: multiPointQuiz.id,
+  class_name: '6.f',
+  mode: 'STUDENT_PACED'
+});
+
+const mpJoin = sessionRepo.joinSession({
+  session_id: multiPointSession.id,
+  student_id: sampleStudents[0].id,
+  student_name: sampleStudents[0].student_name,
+  pc_number: 15
+});
+
+const mpQ = db.prepare('SELECT id FROM questions WHERE quiz_id = ?').get(multiPointQuiz.id);
+const mpAnsRes = sessionRepo.submitAnswer({
+  participant_id: mpJoin.participant.id,
+  question_id: mpQ.id,
+  submitted_answer: 'Hibás válasz',
+  time_spent_sec: 10
+});
+
+// A tanár a felületen a zöld (CORRECT) gombra kattint (custom_points = null)
+const overrideCorrect = sessionRepo.overrideAnswer({
+  answer_id: mpAnsRes.answer.id,
+  eval_status: 'CORRECT'
+});
+assert.strictEqual(overrideCorrect.points_earned, 4.0, 'A 4 pontos kérdés normál CORRECT felülbírálása nem 4.0 pontot adott: ' + overrideCorrect.points_earned);
+
+// A tanár a sárga (PARTIAL) gombra kattint (custom_points = null)
+const overridePartial = sessionRepo.overrideAnswer({
+  answer_id: mpAnsRes.answer.id,
+  eval_status: 'PARTIAL'
+});
+assert.strictEqual(overridePartial.points_earned, 2.0, 'A 4 pontos kérdés normál PARTIAL felülbírálása nem 2.0 pontot adott: ' + overridePartial.points_earned);
+
+// A tanár a piros (WRONG) gombra kattint (custom_points = null)
+const overrideWrong = sessionRepo.overrideAnswer({
+  answer_id: mpAnsRes.answer.id,
+  eval_status: 'WRONG'
+});
+assert.strictEqual(overrideWrong.points_earned, 0.0, 'A 4 pontos kérdés normál WRONG felülbírálása nem 0.0 pontot adott!');
+console.log('✓ A többpontos kérdés normál tanári felülbírálása hibátlanul a kérdés rögzített pontértékéből (4.0 -> 4.0 / 2.0 / 0.0) számol');
+
+// 22. TESZT: Sablonból törölt kérdés megválaszolása futó dolgozatban (Report 17 / 1.2 fejezet)
+console.log('\n--- 22. TESZT: Sablonból törölt kérdés megválaszolása futó dolgozatban (Report 17 / 1.2 fejezet) ---');
+const twoQQuiz = quizRepo.createQuiz({
+  subject_id: 1,
+  title: 'Kétkérdéses törlési teszt',
+  subject_grade: '6',
+  questions: [
+    { question_order: 1, question_type: 'ABCD', question_text: 'Q1 törlendő', options: ['A', 'B'], correct_answer: 'A', points: 1 },
+    { question_order: 2, question_type: 'ABCD', question_text: 'Q2 maradó', options: ['A', 'B'], correct_answer: 'B', points: 1 }
+  ]
+});
+
+const twoQSession = sessionRepo.startSession({
+  subject_id: 1,
+  grade_level: '87',
+  quiz_id: twoQQuiz.id,
+  class_name: '6.g',
+  mode: 'STUDENT_PACED'
+});
+
+const twoQJoin = sessionRepo.joinSession({
+  session_id: twoQSession.id,
+  student_id: sampleStudents[0].id,
+  student_name: sampleStudents[0].student_name,
+  pc_number: 16
+});
+
+const originalQ1 = db.prepare('SELECT id FROM questions WHERE quiz_id = ? AND question_order = 1').get(twoQQuiz.id);
+const originalQ2 = db.prepare('SELECT id FROM questions WHERE quiz_id = ? AND question_order = 2').get(twoQQuiz.id);
+
+// A tanár szerkeszti a kvízt a Tesztszerkesztőben, és törli az 1. kérdést, csak a 2.-at hagyja meg:
+quizRepo.updateQuiz(twoQQuiz.id, {
+  subject_id: 1,
+  title: 'Módosított teszt',
+  subject_grade: '6',
+  default_time_limit_min: 0,
+  questions: [
+    { id: originalQ2.id, question_order: 1, question_type: 'ABCD', question_text: 'Q2 maradó', options: ['A', 'B'], correct_answer: 'B', points: 1 }
+  ]
+});
+
+// A diák elküldi a választ az 1. kérdésre (amely a futó dolgozat pillanatképében benne van)
+let submitDeletedQSuccess = false;
+try {
+  const ansRes = sessionRepo.submitAnswer({
+    participant_id: twoQJoin.participant.id,
+    question_id: originalQ1.id,
+    submitted_answer: 'A',
+    time_spent_sec: 5
+  });
+  submitDeletedQSuccess = ansRes.answer.eval_status === 'CORRECT';
+} catch (err) {
+  console.error('Hiba történt a sablonból törölt kérdés beküldésekor:', err.message);
+}
+assert.strictEqual(submitDeletedQSuccess, true, 'A sablonból törölt, de futó dolgozatban szereplő kérdés válasza elbukott (FK hiba)!');
+console.log('✓ Futó dolgozat alatt a sablonból eltávolított kérdés megválaszolása és mentése zökkenőmentes');
+
+// 23. TESZT: Törölt sablon indításának megakadályozása (Report 17 / 1.3 fejezet)
+console.log('\n--- 23. TESZT: Törölt sablon indításának megakadályozása (Report 17 / 1.3 fejezet) ---');
+let startDeletedBlocked = false;
+try {
+  sessionRepo.startSession({
+    subject_id: 1,
+    grade_level: '86',
+    quiz_id: liveEditQuiz.id, // A 20. tesztben soft-delete-elve lett
+    class_name: '6.h',
+    mode: 'STUDENT_PACED'
+  });
+} catch (err) {
+  startDeletedBlocked = true;
+  assert.ok(err.message.includes('nem található vagy korábban törlésre került'), 'Nem a várt törlési hiba: ' + err.message);
+}
+assert.strictEqual(startDeletedBlocked, true, 'Sikerült elindítani egy soft-deleted tesztet!');
+console.log('✓ A logikailag törölt sablon újbóli elindítását a rendszer szigorúan megakadályozza');
+
 // Takarítás a tesztadatok után
+sessionRepo.deleteSession(multiPointSession.id);
+quizRepo.deleteQuiz(multiPointQuiz.id);
+sessionRepo.deleteSession(twoQSession.id);
+quizRepo.deleteQuiz(twoQQuiz.id);
 sessionRepo.deleteSession(liveEditSession.id);
 db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(liveEditQuiz.id);
 db.prepare('DELETE FROM quizzes WHERE id = ?').run(liveEditQuiz.id);
@@ -736,6 +875,14 @@ quizRepo.deleteQuiz(testQuiz.id);
 quizRepo.deleteQuiz(quizHistory.id);
 quizRepo.deleteQuiz(spaceQuiz.id);
 quizRepo.deleteQuiz(xssQuiz.id);
-db.close();
+try { db.__close(); } catch {}
+if (fs.existsSync(testDbPath)) { try { fs.unlinkSync(testDbPath); } catch {} }
+if (fs.existsSync(testDbPath + '-wal')) { try { fs.unlinkSync(testDbPath + '-wal'); } catch {} }
+if (fs.existsSync(testDbPath + '-shm')) { try { fs.unlinkSync(testDbPath + '-shm'); } catch {} }
+if (fs.existsSync(testUploadsDir)) { try { fs.rmSync(testUploadsDir, { recursive: true, force: true }); } catch {} }
 
-console.log('\n🎉 MINDEN REPORT 14 TESZT SIKERESEN LEFUTOTT! 🎉\n');
+console.log('\n🎉 MINDEN REPORT 14-17 TESZT SIKERESEN LEFUTOTT! 🎉\n');
+})().catch(err => {
+  console.error('Kritikus teszthiba:', err);
+  process.exit(1);
+});

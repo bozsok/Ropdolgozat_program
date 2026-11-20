@@ -46,7 +46,7 @@ function initLiveHandler(io) {
           console.error('Hiba a kivetítő adatok küldésekor:', err.message);
         }
       } else {
-        // Diák szobához csatlakozás: token ellenőrzése az adott dolgozathoz (Report 16 / 1.2)
+        // Diák szobához csatlakozás: token szigorú ellenőrzése az adott dolgozathoz (Report 16 & Report 17 / 3. fejezet)
         if (token) {
           try {
             const participant = sessionRepo.getParticipantByToken(token);
@@ -57,7 +57,7 @@ function initLiveHandler(io) {
             }
           } catch {}
         }
-        socket.join(`session_${sessionId}_student`);
+        socket.emit('error', { message: 'A diák szobához érvényes diák munkamenet-token szükséges!' });
       }
     });
 

@@ -90,7 +90,7 @@ function getQuizById(quizId, isStudentView = false) {
     FROM quizzes q
     JOIN subjects s ON s.id = q.subject_id
     LEFT JOIN quiz_folders f ON f.id = q.folder_id
-    WHERE q.id = ?
+    WHERE q.id = ? AND COALESCE(q.is_deleted, 0) = 0
   `);
 
   const quiz = quizStmt.get(quizId);
@@ -505,17 +505,21 @@ function updateQuiz(quizId, { subject_id, folder_id = null, title, subject_grade
       });
     }
 
-    // A szerkesztőben eltávolított korábbi kérdések kezelése
+    // A szerkesztőben eltávolított korábbi kérdések kezelése (Report 17 / 1.2 fejezet)
     const checkAnswersStmt = db.prepare('SELECT 1 FROM answers WHERE question_id = ? LIMIT 1');
+    const checkSessionStmt = db.prepare('SELECT 1 FROM sessions WHERE quiz_id = ? LIMIT 1');
+    const hasAnySessions = !!checkSessionStmt.get(quizId);
     const deleteQuestionStmt = db.prepare('DELETE FROM questions WHERE id = ?');
     const archiveQuestionStmt = db.prepare('UPDATE questions SET question_order = 100000 + id WHERE id = ?');
 
     for (const [remId] of existingMap) {
       const hasAnswers = checkAnswersStmt.get(remId);
-      if (!hasAnswers) {
+      if (!hasAnswers && !hasAnySessions) {
+        // Csak akkor törölhető fizikailag a kérdés, ha még soha semmilyen dolgozat nem indult ebből a kvízből!
         deleteQuestionStmt.run(remId);
       } else {
-        // Ha van rá válasz korábbi lezárt dolgozatból, megőrizzük a rekordot, de kint tartjuk a sorrendből
+        // Ha van rá válasz, vagy már indult belőle dolgozat (így a pillanatképek vagy futó alkalmak hivatkozhatnak rá),
+        // archiváljuk (question_order >= 100000): a szerkesztőből eltűnik, de az SQL idegen kulcsok épek maradnak!
         archiveQuestionStmt.run(remId);
       }
     }

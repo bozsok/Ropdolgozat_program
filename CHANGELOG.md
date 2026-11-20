@@ -4,6 +4,41 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.28.0] – 2026-11-21
+
+### Report 17 megállapítások: Többpontos kérdések arányos felülbírálása, sablonból törölt kérdések idegenkulcs-védelme, törölt tesztek indítási blokkolása, korábbi mentések Restore sémamigrációja, megbízható rollback-mentésmegőrzés és Socket.IO szobavédelem
+
+Kiemelt tantermi adatintegritási, hibatűrési és biztonsági kiadás a független szakértői felülvizsgálat (Report 17) megállapításainak maradéktalan orvoslására. A kézi felülbírálás (`overrideAnswer`) arányos pontszámítása mostantól a többpontos kérdéseknél is maradéktalanul érvényesíti a kérdés maximális pontértékét (pl. 4 pontos feladat felezése 2.0 pontot ad az 1.0/0.5 helyett). A Tesztszerkesztő sablonmódosítása (`updateQuiz`) a már futó vagy lezárt dolgozattal rendelkező kvízeknél a feladatsorból eltávolított kérdéseket nem törli fizikailag, hanem archiválja (`question_order >= 100000`), megóvva az `answers` tábla szigorú SQL RESTRICT idegen kulcsát a tanulói válaszbeküldéskor. A törölt (soft-deleted, `is_deleted = 1`) feladatsorok indítását mind a dolgozatindító (`startSession`), mind az egyedi tesztlekérdező (`getQuizById`) szigorúan elutasítja. A korábbi verziójú biztonsági mentések helyreállítása (Restore) kibővült az automatikus sémamigrációval: az elavult mentésekből kicsomagolt adatbázisban a rendszer automatikusan pótolja az `is_deleted`, `folder_id` és `instructions` mezőket, megelőzve az ismeretlen oszlop miatti lekérdezési hibákat. A Restore kétoldalú visszagörgetési biztonsága megerősítésre került: ha a visszatöltés vagy a rollback során hiba lépne fel, az átmeneti biztonsági mentések (.bak és képtárhely) szigorúan a lemezen maradnak a rendszergazda számára. A tanulói Socket.IO szobabelépés kötelező tokenellenőrzést kapott (megszűnt a token nélküli fallback belépés), a kivetítő felületéről pedig kivezetésre került a jogosulatlan adminisztrátori mátrix lekérés. A tesztcsomag teljes mértékben elszigetelt, független átmeneti adatbázisban és könyvtárban fut (`process.env.DB_PATH`, `process.env.UPLOADS_DIR`), 23 hibátlan integrációs teszttel garantálva a tantermi működést.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Kézi felülbírálás arányos pontozása és FK-védett kérdésarchiválás (Report 17 / 1.1 és 1.2):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js)
+  - Az `overrideAnswer` alapértelmezett ágában a helyes válasz a kérdés tényleges maximális pontszámát (`newPoints = maxPoints`), a részpont pedig a felét (`newPoints = maxPoints / 2.0`) kapja, elhárítva a többpontos kérdések csonkítását.
+  - Az `updateQuiz` ellenőrzi, hogy a feladatsorhoz tartozik-e már munkamenet. Ha igen, a kérdést nem törli a `questions` táblából, hanem magas sorszámmal archiválja, így a tanuló snapshot alapján leadott válasza nem ütközik `FOREIGN KEY constraint failed` hibába.
+  - A `submitAnswer` a dolgozatkori pillanatképből hiányzó kérdések beküldését azonnal elutasítja.
+
+* **Törölt tesztek indítási védelme (Report 17 / 1.3):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js)
+  - A `startSession` szerveroldalon ellenőrzi, hogy a megadott teszt létezik-e és nincs-e soft-delete-elve (`quizCheck.is_deleted === 1`), azonnali hibaüzenettel megakadályozva a már törölt teszt indítását.
+  - A `getQuizById` kizárja a törölt sablonokat (`COALESCE(q.is_deleted, 0) = 0`).
+
+* **Előző verziójú mentések automatikus Restore sémamigrációja és megerősített rollback (Report 17 / 2.1 és 2.2):**
+  - **Fájlok:** [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js)
+  - A `restoreSystemBackup` kicsomagolás után automatikusan ellenőrzi és szükség esetén pótolja a hiányzó `quizzes.is_deleted`, `quizzes.folder_id` és `questions.instructions` oszlopokat, és tesztlekérdezéssel igazolja a működést a csere előtt.
+  - A visszagörgetési logika pontos állapotkövetéssel (`restoreSuccess`, `isFullyRecovered`) dolgozik. Bármilyen hiba esetén a biztonsági másolatok a lemezen maradnak, a napló és a hibaüzenet pontos elérési utat biztosít a rendszergazdának.
+
+* **Szigorított diák Socket.IO védelem és kivetítői tisztítás (Report 17 / 3. fejezet):**
+  - **Fájlok:** [`src/sockets/liveHandler.js`](file:///d:/dev/Röpdolgozat%20program/src/sockets/liveHandler.js), [`public/js/projector.js`](file:///d:/dev/Röpdolgozat%20program/public/js/projector.js)
+  - A `join:session` socket esemény kizárólag érvényes kriptográfiai token igazolása után lépteti be a tanulót a dolgozat szobájába; hiányzó vagy hibás token esetén hibaüzenetet küld.
+  - A kivetítő felületről törlésre került a hibaági adminisztrátori `/api/admin/sessions/:id/matrix` végpont lekérése.
+
+* **Izolált tesztkörnyezet és 3 új integrációs teszt (Report 17 / 4. fejezet):**
+  - **Fájlok:** [`scratch/test_report14_fixes.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_report14_fixes.js)
+  - A szintetikus regressziós tesztcsomag elszigetelt környezetben (`test_isolated_report17.db`, `test_uploads_report17`) fut, és kitakarítja maga után az átmeneti fájlokat.
+  - 3 új automatizált teszt (21., 22., 23.) igazolja a többpontos kérdések arányos felülbírálását, a sablonból törölt kérdés hibátlan beküldését és a soft-deleted kvízek indításának elutasítását.
+
+---
+
 ## [1.27.0] – 2026-11-20
 
 ### Report 16 megállapítások: Teljes körű dolgozatkori pillanatkép-érvényesítés a pontozásban, globális indítási adatszivárgás megszüntetése, fejléc-alapú diáktoken, Space Race explicit UTC időzítés, archívumvédett sablontörlés és kétoldalú atomi Restore rollback

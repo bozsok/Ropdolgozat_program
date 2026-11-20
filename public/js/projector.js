@@ -163,18 +163,13 @@
         socket.emit('join:session', { sessionId: activeSessionId, role: 'projector' });
       }
 
-      // Kezdeti anonim és aggregált adatok lekérése a dedikált kivetítői végpontról
+      // Kezdeti anonim és aggregált adatok lekérése a dedikált kivetítői végpontról (Report 17 / 3. fejezet)
       const mRes = await fetch(`/api/sessions/${activeSessionId}/projector-matrix`);
       if (mRes.ok) {
         const matrixData = await mRes.json();
         updateProjector(matrixData);
       } else {
-        // Fallback admin mátrixra, ha a tanár van bejelentkezve
-        const adminRes = await fetch(`/api/admin/sessions/${activeSessionId}/matrix`);
-        if (adminRes.ok) {
-          const matrixData = await adminRes.json();
-          updateProjector(matrixData);
-        }
+        console.warn('A kivetítő aggregált adatai jelenleg nem érhetők el.');
       }
 
     } catch (err) {

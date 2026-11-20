@@ -105,7 +105,7 @@ function restoreSystemBackup(zipFilePath) {
       throw new Error('Érvénytelen mentésfájl: a csomag nem tartalmazza a ropdolgozat.db adatbázist!');
     }
 
-    // 3. Automatikus sémamigráció a korábbi mentésekhez az ideiglenes könyvtárban (Report 15 / 4. fejezet)
+    // 3. Automatikus sémamigráció a korábbi mentésekhez az ideiglenes könyvtárban (Report 15 & Report 17)
     const migrateDb = new Database(extractedDbPath);
     try {
       const sessionCols = migrateDb.prepare("PRAGMA table_info(sessions)").all().map(c => c.name);
@@ -117,12 +117,28 @@ function restoreSystemBackup(zipFilePath) {
           migrateDb.prepare('ALTER TABLE sessions ADD COLUMN quiz_snapshot_json TEXT DEFAULT NULL').run();
         }
       }
+
+      const quizCols = migrateDb.prepare("PRAGMA table_info(quizzes)").all().map(c => c.name);
+      if (quizCols.length > 0) {
+        if (!quizCols.includes('is_deleted')) {
+          migrateDb.prepare('ALTER TABLE quizzes ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0').run();
+        }
+        if (!quizCols.includes('folder_id')) {
+          migrateDb.prepare('ALTER TABLE quizzes ADD COLUMN folder_id INTEGER DEFAULT NULL REFERENCES quiz_folders(id) ON DELETE SET NULL').run();
+        }
+      }
+
+      const questionCols = migrateDb.prepare("PRAGMA table_info(questions)").all().map(c => c.name);
+      if (questionCols.length > 0 && !questionCols.includes('instructions')) {
+        migrateDb.prepare("ALTER TABLE questions ADD COLUMN instructions TEXT DEFAULT ''").run();
+      }
+
       migrateDb.pragma('wal_checkpoint(TRUNCATE)');
     } finally {
       migrateDb.close();
     }
 
-    // 4. Integritás- és sémakompatibilitás-ellenőrzés a kicsomagolt adatbázison (Report 14 / 43.)
+    // 4. Integritás- és sémakompatibilitás-ellenőrzés a kicsomagolt adatbázison (Report 14 / 43. & Report 17 / 2.1)
     const testDb = new Database(extractedDbPath, { readonly: true });
     try {
       const integrity = testDb.prepare('PRAGMA integrity_check').get();
@@ -140,6 +156,8 @@ function restoreSystemBackup(zipFilePath) {
           throw new Error(`Inkompatibilis mentés: a kötelező '${t}' tábla hiányzik az adatbázisból!`);
         }
       }
+      // Tesztlekérdezés a v1.27+ sémakompatibilitás igazolására
+      testDb.prepare("SELECT q.id FROM quizzes q WHERE COALESCE(q.is_deleted, 0) = 0 LIMIT 1").all();
     } finally {
       testDb.close();
     }
@@ -165,6 +183,7 @@ function restoreSystemBackup(zipFilePath) {
       backupUploadsCreated = true;
     }
 
+    let restoreSuccess = false;
     try {
       // 5. Adatbáziskapcsolat lezárása a fájlcsere idejére
       db.__close();
@@ -189,10 +208,16 @@ function restoreSystemBackup(zipFilePath) {
       // 8. Adatbázis újranyitása a Proxy-n keresztül (Hot-Reload)
       db.__reopen();
 
+      restoreSuccess = true;
       return { success: true };
     } catch (restoreErr) {
-      // Automatikus atomi visszagörgetés mindkét komponensre (Adatbázis + Képek - Report 16 / 4. fejezet)
+      // Automatikus atomi visszagörgetés mindkét komponensre (Adatbázis + Képek - Report 16 & Report 17 / 2.2)
       console.error('Hiba a restore végrehajtása közben, atomi visszagörgetés az eredeti állapotra:', restoreErr.message);
+      let dbRollbackOk = false;
+      let uploadsRollbackOk = false;
+      let dbReopenOk = false;
+
+      // 1. Adatbázis visszagörgetése
       if (backupDbCreated && fs.existsSync(backupDbPath)) {
         try {
           fs.copyFileSync(backupDbPath, config.dbPath);
@@ -200,8 +225,15 @@ function restoreSystemBackup(zipFilePath) {
           const shmPath = config.dbPath + '-shm';
           if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
           if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
-        } catch {}
+          dbRollbackOk = true;
+        } catch (dbErr) {
+          console.error('Kritikus hiba az adatbázis visszagörgetésekor:', dbErr);
+        }
+      } else {
+        dbRollbackOk = true;
       }
+
+      // 2. Képek visszagörgetése
       if (backupUploadsCreated && fs.existsSync(backupUploadsDir)) {
         try {
           if (fs.existsSync(config.uploadsDir)) {
@@ -209,24 +241,53 @@ function restoreSystemBackup(zipFilePath) {
           }
           fs.mkdirSync(config.uploadsDir, { recursive: true });
           copyRecursiveSync(backupUploadsDir, config.uploadsDir);
+          uploadsRollbackOk = true;
         } catch (uErr) {
-          console.error('Hiba a képek visszagörgetésekor:', uErr);
+          console.error('Kritikus hiba a képek visszagörgetésekor:', uErr);
         }
+      } else {
+        uploadsRollbackOk = true;
       }
+
+      // 3. Adatbázis újranyitása
       try {
         db.__reopen();
-      } catch {}
-      throw new Error(`A rendszer-visszaállítás meghiúsult, az eredeti állapot (adatbázis és feltöltött képek) sikeresen visszaállítva: ${restoreErr.message}`);
-    } finally {
-      if (backupUploadsCreated && fs.existsSync(backupUploadsDir)) {
-        try {
-          fs.rmSync(backupUploadsDir, { recursive: true, force: true });
-        } catch {}
+        dbReopenOk = true;
+      } catch (openErr) {
+        console.error('Hiba az adatbázis újranyitásakor rollback után:', openErr);
       }
-      if (backupDbCreated && fs.existsSync(backupDbPath)) {
-        try {
-          fs.unlinkSync(backupDbPath);
-        } catch {}
+
+      const isFullyRecovered = dbRollbackOk && uploadsRollbackOk && dbReopenOk;
+
+      if (isFullyRecovered) {
+        // Csak akkor takarítjuk a mentéseket, ha a visszagörgetés 100%-ban sikeres volt!
+        if (backupUploadsCreated && fs.existsSync(backupUploadsDir)) {
+          try { fs.rmSync(backupUploadsDir, { recursive: true, force: true }); } catch {}
+        }
+        if (backupDbCreated && fs.existsSync(backupDbPath)) {
+          try { fs.unlinkSync(backupDbPath); } catch {}
+        }
+        throw new Error(`A rendszer-visszaállítás meghiúsult, az eredeti állapot (adatbázis és feltöltött képek) sikeresen visszaállítva: ${restoreErr.message}`);
+      } else {
+        // Ha a visszagörgetés is hibát szenvedett, a biztonsági másolatokat SZIGORÚAN MEGŐRIZZÜK a lemezen!
+        const preservedInfo = [];
+        if (backupDbCreated && fs.existsSync(backupDbPath)) preservedInfo.push(`Adatbázis: ${backupDbPath}`);
+        if (backupUploadsCreated && fs.existsSync(backupUploadsDir)) preservedInfo.push(`Képek: ${backupUploadsDir}`);
+        
+        throw new Error(`Kritikus hiba: A rendszer-visszaállítás és a visszagörgetés is meghiúsult! A biztonsági másolatok megőrizve a lemezen (${preservedInfo.join(', ')}). Hiba: ${restoreErr.message}`);
+      }
+    } finally {
+      if (restoreSuccess) {
+        if (backupUploadsCreated && fs.existsSync(backupUploadsDir)) {
+          try {
+            fs.rmSync(backupUploadsDir, { recursive: true, force: true });
+          } catch {}
+        }
+        if (backupDbCreated && fs.existsSync(backupDbPath)) {
+          try {
+            fs.unlinkSync(backupDbPath);
+          } catch {}
+        }
       }
     }
   } finally {
