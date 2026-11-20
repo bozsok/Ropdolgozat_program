@@ -6,14 +6,11 @@ const presenceService = require('../services/presenceService');
  */
 function initLiveHandler(io) {
   io.on('connection', (socket) => {
-    // Feliratkozás egy adott órai dolgozat szobájára
+    // Feliratkozás egy adott órai dolgozat szobájára (elkülönített tanári és diák szoba az adatszivárgás ellen)
     socket.on('join:session', ({ sessionId, role = 'student' }) => {
       if (!sessionId) return;
-      const room = `session_${sessionId}`;
-      socket.join(room);
-
-      // Ha a tanári felület csatlakozik, azonnal elküldjük a legfrissebb élő mátrixot
-      if (role === 'teacher') {
+      if (role === 'teacher' || role === 'projector') {
+        socket.join(`session_${sessionId}_teacher`);
         try {
           const matrixData = sessionRepo.getLiveMatrixData(sessionId);
           if (matrixData) {
@@ -22,13 +19,16 @@ function initLiveHandler(io) {
         } catch (err) {
           console.error('Hiba a mátrix adatok küldésekor:', err.message);
         }
+      } else {
+        socket.join(`session_${sessionId}_student`);
       }
     });
 
     // Kilépés a dolgozat szobájából
     socket.on('leave:session', ({ sessionId }) => {
       if (!sessionId) return;
-      socket.leave(`session_${sessionId}`);
+      socket.leave(`session_${sessionId}_teacher`);
+      socket.leave(`session_${sessionId}_student`);
     });
 
     // Tanári Teacher Paced léptetés (együtt haladás a feladatokon)
@@ -52,9 +52,10 @@ function initLiveHandler(io) {
             });
           });
         }
-        io.to(`session_${sessionId}`).emit('participant:kicked', { participantId });
+        io.to(`session_${sessionId}_student`).emit('participant:kicked', { participantId });
+        io.to(`session_${sessionId}_teacher`).emit('participant:kicked', { participantId });
         const matrixData = sessionRepo.getLiveMatrixData(sessionId);
-        io.to(`session_${sessionId}`).emit('matrix:updated', matrixData);
+        io.to(`session_${sessionId}_teacher`).emit('matrix:updated', matrixData);
         io.emit('badges:updated', sessionRepo.getActiveSessions());
       } catch (err) {
         socket.emit('error', { message: err.message });

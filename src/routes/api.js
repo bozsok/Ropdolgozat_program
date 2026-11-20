@@ -4,7 +4,15 @@ const fs = require('fs');
 const os = require('os');
 const multer = require('multer');
 const config = require('../../config');
-const { requireAdminAuth, isValidToken, loginAdmin, logoutAdmin } = require('../middleware/auth');
+const { 
+  requireAdminAuth, 
+  isValidToken, 
+  loginAdmin, 
+  logoutAdmin,
+  checkLoginRateLimit,
+  recordFailedLogin,
+  recordSuccessfulLogin
+} = require('../middleware/auth');
 const rosterRepo = require('../db/rosterRepo');
 const quizRepo = require('../db/quizRepo');
 const sessionRepo = require('../db/sessionRepo');
@@ -69,6 +77,12 @@ const upload = multer({
    ========================================================================== */
 
 router.post('/auth/login', (req, res) => {
+  const clientIp = req.ip || req.connection?.remoteAddress || '127.0.0.1';
+  const rateLimitStatus = checkLoginRateLimit(clientIp);
+  if (!rateLimitStatus.allowed) {
+    return res.status(429).json({ success: false, message: rateLimitStatus.message });
+  }
+
   const { pin } = req.body;
   if (!pin) {
     return res.status(400).json({ success: false, message: 'A PIN-kód megadása kötelező!' });
@@ -76,9 +90,17 @@ router.post('/auth/login', (req, res) => {
 
   const success = loginAdmin(res, pin);
   if (success) {
+    recordSuccessfulLogin(clientIp);
     return res.json({ success: true, message: 'Sikeres bejelentkezés!' });
   }
-  return res.status(401).json({ success: false, message: 'Helytelen tanári PIN-kód!' });
+
+  const attempt = recordFailedLogin(clientIp);
+  const remaining = 5 - attempt.count;
+  const msg = remaining > 0 
+    ? `Helytelen tanári PIN-kód! Még ${remaining} próbálkozási lehetőség maradt.` 
+    : 'Helytelen tanári PIN-kód! Túl sok sikertelen kísérlet miatt a bejelentkezés 1 percre zárolva.';
+
+  return res.status(401).json({ success: false, message: msg });
 });
 
 router.post('/auth/logout', (req, res) => {
@@ -596,9 +618,10 @@ router.post('/admin/sessions/:id/start-race', requireAdminAuth, (req, res) => {
     const session = sessionRepo.startRace(req.params.id);
     const io = req.app.get('io');
     if (io) {
-      io.to(`session_${req.params.id}`).emit('race:started', { sessionId: req.params.id });
+      io.to(`session_${req.params.id}_student`).emit('race:started', { sessionId: req.params.id });
+      io.to(`session_${req.params.id}_teacher`).emit('race:started', { sessionId: req.params.id });
       const matrixData = sessionRepo.getLiveMatrixData(req.params.id);
-      io.to(`session_${req.params.id}`).emit('matrix:updated', matrixData);
+      io.to(`session_${req.params.id}_teacher`).emit('matrix:updated', matrixData);
     }
     res.json({ success: true, session });
   } catch (err) {
@@ -627,11 +650,11 @@ router.post('/admin/answers/:id/override', requireAdminAuth, (req, res) => {
       custom_points
     });
 
-    // Frissült mátrix adatok kiküldése Socket.io-n
+    // Frissült mátrix adatok kiküldése Socket.io-n (kizárólag a tanári szobának)
     const io = req.app.get('io');
     if (io) {
       const matrixData = sessionRepo.getLiveMatrixData(updatedAnswer.session_id);
-      io.to(`session_${updatedAnswer.session_id}`).emit('matrix:updated', matrixData);
+      io.to(`session_${updatedAnswer.session_id}_teacher`).emit('matrix:updated', matrixData);
     }
 
     res.json({ success: true, answer: updatedAnswer });
@@ -640,16 +663,51 @@ router.post('/admin/answers/:id/override', requireAdminAuth, (req, res) => {
   }
 });
 
-// Gépváltás engedélyezése adatvesztés nélkül (Report 12 / 2.2 & Report 13 / 1.2)
+// Gépváltás engedélyezése adatvesztés nélkül (Report 12 / 2.2 & Report 13 / 1.2 & Report 14 / 06., 07.)
 router.post('/admin/participants/:id/authorize-seat-change', requireAdminAuth, (req, res) => {
   try {
     const participantId = req.params.id;
     const { target_pc_number } = req.body || {};
+
+    // Résztvevő és diák adatainak lekérdezése a jelenléti feloldáshoz
+    const participant = db.prepare(`
+      SELECT p.id, p.session_id, p.student_id, p.student_name, stu.class_name
+      FROM participants p
+      LEFT JOIN students stu ON p.student_id = stu.id
+      WHERE p.id = ?
+    `).get(participantId);
+
     const result = sessionRepo.authorizeSeatChange(participantId, target_pc_number);
+
+    // Memóriabeli foglalás feloldása, hogy a célgépen azonnal kiválasztható legyen
+    if (participant && participant.student_id) {
+      presenceService.releaseStudent(participant.student_id);
+    }
 
     const io = req.app.get('io');
     if (io) {
-      io.emit('participant:seat-change-authorized', { participantId, targetPcNumber: result.targetPcNumber });
+      // Célzott értesítés a régi gépnek a munkamenet lezárásához
+      io.emit('participant:kicked', { 
+        participantId: Number(participantId), 
+        studentId: participant ? participant.student_id : null 
+      });
+      io.emit('participant:seat-change-authorized', { 
+        participantId: Number(participantId), 
+        studentId: participant ? participant.student_id : null,
+        targetPcNumber: result.targetPcNumber 
+      });
+
+      // Frissített foglaltság kiküldése az érintett osztálynak
+      if (participant && participant.class_name) {
+        io.emit('students:occupied_updated', {
+          className: participant.class_name,
+          occupiedStudentIds: presenceService.getOccupiedStudentIds(participant.class_name)
+        });
+      }
+
+      // Mátrix frissítése a tanári felületen
+      const matrixData = sessionRepo.getLiveMatrixData(result.sessionId);
+      io.to(`session_${result.sessionId}_teacher`).emit('matrix:updated', matrixData);
     }
 
     const targetMsg = result.targetPcNumber ? ` a(z) ${result.targetPcNumber}. gépre` : '';
@@ -659,16 +717,56 @@ router.post('/admin/participants/:id/authorize-seat-change', requireAdminAuth, (
   }
 });
 
-// Téves névfoglalás törlése (Report 12 / 2.2 - Reset: törli a téves rekordot és válaszokat)
+// Téves névfoglalás törlése (Report 12 / 2.2 & Report 14 / 07. - Reset: törli a téves rekordot és válaszokat)
 router.post('/admin/participants/:id/reset', requireAdminAuth, (req, res) => {
   try {
     const participantId = req.params.id;
+
+    const participant = db.prepare(`
+      SELECT p.id, p.session_id, p.student_id, stu.class_name
+      FROM participants p
+      LEFT JOIN students stu ON p.student_id = stu.id
+      WHERE p.id = ?
+    `).get(participantId);
+
+    if (!participant) {
+      return res.status(404).json({ error: 'A résztvevő nem található!' });
+    }
+
     sessionRepo.resetParticipant(participantId);
+
+    // Memóriabeli foglalás feloldása
+    if (participant.student_id) {
+      presenceService.releaseStudent(participant.student_id);
+    }
 
     const io = req.app.get('io');
     if (io) {
-      io.emit('participant:reset', { participantId });
-      io.emit('participant:unlocked', { participantId });
+      // Célzott kiléptetés a tévesen bejelentkezett kliensnek
+      io.emit('participant:kicked', { 
+        participantId: Number(participantId), 
+        studentId: participant.student_id 
+      });
+      io.emit('participant:reset', { 
+        participantId: Number(participantId), 
+        studentId: participant.student_id 
+      });
+      io.emit('participant:unlocked', { 
+        participantId: Number(participantId), 
+        studentId: participant.student_id 
+      });
+
+      // Frissített foglaltság kiküldése az osztálynak
+      if (participant.class_name) {
+        io.emit('students:occupied_updated', {
+          className: participant.class_name,
+          occupiedStudentIds: presenceService.getOccupiedStudentIds(participant.class_name)
+        });
+      }
+
+      // Mátrix frissítése a tanári felületen
+      const matrixData = sessionRepo.getLiveMatrixData(participant.session_id);
+      io.to(`session_${participant.session_id}_teacher`).emit('matrix:updated', matrixData);
     }
 
     res.json({ success: true, message: 'A diák téves rekordja és válaszai sikeresen törölve!' });
@@ -681,12 +779,48 @@ router.post('/admin/participants/:id/reset', requireAdminAuth, (req, res) => {
 router.post('/admin/participants/:id/unlock', requireAdminAuth, (req, res) => {
   try {
     const participantId = req.params.id;
+
+    const participant = db.prepare(`
+      SELECT p.id, p.session_id, p.student_id, stu.class_name
+      FROM participants p
+      LEFT JOIN students stu ON p.student_id = stu.id
+      WHERE p.id = ?
+    `).get(participantId);
+
+    if (!participant) {
+      return res.status(404).json({ error: 'A résztvevő nem található!' });
+    }
+
     sessionRepo.resetParticipant(participantId);
+
+    if (participant.student_id) {
+      presenceService.releaseStudent(participant.student_id);
+    }
 
     const io = req.app.get('io');
     if (io) {
-      io.emit('participant:unlocked', { participantId });
-      io.emit('participant:reset', { participantId });
+      io.emit('participant:kicked', { 
+        participantId: Number(participantId), 
+        studentId: participant.student_id 
+      });
+      io.emit('participant:unlocked', { 
+        participantId: Number(participantId), 
+        studentId: participant.student_id 
+      });
+      io.emit('participant:reset', { 
+        participantId: Number(participantId), 
+        studentId: participant.student_id 
+      });
+
+      if (participant.class_name) {
+        io.emit('students:occupied_updated', {
+          className: participant.class_name,
+          occupiedStudentIds: presenceService.getOccupiedStudentIds(participant.class_name)
+        });
+      }
+
+      const matrixData = sessionRepo.getLiveMatrixData(participant.session_id);
+      io.to(`session_${participant.session_id}_teacher`).emit('matrix:updated', matrixData);
     }
 
     res.json({ success: true, message: 'A diák sikeresen feloldva!' });
@@ -721,7 +855,7 @@ router.post('/student/join', (req, res) => {
     const io = req.app.get('io');
     if (io) {
       const matrixData = sessionRepo.getLiveMatrixData(session_id);
-      io.to(`session_${session_id}`).emit('matrix:updated', matrixData);
+      io.to(`session_${session_id}_teacher`).emit('matrix:updated', matrixData);
       io.emit('badges:updated', sessionRepo.getActiveSessions());
 
       // Diák osztályának kinyerése a valós idejű jelenlét frissítéséhez
@@ -828,6 +962,9 @@ router.get('/student/session-data', (req, res) => {
       `).all(participant.id);
     }
 
+    const isRaceStarted = participant.mode === 'SPACE_RACE' ? (participant.current_question_index >= 1) : true;
+    const exposedQuestions = isRaceStarted ? orderedQuestions : [];
+
     res.json({
       session: {
         id: participant.session_id,
@@ -851,13 +988,13 @@ router.get('/student/session-data', (req, res) => {
         finished_at: participant.finished_at,
         session_status: participant.session_status,
         session_mode: participant.mode,
-        is_race_started: participant.mode === 'SPACE_RACE' ? (participant.current_question_index >= 1) : true,
+        is_race_started: isRaceStarted,
         show_feedback_on_end: participant.show_feedback_on_end
       },
       quiz: {
         id: quiz.id,
         title: quiz.title,
-        questions: orderedQuestions,
+        questions: exposedQuestions,
         total_points: quiz.total_points
       },
       results: {
@@ -893,11 +1030,11 @@ router.post('/student/submit-answer', (req, res) => {
       time_spent_sec
     });
 
-    // Értesítés a tanári mátrixnak valós időben
+    // Értesítés a tanári mátrixnak valós időben (csak tanári szobába)
     const io = req.app.get('io');
     if (io) {
       const matrixData = sessionRepo.getLiveMatrixData(participant.session_id);
-      io.to(`session_${participant.session_id}`).emit('matrix:updated', matrixData);
+      io.to(`session_${participant.session_id}_teacher`).emit('matrix:updated', matrixData);
     }
 
     const session = sessionRepo.getSessionById(participant.session_id);
@@ -933,7 +1070,7 @@ router.post('/student/focus-lost', (req, res) => {
     // Értesítés a tanári felületnek
     const io = req.app.get('io');
     if (io) {
-      io.to(`session_${participant.session_id}`).emit('participant:focus_lost', {
+      io.to(`session_${participant.session_id}_teacher`).emit('participant:focus_lost', {
         participantId: participant.id,
         studentName: participant.student_name,
         focusLostCount: updated.focus_lost_count
@@ -960,7 +1097,7 @@ router.post('/student/finish', (req, res) => {
     const io = req.app.get('io');
     if (io) {
       const matrixData = sessionRepo.getLiveMatrixData(participant.session_id);
-      io.to(`session_${participant.session_id}`).emit('matrix:updated', matrixData);
+      io.to(`session_${participant.session_id}_teacher`).emit('matrix:updated', matrixData);
     }
 
     res.json({ success: true, participant: finished });
@@ -1007,9 +1144,9 @@ router.get('/admin/export/zip/:sessionId', requireAdminAuth, (req, res) => {
   }
 });
 
-router.get('/admin/backup', requireAdminAuth, (req, res) => {
+router.get('/admin/backup', requireAdminAuth, async (req, res) => {
   try {
-    const archive = backup.createSystemBackupStream();
+    const archive = await backup.createSystemBackupStream();
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="ropdolgozat_backup_${timestamp}.zip"`);

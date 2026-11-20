@@ -77,6 +77,20 @@ function initializeDatabase() {
     console.error('Hiba a quizzes.folder_id migrációjakor:', err);
   }
 
+  // 2. Migráció: sessions.max_points oszlop a történeti jegymegőrzéshez (Report 14 / 25. pont)
+  try {
+    const sessionsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'").get();
+    if (sessionsTable) {
+      const sessionCols = db.prepare('PRAGMA table_info(sessions)').all();
+      const hasMaxPoints = sessionCols.some(c => c.name === 'max_points');
+      if (!hasMaxPoints) {
+        db.prepare('ALTER TABLE sessions ADD COLUMN max_points REAL DEFAULT NULL').run();
+      }
+    }
+  } catch (err) {
+    console.error('Hiba a sessions.max_points migrációjakor:', err);
+  }
+
   // 3. Participants tábla migrációja: student_id NULL engedélyezése és ON DELETE SET NULL, hogy a lezárt archívum független legyen a névsortörléstől
   try {
     const partTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='participants'").get();

@@ -23,7 +23,9 @@ function getDbOccupiedStudentIds(className) {
       FROM participants p
       JOIN sessions s ON p.session_id = s.id
       JOIN students stu ON p.student_id = stu.id
-      WHERE s.status = 'ACTIVE' AND stu.class_name = ?
+      WHERE s.status = 'ACTIVE' 
+        AND stu.class_name = ?
+        AND (p.session_token IS NULL OR NOT p.session_token LIKE 'PENDING_SEAT_CHANGE:%')
     `);
     const rows = stmt.all(className);
     return rows.map(r => String(r.student_id));

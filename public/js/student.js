@@ -248,30 +248,25 @@
     });
 
     socket.on('participant:kicked', (data) => {
-      sessionStorage.removeItem('ropdolgozat_token');
-      showCalmAlert('A tanár feloldotta a munkamenetedet. Az oldal újratöltődik.', 'Munkamenet feloldva', 'info', () => {
-        window.location.reload();
-      });
+      // Csak akkor lépünk ki, ha az esemény kifejezetten a mi munkamenetünket vagy tanulónkat célozza
+      const matchesParticipant = data && currentParticipant && String(data.participantId) === String(currentParticipant.id);
+      const matchesStudent = data && data.studentId && selectedStudent && String(data.studentId) === String(selectedStudent.id);
+      const isTargeted = data && (data.participantId || data.studentId);
+
+      if (!isTargeted || matchesParticipant || matchesStudent) {
+        sessionStorage.removeItem('ropdolgozat_token');
+        showCalmAlert('A tanár feloldotta a munkamenetedet vagy engedélyezte a gépváltást. Az oldal újratöltődik.', 'Munkamenet feloldva', 'info', () => {
+          window.location.reload();
+        });
+      }
     });
 
-    // Űrhajós verseny rajtot jelző esemény (Space Race indítása)
-    socket.on('race:started', (data) => {
+    // Űrhajós verseny rajtot jelző esemény (Space Race indítása - Report 14 / 16. pont)
+    socket.on('race:started', async (data) => {
       if (activeSession && (!data || !data.sessionId || String(data.sessionId) === String(activeSession.id))) {
-        if (lobbyContainer) lobbyContainer.style.display = 'none';
-        if (studentEntryInner) studentEntryInner.classList.add('quiz-active');
-        if (quizTopBar) quizTopBar.style.display = 'flex';
-        if (quizContainer) quizContainer.style.display = 'block';
         showToast('🚀 A verseny elindult! Sok sikert!', 'success');
-        if (currentQuestions && currentQuestions.length > 0) {
-          let nextIndex = 0;
-          for (let i = 0; i < currentQuestions.length; i++) {
-            if (!answeredQuestionIds.has(currentQuestions[i].id)) {
-              nextIndex = i;
-              break;
-            }
-          }
-          renderQuestion(nextIndex);
-        }
+        // Kérdések és elindított időzítő azonnali lekérése a szerverről
+        await startQuizInterface(null);
       }
     });
 

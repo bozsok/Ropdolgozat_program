@@ -316,16 +316,27 @@ function parseSocrativePdf(pdfBuffer) {
         const opts = questionOptions[i] || [];
         const isTF = opts.length === 2 && opts[0].text === 'Igaz' && opts[1].text === 'Hamis';
 
-        let correctLetter = 'A';
+        let correctText = '';
         if (isTF) {
-          correctLetter = correctAnswerRaw.toLowerCase().includes('hamis') ? 'B' : 'A';
+          correctText = correctAnswerRaw.toLowerCase().includes('hamis') ? 'Hamis' : 'Igaz';
         } else {
           for (const o of opts) {
             if (o.text.toLowerCase().trim() === correctAnswerRaw.toLowerCase().trim() ||
               correctAnswerRaw.toLowerCase().trim().startsWith(o.text.toLowerCase().trim().slice(0, 20))) {
-              correctLetter = o.letter;
+              correctText = o.text;
               break;
             }
+          }
+          if (!correctText && opts.length > 0) {
+            // Ha a megoldókulcs betűjelként szerepel (pl. "A" vagy "B")
+            const m = correctAnswerRaw.match(/^([A-D])/i);
+            if (m) {
+              const letterIndex = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 }[m[1].toUpperCase()];
+              if (letterIndex !== undefined && opts[letterIndex]) {
+                correctText = opts[letterIndex].text;
+              }
+            }
+            if (!correctText) correctText = opts[0].text;
           }
         }
 
@@ -346,7 +357,7 @@ function parseSocrativePdf(pdfBuffer) {
           question_type: isTF ? 'TF' : 'ABCD',
           points: 1,
           options: isTF ? ['Igaz', 'Hamis'] : opts.map(o => o.text),
-          correct_answer: correctLetter,
+          correct_answer: correctText,
           imageBuffer: matchedImage ? matchedImage.pngBuffer : null
         });
       }
@@ -396,7 +407,7 @@ function parseSocrativePdf(pdfBuffer) {
           question_type: isTF ? 'TF' : 'ABCD',
           points: 1,
           options: isTF ? ['Igaz', 'Hamis'] : opts.map(o => o.text),
-          correct_answer: 'A', // Alapértelmezett, tanár egy kattintással ellenőrizheti
+          correct_answer: isTF ? 'Igaz' : (opts[0] ? opts[0].text : 'A'), // Alapértelmezett, tanár egy kattintással ellenőrizheti
           imageBuffer: matchedImage ? matchedImage.pngBuffer : null
         });
       }

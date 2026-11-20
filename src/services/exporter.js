@@ -48,6 +48,19 @@ function formatDisplayAnswer(ans) {
 }
 
 /**
+ * XSS elleni szöveg- és attribútumfertőtlenítés
+ */
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * 1. Csoportos KRÉTA-kompatibilis formázott Excel munkafüzet generálása
  */
 async function generateExcelReport(sessionId) {
@@ -216,7 +229,7 @@ function generateInteractiveHtml(sessionId) {
 <html lang="hu">
 <head>
   <meta charset="UTF-8">
-  <title>${session.quiz_title} – Eredmények</title>
+  <title>${escapeHtml(session.quiz_title)} – Eredmények</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #1e293b; margin: 0; padding: 24px; }
     .container { max-width: 1200px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); padding: 24px; }
@@ -245,13 +258,13 @@ function generateInteractiveHtml(sessionId) {
       <div class="header-left">
         ${logoDataUri ? `<img src="${logoDataUri}" alt="Okoskodó" class="header-logo">` : ''}
         <div>
-          <h1 class="header-title">${session.quiz_title}</h1>
-          <div class="header-meta">Tantárgy: <strong>${session.subject_name}</strong> | Évfolyam: <strong>${session.grade_level}. évfolyam</strong></div>
+          <h1 class="header-title">${escapeHtml(session.quiz_title)}</h1>
+          <div class="header-meta">Tantárgy: <strong>${escapeHtml(session.subject_name)}</strong> | Évfolyam: <strong>${escapeHtml(session.grade_level)}. évfolyam</strong></div>
         </div>
       </div>
       <div class="header-right">
         <div class="header-group-label">Csoportos eredménytábla</div>
-        <div class="header-meta">Résztvevők: <strong>${participants.length} tanuló</strong> | Dátum: <strong>${todayFormatted}</strong></div>
+        <div class="header-meta">Résztvevők: <strong>${participants.length} tanuló</strong> | Dátum: <strong>${escapeHtml(todayFormatted)}</strong></div>
       </div>
     </div>
     
@@ -264,7 +277,7 @@ function generateInteractiveHtml(sessionId) {
       <thead>
         <tr>
           <th class="col-name">Tanuló neve</th>
-          ${questions.map((q, idx) => `<th>K${idx + 1} (${q.points}p)</th>`).join('')}
+          ${questions.map((q, idx) => `<th>K${idx + 1} (${escapeHtml(q.points)}p)</th>`).join('')}
           <th>Összpont</th>
           <th>%</th>
           <th>Jegy</th>
@@ -272,17 +285,17 @@ function generateInteractiveHtml(sessionId) {
       </thead>
       <tbody>
         ${participants.map((p, pIdx) => `
-          <tr data-name="${p.student_name}">
-            <td class="col-name student-cell">${p.student_name}</td>
+          <tr data-name="${escapeHtml(p.student_name)}">
+            <td class="col-name student-cell">${escapeHtml(p.student_name)}</td>
             ${questions.map(q => {
               const a = answerMap.get(`${p.id}:${q.id}`);
               if (!a) return `<td>–</td>`;
               const cls = a.eval_status === 'CORRECT' ? 'correct' : (a.eval_status === 'PARTIAL' ? 'partial' : 'wrong');
-              return `<td class="${cls}">${a.points_earned}p</td>`;
+              return `<td class="${cls}">${escapeHtml(a.points_earned)}p</td>`;
             }).join('')}
-            <td><strong>${p.total_points}</strong> / ${totalMaxPoints}</td>
-            <td><strong>${p.percentage}%</strong></td>
-            <td><strong>${p.grade}</strong></td>
+            <td><strong>${escapeHtml(p.total_points)}</strong> / ${escapeHtml(totalMaxPoints)}</td>
+            <td><strong>${escapeHtml(p.percentage)}%</strong></td>
+            <td><strong>${escapeHtml(p.grade)}</strong></td>
           </tr>
         `).join('')}
       </tbody>
@@ -307,7 +320,7 @@ function generateInteractiveHtml(sessionId) {
     filterInput.addEventListener('input', (e) => {
       const q = e.target.value.toLowerCase();
       rows.forEach(r => {
-        const name = r.dataset.name.toLowerCase();
+        const name = (r.dataset.name || '').toLowerCase();
         r.style.display = name.includes(q) ? '' : 'none';
       });
     });
@@ -333,12 +346,14 @@ function createIndividualZipStream(sessionId) {
     answerMap.set(`${a.participant_id}:${a.question_id}`, a);
   });
 
+  const usedFileNames = new Set();
+
   participants.forEach(p => {
     const studentHtml = `<!DOCTYPE html>
 <html lang="hu">
 <head>
   <meta charset="UTF-8">
-  <title>Értékelőlap – ${p.student_name}</title>
+  <title>Értékelőlap – ${escapeHtml(p.student_name)}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #1e293b; padding: 24px; }
     .card { max-width: 700px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
@@ -361,18 +376,18 @@ function createIndividualZipStream(sessionId) {
       <div class="header-left">
         ${logoDataUri ? `<img src="${logoDataUri}" alt="Okoskodó" class="header-logo">` : ''}
         <div>
-          <h2 class="header-title">${session.quiz_title}</h2>
-          <div class="header-meta">Tantárgy: <strong>${session.subject_name}</strong> | Évfolyam: <strong>${session.grade_level}. évfolyam</strong></div>
+          <h2 class="header-title">${escapeHtml(session.quiz_title)}</h2>
+          <div class="header-meta">Tantárgy: <strong>${escapeHtml(session.subject_name)}</strong> | Évfolyam: <strong>${escapeHtml(session.grade_level)}. évfolyam</strong></div>
         </div>
       </div>
       <div class="header-right">
-        <div class="student-name">${p.student_name}</div>
-        <div class="header-meta">${p.pc_number ? p.pc_number + '. gép' : 'Diák'} | Dátum: <strong>${todayFormatted}</strong></div>
+        <div class="student-name">${escapeHtml(p.student_name)}</div>
+        <div class="header-meta">${p.pc_number ? escapeHtml(p.pc_number) + '. gép' : 'Diák'} | Dátum: <strong>${escapeHtml(todayFormatted)}</strong></div>
       </div>
     </div>
     <div class="score-box">
-      <div style="font-size: 2rem; font-weight: 800; color: #1d4ed8;">${p.total_points} / ${totalMaxPoints} pont (${p.percentage}%)</div>
-      <div style="font-size: 1.2rem; font-weight: 700; margin-top: 6px;">Érdemjegy: ${p.gradeText}</div>
+      <div style="font-size: 2rem; font-weight: 800; color: #1d4ed8;">${escapeHtml(p.total_points)} / ${escapeHtml(totalMaxPoints)} pont (${escapeHtml(p.percentage)}%)</div>
+      <div style="font-size: 1.2rem; font-weight: 700; margin-top: 6px;">Érdemjegy: ${escapeHtml(p.gradeText)}</div>
     </div>
     <h3>Kérdések és válaszok:</h3>
     ${questions.map((q, idx) => {
@@ -380,10 +395,10 @@ function createIndividualZipStream(sessionId) {
       const isCor = a && a.is_correct === 1;
       return `
         <div class="q-item">
-          <div><strong>${idx + 1}. ${q.question_text}</strong> (${q.points}p)</div>
-          <div style="margin-top: 4px;">Adott válasz: <strong>${a ? a.submitted_answer : '–'}</strong></div>
-          <div class="${isCor ? 'correct' : 'wrong'}">${isCor ? '✓ Helyes' : '✗ Hibás'} (Kapott pont: ${a ? a.points_earned : 0}p)</div>
-          ${!isCor ? `<div style="font-size: 0.9rem; color: #475569;">Helyes válasz: ${formatDisplayAnswer(q.correct_answer)}</div>` : ''}
+          <div><strong>${idx + 1}. ${escapeHtml(q.question_text)}</strong> (${escapeHtml(q.points)}p)</div>
+          <div style="margin-top: 4px;">Adott válasz: <strong>${a ? escapeHtml(a.submitted_answer) : '–'}</strong></div>
+          <div class="${isCor ? 'correct' : 'wrong'}">${isCor ? '✓ Helyes' : '✗ Hibás'} (Kapott pont: ${a ? escapeHtml(a.points_earned) : 0}p)</div>
+          ${!isCor ? `<div style="font-size: 0.9rem; color: #475569;">Helyes válasz: ${escapeHtml(formatDisplayAnswer(q.correct_answer))}</div>` : ''}
         </div>
       `;
     }).join('')}
@@ -391,9 +406,14 @@ function createIndividualZipStream(sessionId) {
 </body>
 </html>`;
 
-    // Fájlnév tisztítása az ékezetes karakterek kezelésével
-    const cleanName = p.student_name.replace(/[/\\?%*:|"<>]/g, '');
-    archive.append(studentHtml, { name: `${cleanName}_ertekeles.html` });
+    // Fájlnév tisztítása az ékezetes karakterek kezelésével és névütközés elleni védelemmel
+    const cleanBaseName = p.student_name.replace(/[/\\?%*:|"<>]/g, '').trim() || 'tanulo';
+    let fileName = `${cleanBaseName}_ertekeles.html`;
+    if (usedFileNames.has(fileName)) {
+      fileName = `${cleanBaseName}_${p.id}_ertekeles.html`;
+    }
+    usedFileNames.add(fileName);
+    archive.append(studentHtml, { name: fileName });
   });
 
   return archive;

@@ -8,19 +8,35 @@ const config = require('../../config');
 
 /**
  * backup.js - Teljes offline rendszermentés (.db + feltöltött képek -> .zip)
+ * Használja az SQLite Online Backup API-t a garantáltan konzisztens pillanatképhez (Report 14 / 41.)
  */
-function createSystemBackupStream() {
-  // 1. WAL fájl ürítése és szinkronizálása a fő adatbázisfájlba
+async function createSystemBackupStream() {
+  const tempSnapshotPath = path.join(path.dirname(config.dbPath), `backup_snapshot_${Date.now()}.db`);
+
+  // 1. Konzisztens pillanatkép készítése (SQLite Online Backup API vagy WAL checkpoint)
   try {
-    db.pragma('wal_checkpoint(TRUNCATE)');
+    if (typeof db.backup === 'function') {
+      await db.backup(tempSnapshotPath);
+    } else {
+      try {
+        db.pragma('wal_checkpoint(TRUNCATE)');
+      } catch {}
+      fs.copyFileSync(config.dbPath, tempSnapshotPath);
+    }
   } catch (err) {
-    console.warn('Figyelmeztetés a WAL checkpoint során:', err.message);
+    console.warn('Figyelmeztetés az SQLite Online Backup során, fallback checkpoint:', err.message);
+    try {
+      db.pragma('wal_checkpoint(TRUNCATE)');
+    } catch {}
+    fs.copyFileSync(config.dbPath, tempSnapshotPath);
   }
 
   const archive = archiver('zip', { zlib: { level: 9 } });
 
-  // 2. ropdolgozat.db hozzáadása
-  if (fs.existsSync(config.dbPath)) {
+  // 2. ropdolgozat.db hozzáadása a konzisztens snapshotból
+  if (fs.existsSync(tempSnapshotPath)) {
+    archive.file(tempSnapshotPath, { name: 'data/ropdolgozat.db' });
+  } else if (fs.existsSync(config.dbPath)) {
     archive.file(config.dbPath, { name: 'data/ropdolgozat.db' });
   }
 
@@ -29,6 +45,17 @@ function createSystemBackupStream() {
   if (fs.existsSync(quizzesDir)) {
     archive.directory(quizzesDir, 'data/uploads/quizzes');
   }
+
+  // Takarítás a stream befejeződésekor vagy hibájakor
+  const cleanupSnapshot = () => {
+    try {
+      if (fs.existsSync(tempSnapshotPath)) fs.unlinkSync(tempSnapshotPath);
+    } catch {}
+  };
+
+  archive.on('end', cleanupSnapshot);
+  archive.on('close', cleanupSnapshot);
+  archive.on('error', cleanupSnapshot);
 
   return archive;
 }
@@ -78,12 +105,23 @@ function restoreSystemBackup(zipFilePath) {
       throw new Error('Érvénytelen mentésfájl: a csomag nem tartalmazza a ropdolgozat.db adatbázist!');
     }
 
-    // 3. Integritás-ellenőrzés a kicsomagolt adatbázison
+    // 3. Integritás- és sémakompatibilitás-ellenőrzés a kicsomagolt adatbázison (Report 14 / 43.)
     const testDb = new Database(extractedDbPath, { readonly: true });
     try {
       const integrity = testDb.prepare('PRAGMA integrity_check').get();
       if (!integrity || integrity.integrity_check !== 'ok') {
-        throw new Error('A mentésben lévő adatbázis integritása sérült!');
+        throw new Error('A mentésben lévő adatbázis integritása sérült (PRAGMA integrity_check failed)!');
+      }
+      const fkCheck = testDb.prepare('PRAGMA foreign_key_check').all();
+      if (fkCheck.length > 0) {
+        throw new Error('A mentésben lévő adatbázis idegen kulcsai sérültek (PRAGMA foreign_key_check failed)!');
+      }
+      const requiredTables = ['quizzes', 'questions', 'students', 'sessions', 'participants', 'answers'];
+      const existingTables = testDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(t => t.name);
+      for (const t of requiredTables) {
+        if (!existingTables.includes(t)) {
+          throw new Error(`Inkompatibilis mentés: a kötelező '${t}' tábla hiányzik az adatbázisból!`);
+        }
       }
     } finally {
       testDb.close();
@@ -96,34 +134,54 @@ function restoreSystemBackup(zipFilePath) {
       console.warn('Figyelmeztetés a WAL checkpoint során mentés előtt:', e.message);
     }
     const backupDbPath = config.dbPath + '.bak';
+    let backupCreated = false;
     if (fs.existsSync(config.dbPath)) {
       fs.copyFileSync(config.dbPath, backupDbPath);
+      backupCreated = true;
     }
 
-    // 5. Adatbáziskapcsolat lezárása a fájlcsere idejére
-    db.__close();
+    try {
+      // 5. Adatbáziskapcsolat lezárása a fájlcsere idejére
+      db.__close();
 
-    // 6. Új adatbázisfájl élesítése és elavult WAL/SHM takarítása
-    fs.copyFileSync(extractedDbPath, config.dbPath);
-    const walPath = config.dbPath + '-wal';
-    const shmPath = config.dbPath + '-shm';
-    if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
-    if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
+      // 6. Új adatbázisfájl élesítése és elavult WAL/SHM takarítása
+      fs.copyFileSync(extractedDbPath, config.dbPath);
+      const walPath = config.dbPath + '-wal';
+      const shmPath = config.dbPath + '-shm';
+      if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
+      if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
 
-    // 7. Feltöltött képek visszaállítása
-    let extractedUploads = path.join(tempExtractDir, 'data', 'uploads');
-    if (!fs.existsSync(extractedUploads)) {
-      extractedUploads = path.join(tempExtractDir, 'uploads');
+      // 7. Feltöltött képek visszaállítása
+      let extractedUploads = path.join(tempExtractDir, 'data', 'uploads');
+      if (!fs.existsSync(extractedUploads)) {
+        extractedUploads = path.join(tempExtractDir, 'uploads');
+      }
+      if (fs.existsSync(extractedUploads)) {
+        fs.mkdirSync(config.uploadsDir, { recursive: true });
+        copyRecursiveSync(extractedUploads, config.uploadsDir);
+      }
+
+      // 8. Adatbázis újranyitása a Proxy-n keresztül (Hot-Reload)
+      db.__reopen();
+
+      return { success: true };
+    } catch (restoreErr) {
+      // Automatikus visszagörgetés a biztonsági másolatra (.bak rollback - Report 14 / 42.)
+      console.error('Hiba a restore végrehajtása közben, automatikus visszagörgetés a .bak másolatra:', restoreErr.message);
+      if (backupCreated && fs.existsSync(backupDbPath)) {
+        try {
+          fs.copyFileSync(backupDbPath, config.dbPath);
+          const walPath = config.dbPath + '-wal';
+          const shmPath = config.dbPath + '-shm';
+          if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
+          if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
+        } catch {}
+      }
+      try {
+        db.__reopen();
+      } catch {}
+      throw new Error(`A rendszer-visszaállítás meghiúsult, az eredeti állapot sikeresen visszaállítva: ${restoreErr.message}`);
     }
-    if (fs.existsSync(extractedUploads)) {
-      fs.mkdirSync(config.uploadsDir, { recursive: true });
-      copyRecursiveSync(extractedUploads, config.uploadsDir);
-    }
-
-    // 8. Adatbázis újranyitása a Proxy-n keresztül (Hot-Reload)
-    db.__reopen();
-
-    return { success: true };
   } finally {
     try {
       fs.rmSync(tempExtractDir, { recursive: true, force: true });

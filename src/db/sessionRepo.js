@@ -56,6 +56,7 @@ function getAllSessions() {
       s.status,
       s.time_limit_min,
       s.grade_thresholds_json,
+      s.max_points,
       s.started_at,
       s.ended_at,
       COUNT(DISTINCT p.id) AS participant_count,
@@ -116,7 +117,9 @@ function getAllSessions() {
       thresholds = { 2: 30, 3: 55, 4: 75, 5: 90 };
     }
 
-    const maxPoints = quizPointsMap.get(s.quiz_id) || 0.0;
+    const maxPoints = (s.max_points !== null && s.max_points !== undefined && Number(s.max_points) > 0)
+      ? Number(s.max_points)
+      : (quizPointsMap.get(s.quiz_id) || 0.0);
     const parts = sessionParticipantsMap.get(s.id) || [];
 
     let sumGrades = 0;
@@ -243,15 +246,18 @@ function startSession({
 
   let sessionId = null;
   const tx = db.transaction(() => {
+    const quizPointsRow = db.prepare('SELECT COALESCE(SUM(points), 0.0) as mp FROM questions WHERE quiz_id = ?').get(Number(quiz_id));
+    const initialMaxPoints = quizPointsRow ? Number(quizPointsRow.mp) || 0.0 : 0.0;
+
     const insertStmt = db.prepare(`
       INSERT INTO sessions (
         subject_id, grade_level, quiz_id, class_name, mode, status,
         time_limit_min, shuffle_questions, shuffle_options, show_feedback_on_end,
-        grade_thresholds_json, started_at, ended_at
+        grade_thresholds_json, max_points, started_at, ended_at
       ) VALUES (
         ?, ?, ?, ?, ?, 'ACTIVE',
         ?, ?, ?, ?,
-        ?, CURRENT_TIMESTAMP, NULL
+        ?, ?, CURRENT_TIMESTAMP, NULL
       )
     `);
 
@@ -265,7 +271,8 @@ function startSession({
       effectiveShuffleQuestions ? 1 : 0,
       shuffle_options ? 1 : 0,
       effectiveShowFeedback ? 1 : 0,
-      thresholdsJson
+      thresholdsJson,
+      initialMaxPoints
     );
 
     sessionId = result.lastInsertRowid;
@@ -289,11 +296,15 @@ function finishSession(sessionId) {
       WHERE session_id = ? AND is_finished = 0
     `).run(sessionId);
 
-    // 2. Session státusz végleges lezárása (FINISHED) és osztálynév beégetése történeti archívumként
+    // 2. Session státusz végleges lezárása (FINISHED), max_points beégetése és osztálynév beégetése történeti archívumként
+    const quizPointsRow = db.prepare('SELECT COALESCE(SUM(points), 0.0) as mp FROM questions WHERE quiz_id = (SELECT quiz_id FROM sessions WHERE id = ?)').get(sessionId);
+    const lockedMaxPoints = quizPointsRow ? Number(quizPointsRow.mp) || 0.0 : 0.0;
+
     const updateSessionStmt = db.prepare(`
       UPDATE sessions 
       SET status = 'FINISHED', 
           ended_at = CURRENT_TIMESTAMP,
+          max_points = CASE WHEN max_points IS NOT NULL AND max_points > 0 THEN max_points ELSE ? END,
           class_name = CASE 
             WHEN class_name IS NOT NULL AND class_name != '' THEN class_name
             ELSE COALESCE(
@@ -303,7 +314,7 @@ function finishSession(sessionId) {
           END
       WHERE id = ? AND status = 'ACTIVE'
     `);
-    const sessionRes = updateSessionStmt.run(sessionId, sessionId);
+    const sessionRes = updateSessionStmt.run(lockedMaxPoints, sessionId, sessionId);
     if (sessionRes.changes === 0) {
       throw new Error('A dolgozat nem található vagy már le van zárva!');
     }
@@ -429,8 +440,27 @@ function joinSession({ session_id, student_id, student_name, pc_number = null, t
   // Szerveroldali határidő kiszámítása (ha van időkorlát)
   let deadlineAt = null;
   if (session.time_limit_min > 0) {
-    const deadlineMs = Date.now() + (session.time_limit_min * 60 * 1000);
-    deadlineAt = new Date(deadlineMs).toISOString();
+    if (session.mode === 'SPACE_RACE') {
+      if (session.current_question_index === 0 || session.current_question_index === null) {
+        // Space Race módban a rajt előtt nincs ketyegő határidő a váróban!
+        deadlineAt = null;
+      } else {
+        // Ha a verseny már elrajtolt és a diák késve csatlakozik, a már futó közös határidőhöz igazodunk
+        const existingDeadline = db.prepare(`
+          SELECT deadline_at FROM participants 
+          WHERE session_id = ? AND deadline_at IS NOT NULL 
+          LIMIT 1
+        `).get(session.id);
+        if (existingDeadline && existingDeadline.deadline_at) {
+          deadlineAt = existingDeadline.deadline_at;
+        } else {
+          deadlineAt = new Date(Date.now() + (session.time_limit_min * 60 * 1000)).toISOString();
+        }
+      }
+    } else {
+      const deadlineMs = Date.now() + (session.time_limit_min * 60 * 1000);
+      deadlineAt = new Date(deadlineMs).toISOString();
+    }
   }
 
   let newParticipantId = null;
@@ -537,7 +567,7 @@ function finishParticipant(participantId) {
  */
 function authorizeSeatChange(participantId, targetPcNumber = null) {
   const participant = db.prepare(`
-    SELECT p.id, p.session_id, p.student_name, p.is_finished, s.status AS session_status 
+    SELECT p.id, p.session_id, p.student_id, p.student_name, p.is_finished, s.status AS session_status 
     FROM participants p
     JOIN sessions s ON s.id = p.session_id
     WHERE p.id = ?
@@ -563,6 +593,7 @@ function authorizeSeatChange(participantId, targetPcNumber = null) {
   return {
     success: true,
     participantId: participant.id,
+    studentId: participant.student_id,
     sessionId: participant.session_id,
     studentName: participant.student_name,
     targetPcNumber: pcTag !== 'ANY' ? pcTag : null
@@ -616,6 +647,34 @@ function submitAnswer({
 }) {
   let result = null;
 
+  // 0. Határidő és alapállapot ellenőrzése a tranzakción kívül (hogy lejáratkor a befejezés tartósan megmaradjon!)
+  const preCheck = db.prepare(`
+    SELECT p.id, p.is_finished, p.deadline_at, s.status AS session_status, s.mode AS session_mode, s.current_question_index
+    FROM participants p
+    JOIN sessions s ON s.id = p.session_id
+    WHERE p.id = ?
+  `).get(participant_id);
+
+  if (!preCheck) throw new Error('A résztvevő nem található!');
+  if (preCheck.session_status !== 'ACTIVE' || preCheck.is_finished === 1) {
+    throw new Error('A dolgozat már befejeződött, új válasz nem küldhető be!');
+  }
+
+  // Űrhajós verseny közös rajt előtti válaszvédelem (Report 14 / 16. pont)
+  if (preCheck.session_mode === 'SPACE_RACE' && (preCheck.current_question_index === 0 || preCheck.current_question_index === null)) {
+    throw new Error('A verseny még nem indult el, válasz még nem küldhető be!');
+  }
+
+  if (preCheck.deadline_at) {
+    const now = new Date();
+    const deadline = new Date(preCheck.deadline_at);
+    if (now >= deadline) {
+      // Idő lejárt: tartósan befejezettre állítjuk a tanulót az adatbázisban
+      db.prepare('UPDATE participants SET is_finished = 1, finished_at = CURRENT_TIMESTAMP WHERE id = ?').run(participant_id);
+      throw new Error('Az egyéni időkorlát lejárt, a dolgozat automatikusan lezárásra került!');
+    }
+  }
+
   // BEGIN IMMEDIATE tranzakció konkurens beküldések kezelésére
   const tx = db.transaction(() => {
     // 1. Résztvevő és Session ellenőrzése
@@ -649,19 +708,9 @@ function submitAnswer({
       throw new Error('A dolgozat már befejeződött, új válasz nem küldhető be!');
     }
 
-    if (participant.deadline_at) {
-      const now = new Date();
-      const deadline = new Date(participant.deadline_at);
-      if (now > deadline) {
-        // Idő lejárt: automatikusan befejezettre állítjuk a tanulót
-        db.prepare('UPDATE participants SET is_finished = 1, finished_at = CURRENT_TIMESTAMP WHERE id = ?').run(participant_id);
-        throw new Error('Az egyéni időkorlát lejárt, a dolgozat automatikusan lezárásra került!');
-      }
-    }
-
     // 4. Kérdés adatainak lekérése
     const question = db.prepare(`
-      SELECT id, quiz_id, question_type, correct_answer, explanation, points
+      SELECT id, quiz_id, question_type, options_json, correct_answer, explanation, points
       FROM questions
       WHERE id = ? AND quiz_id = ?
     `).get(question_id, participant.quiz_id);
@@ -670,12 +719,20 @@ function submitAnswer({
       throw new Error('A kérdés nem található a dolgozat tesztjében!');
     }
 
+    let parsedOptions = [];
+    try {
+      parsedOptions = JSON.parse(question.options_json || '[]');
+    } catch {
+      parsedOptions = [];
+    }
+
     // 5. Gépi kiértékelés (grader)
     const evaluation = grader.evaluateAnswer(
       question.question_type,
       submitted_answer,
       question.correct_answer,
-      question.points
+      question.points,
+      parsedOptions
     );
 
     // 6. Válasz beszúrása az answers táblába
@@ -839,7 +896,9 @@ function getLiveMatrixData(sessionId) {
     };
   });
 
-  const totalMaxPoints = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
+  const totalMaxPoints = (session.max_points !== null && session.max_points !== undefined && Number(session.max_points) > 0)
+    ? Number(session.max_points)
+    : questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
 
   // Résztvevők
   const participants = db.prepare(`
@@ -911,8 +970,25 @@ function startRace(sessionId) {
   const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId);
   if (!session) throw new Error('A dolgozat nem található!');
   if (session.status !== 'ACTIVE') throw new Error('Csak aktív dolgozat versenye indítható el!');
+  if (session.mode !== 'SPACE_RACE') throw new Error('Csak űrverseny (Space Race) módban indítható közös rajt!');
 
-  db.prepare('UPDATE sessions SET current_question_index = 1 WHERE id = ?').run(sessionId);
+  const now = new Date();
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE sessions SET current_question_index = 1 WHERE id = ?').run(sessionId);
+
+    // Ha van időkorlát, az egyéni visszaszámlálót a közös rajt pillanatától indítjuk a már bent lévő diákoknak
+    if (session.time_limit_min > 0) {
+      const deadlineMs = now.getTime() + (session.time_limit_min * 60 * 1000);
+      const deadlineAt = new Date(deadlineMs).toISOString();
+      db.prepare(`
+        UPDATE participants 
+        SET deadline_at = ? 
+        WHERE session_id = ? AND is_finished = 0
+      `).run(deadlineAt, sessionId);
+    }
+  });
+
+  tx();
   return { ...session, current_question_index: 1 };
 }
 

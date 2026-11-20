@@ -95,10 +95,52 @@ function logoutAdmin(res) {
   });
 }
 
+// Rate limiting a tanári bejelentkezési kísérletekhez (brute-force védelem - Report 14 / 03.)
+const loginAttempts = new Map(); // ip -> { count: number, blockedUntil: number }
+
+function checkLoginRateLimit(ip) {
+  const now = Date.now();
+  const attempt = loginAttempts.get(ip);
+  if (!attempt) return { allowed: true };
+
+  if (attempt.blockedUntil && now < attempt.blockedUntil) {
+    const remainingSec = Math.ceil((attempt.blockedUntil - now) / 1000);
+    return { 
+      allowed: false, 
+      message: `Túl sok sikertelen próbálkozás! Biztonsági okokból kérjük, várj még ${remainingSec} másodpercet.` 
+    };
+  }
+
+  if (attempt.blockedUntil && now >= attempt.blockedUntil) {
+    loginAttempts.delete(ip);
+    return { allowed: true };
+  }
+
+  return { allowed: true };
+}
+
+function recordFailedLogin(ip) {
+  const now = Date.now();
+  const attempt = loginAttempts.get(ip) || { count: 0, blockedUntil: 0 };
+  attempt.count += 1;
+  if (attempt.count >= 5) {
+    attempt.blockedUntil = now + (60 * 1000); // 1 perc tiltás 5 sikertelen kísérlet után
+  }
+  loginAttempts.set(ip, attempt);
+  return attempt;
+}
+
+function recordSuccessfulLogin(ip) {
+  loginAttempts.delete(ip);
+}
+
 module.exports = {
   requireAdminAuth,
   isValidToken,
   loginAdmin,
-  logoutAdmin
+  logoutAdmin,
+  checkLoginRateLimit,
+  recordFailedLogin,
+  recordSuccessfulLogin
 };
 

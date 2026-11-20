@@ -22,7 +22,7 @@ function normalizeText(str) {
  * @param {number} maxPoints - A kérdésre adható maximális pontszám (alapértelmezett: 1.0)
  * @returns {{ eval_status: 'CORRECT'|'PARTIAL'|'WRONG', points_earned: number, is_correct: number }}
  */
-function evaluateAnswer(questionType, submittedAnswer, correctAnswer, maxPoints = 1.0) {
+function evaluateAnswer(questionType, submittedAnswer, correctAnswer, maxPoints = 1.0, options = []) {
   const points = Number(maxPoints) || 1.0;
   const rawSubmitted = (submittedAnswer !== null && submittedAnswer !== undefined) ? String(submittedAnswer).trim() : '';
   const rawCorrect = (correctAnswer !== null && correctAnswer !== undefined) ? String(correctAnswer).trim() : '';
@@ -50,7 +50,27 @@ function evaluateAnswer(questionType, submittedAnswer, correctAnswer, maxPoints 
       acceptedAnswers = [rawCorrect];
     }
 
-    const isMatch = acceptedAnswers.some(ans => ans.toLowerCase() === rawSubmitted.toLowerCase());
+    let isMatch = acceptedAnswers.some(ans => ans.toLowerCase() === rawSubmitted.toLowerCase());
+
+    // Kompatibilitási fallback: ha a correctAnswer betűjel (pl. 'A', 'B', 'C', 'D'), és van options tömb
+    if (!isMatch && Array.isArray(options) && options.length > 0) {
+      const letterMap = { 'a': 0, 'b': 1, 'c': 2, 'd': 3 };
+      const subLower = rawSubmitted.toLowerCase();
+      acceptedAnswers.forEach(ans => {
+        const idx = letterMap[ans.toLowerCase()];
+        if (idx !== undefined && options[idx] && options[idx].toLowerCase().trim() === subLower) {
+          isMatch = true;
+        }
+      });
+      // Vagy fordítva: ha a diák betűjelet küldött be, de a correct_answer a szöveg
+      const subIdx = letterMap[subLower];
+      if (!isMatch && subIdx !== undefined && options[subIdx]) {
+        const optText = options[subIdx].toLowerCase().trim();
+        if (acceptedAnswers.some(ans => ans.toLowerCase() === optText)) {
+          isMatch = true;
+        }
+      }
+    }
 
     return {
       eval_status: isMatch ? 'CORRECT' : 'WRONG',
@@ -64,9 +84,9 @@ function evaluateAnswer(questionType, submittedAnswer, correctAnswer, maxPoints 
     const normSub = normalizeText(rawSubmitted);
     const normCor = normalizeText(rawCorrect);
 
-    // Különféle megadási formák egységesítése
-    const isTrue = val => ['igaz', 'true', 'i', 't', '1'].includes(val);
-    const isFalse = val => ['hamis', 'false', 'h', 'f', '0'].includes(val);
+    // Különféle megadási formák egységesítése ('a' = igaz, 'b' = hamis is támogatva)
+    const isTrue = val => ['igaz', 'true', 'i', 't', '1', 'a'].includes(val);
+    const isFalse = val => ['hamis', 'false', 'h', 'f', '0', 'b'].includes(val);
 
     let isMatch = false;
     if (isTrue(normCor) && isTrue(normSub)) isMatch = true;

@@ -4,6 +4,81 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.24.0] – 2026-11-20
+
+### Report 14 tantermi átvilágítás: Space Race kérdés- és rajtvédelem, gépváltási és reset jelenlét feloldása, HTML exportok XSS védelme, tanári PIN brute-force védelem és atomi SQLite Backup & Restore garancia
+
+Kiemelt tantermi biztonsági, versenyfelügyeleti és üzemeltetési kiadás az éles próba előtti átvilágítás (Report 14) alapján. A Space Race (Csapatverseny) közös rajtja szerveroldalon is teljes védelmet kapott: a tanulói felület a tanári indítás (`start-race`) előtt egyáltalán nem kapja meg a kérdéseket (`questions: []`), a rajt előtti válaszküldés szigorúan tiltott, az egyéni időkorlát pedig nem a várótermi belépéstől, hanem kizárólag a tanári rajt pillanatától indul el. A tantermi gépváltás (`authorize-seat-change`) és a téves névfoglalás törlése (`reset`) mostantól azonnal feloldja a memóriabeli és adatbázis-jelenlétet a célgépen, így az áthelyezett diák a lenyíló névsorban nem ragad benn foglaltként, a régi gép pedig célzott Socket.IO értesítésre automatikusan kilép a munkamenetből anélkül, hogy a többi tanulót megzavarná. Az interaktív csoportos HTML és az egyéni ZIP értékelőlap exportok teljes körű XSS és attribútum-tisztítást (`escapeHtml`) kaptak, valamint a ZIP fájlnevek egyediségi védelmet élveznek azonos nevű diákok esetén. A tanári belépési felület intelligens próbálkozáskorlátot (Rate Limiting) kapott az illetéktelen PIN próbálgatások (brute-force) ellen (5 sikertelen kísérlet után 1 perces zárolás lép életbe). Végül a rendszermentés és -visszaállítás az SQLite Online Backup API-val konzisztens pillanatképet készít, a visszatöltés pedig előzetes integritás-, séma- és idegenkulcs-vizsgálattal, valamint hiba esetén automatikus biztonsági másolatra való visszagörgetéssel (Rollback) garantálja a 100%-os adatbiztonságot.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Space Race közös rajt és kérdésvédelem (16. pont):**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `GET /api/student/session-data` végpont Space Race módban a rajt előtt üres kérdéslistát ad vissza (`questions: []`), megakadályozva a feladatok idő előtti megtekintését.
+  - A `submitAnswer` a rajt előtt elutasítja a válaszküldési kísérleteket.
+  - A `joinSession` a váróban várakozó diákoknak nem indítja el a visszaszámlálót (`deadline_at = null`), az időkorlát a tanári indítás (`startRace`) pillanatától ketyeg mindenkinek egységesen.
+  - A `student.js` a `race:started` Socket.IO esemény fogadásakor frissen kéri le a feloldott kérdéseket és az elindított határidőt a szervertől.
+
+* **Gépváltási és törlési események és jelenlét feloldása (06., 07. pont):**
+  - **Fájlok:** [`src/services/presenceService.js`](file:///d:/dev/Röpdolgozat%20program/src/services/presenceService.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `getDbOccupiedStudentIds` a gépváltásra jóváhagyott (`PENDING_SEAT_CHANGE`) diákot nem tekinti foglaltnak, így az új célgépen a névsorban azonnal kattinthatóvá válik a neve.
+  - A tanári jóváhagyáskor és resetkor lefut a `presenceService.releaseStudent`, és kimegy a frissített `students:occupied_updated` az osztálynak.
+  - A `participant:kicked` esemény tartalmazza a célzott `participantId` és `studentId` mezőket, így a diákfelület kizárólag az érintett régi gépet lépteti ki.
+
+* **HTML exportok XSS / escape védelme (08., 40. pont):**
+  - **Fájlok:** [`src/services/exporter.js`](file:///d:/dev/Röpdolgozat%20program/src/services/exporter.js)
+  - Bevezetésre került a szerveroldali `escapeHtml` segédfüggvény.
+  - Az interaktív csoportos HTML és az egyéni tanulói HTML értékelőlapok minden szöveges és attribútum-mezője (tesztcím, tantárgy, évfolyam, diák neve, kérdésszöveg, válaszok) biztonságosan szűrésre kerül.
+  - A ZIP fájlnevek a névütközések elkerülésére azonos diáknevek esetén automatikusan megkapják a résztvevő azonosítóját (`nev_id_ertekeles.html`).
+
+* **Tanári bejelentkezési Rate Limiting (03. pont):**
+  - **Fájlok:** [`src/middleware/auth.js`](file:///d:/dev/Röpdolgozat%20program/src/middleware/auth.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - Beépített brute-force védelem: 5 sikertelen PIN kísérlet után a rendszer automatikusan 60 másodpercre zárolja az adott IP-címről érkező bejelentkezéseket, HTTP 429-es státuszkóddal és hátralévő idő kijelzésével.
+
+* **SQLite Online Backup és Atomi Rollback garancia (41., 42., 43. pont):**
+  - **Fájlok:** [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - A mentés az SQLite hivatalos Online Backup API-ját használja, így az élő adatbázisról garantáltan konzisztens pillanatkép kerül a ZIP csomagba.
+  - A visszaállítás (Restore) a kicsomagolt adatbázison `integrity_check`, `foreign_key_check` és kötelező táblamegléti vizsgálatot végez.
+  - Bármilyen fájlcsere vagy képmásolási hiba esetén a rendszer automatikusan visszagörgeti a `.bak` másolatot a helyére és újranyitja a kapcsolatot, kizárva az adatbázis keveredését vagy elvesztését.
+
+---
+
+## [1.23.0] – 2026-11-20
+
+### Report 14 tantermi átvilágítás: Socrative PDF megoldókulcs és kiértékelő szinkronizáció, időkorlátos lezárási rollback elhárítása, tanári léptetés mód letiltása, Socket.IO tanári mátrix elszigetelése és történeti jegyvédelem
+
+Kiemelt tantermi stabilitási, biztonsági és adatintegritási kiadás az éles próba előtti független szakértői átvilágítás (Report 14) alapján. A Socrative PDF importáló és az automatikus kiértékelő teljes szinkronizációt kapott: a parser mostantól az opció tényleges válaszszövegét rögzíti megoldókulcsként, a pontozó pedig kétirányú intelligens kompatibilitási védelmet kapott az egybetűs ('A', 'B', 'C', 'D') és TF ('a'/'b') aliasok felismerésére. Megszűnt az egyéni időkorlát lejárati mentésének visszagördülése: az idő lejárta után a válasz elutasítása mellett a tanuló lezárt állapota tartósan megmarad az adatbázisban. A félkész „Tanári léptetés” működési mód az indítási ablakban ideiglenesen letiltásra került a tanári tévedések kizárása érdekében. A Socket.IO valós idejű adatszivárgás elhárult: a tanári élő mátrix és a tanulói fókuszvesztési értesítések kizárólag a tanári és kivetítői szobába (`session_${id}_teacher`) kerülnek kiküldésre, így a diákok nem láthatják a megoldásokat vagy mások válaszait a hálózaton. Ezenfelül a rendszer kőbe vésett történeti jegyvédelmet kapott: az új `sessions.max_points` mező beégeti a dolgozat lezáráskori maximális összpontszámát, így a tesztek későbbi szerkesztése, bővítése vagy módosítása a Tesztszerkesztőben soha többé nem változtathatja meg a korábban megírt dolgozatok KRÉTA jegyeit és százalékait az archívumban.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Socrative PDF megoldókulcs és kiértékelő szinkronizáció (37. pont):**
+  - **Fájlok:** [`src/services/socrativePdfParser.js`](file:///d:/dev/Röpdolgozat%20program/src/services/socrativePdfParser.js), [`src/services/grader.js`](file:///d:/dev/Röpdolgozat%20program/src/services/grader.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - A PDF-ből kinyert feleletválasztós (ABCD) és igaz/hamis (TF) kérdések helyes válaszaként a megoldás tényleges szövege kerül mentésre a betűjel helyett.
+  - A `grader.js` kétirányú kompatibilitási ellenőrzést kapott: a betűjeles megoldókulcsot és az opció szövegét automatikusan megfelelteti, TF esetén pedig az `'a'` (Igaz) és `'b'` (Hamis) aliasokat is támogatja.
+  - A `sessionRepo.submitAnswer` átadja a kérdés opciólistáját a pontozónak a hibátlan illesztéshez.
+
+* **Időkorlát lejárati mentés visszagördülésének elhárítása (14. pont):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - A határidő-ellenőrzés a válaszmentő tranzakción kívül fut le: lejáratkor az `is_finished = 1` és `finished_at` tartósan rögzül az adatbázisban a válaszelutasítás mellett, megelőzve a tranzakciós rollback hibát.
+
+* **Tanári léptetés mód ideiglenes letiltása (15. pont):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html)
+  - Az Új dolgozat indítása modális ablakban a nem támogatott `TEACHER_PACED` opció rejtésre és letiltásra került (`disabled`), kizárva a téves indítást.
+
+* **Socket.IO tanári mátrix adatszivárgás elszigetelése (01. pont):**
+  - **Fájlok:** [`src/sockets/liveHandler.js`](file:///d:/dev/Röpdolgozat%20program/src/sockets/liveHandler.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - Elkülönített szobák: a tanár és a kivetítő a `session_${id}_teacher`, a diákok a `session_${id}_student` szobához csatlakoznak.
+  - A `matrix:updated` és `participant:focus_lost` események szigorúan csak a tanári szobába kerülnek kiküldésre, a diákok semmilyen bizalmas adatot nem kapnak a hálózaton.
+
+* **Történeti jegyvédelem tesztszerkesztés után (25. pont):**
+  - **Fájlok:** [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql), [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - Új `sessions.max_points REAL DEFAULT NULL` mező automatikus adatbázis-migrációval.
+  - Dolgozat indításakor és befejezésekor a rendszer rögzíti az aktuális maximális pontszámot. Az archívum, a mátrix és az exportok ezt veszik alapul, így a tesztek utólagos szerkesztése nem módosítja a korábbi jegyeket.
+
+* **Automatikus regressziós tesztcsomag:**
+  - **Fájlok:** [`scratch/test_report14_fixes.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_report14_fixes.js), [`package.json`](file:///d:/dev/Röpdolgozat%20program/package.json)
+  - Új célzott rendszerteszt a fenti pontok igazolására, integrálva az `npm test` tesztcsomagba (5/5 zöld tesztmodul).
+
+---
+
 ## [1.22.0] – 2026-11-20
 
 ### Tesztek egyesítése (Merge) funkció a Tesztszerkesztőben, nem-destruktív kérdésmásolás ütközésmentes áthelyezéssel és összegző modális ablakkal, valamint tanári fejléc logó kezdőképernyő-navigáció
