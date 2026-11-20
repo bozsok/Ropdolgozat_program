@@ -18,6 +18,7 @@
   const inputPin = document.getElementById('input-pin');
   const btnLoginSubmit = document.getElementById('btn-login-submit');
   const btnLogout = document.getElementById('btn-logout');
+  const adminLogoLink = document.getElementById('admin-logo-link');
   const headerMetaBox = document.getElementById('header-meta-box');
   const badgeNavBar = document.getElementById('badge-nav-bar');
   const adminMainContainer = document.getElementById('admin-main-container');
@@ -272,6 +273,16 @@
     }
     window.location.href = '/';
   });
+
+  // Logóra kattintás: mindig a 'Jelenleg nincs folyamatban lévő dolgozat' kezdőképernyőt jeleníti meg
+  if (adminLogoLink) {
+    adminLogoLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      switchTab('tab-live');
+      showNoSessionView();
+      renderBadges();
+    });
+  }
 
   /**
    * Kezdeti adatok betöltése

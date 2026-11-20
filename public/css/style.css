@@ -1083,6 +1083,12 @@ h5 {
   align-items: center;
   text-decoration: none;
   flex-shrink: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.admin-brand-link:hover {
+  opacity: 0.85;
 }
 
 .admin-brand-logo {

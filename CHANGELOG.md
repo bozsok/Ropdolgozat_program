@@ -6,9 +6,9 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ## [1.22.0] – 2026-11-20
 
-### Tesztek egyesítése (Merge) funkció a Tesztszerkesztőben, nem-destruktív kérdésmásolás ütközésmentes áthelyezéssel és összegző modális ablakkal
+### Tesztek egyesítése (Merge) funkció a Tesztszerkesztőben, nem-destruktív kérdésmásolás ütközésmentes áthelyezéssel és összegző modális ablakkal, valamint tanári fejléc logó kezdőképernyő-navigáció
 
-Kiemelt tanári kényelmi és tananyag-szervezési kiadás: a Tesztszerkesztő felületen megjelent a tesztek egyesítése („Merge”) lehetősége. A pedagógus két tetszőleges korábbi dolgozatból (például félévi vagy év végi összefoglalókhoz, témazárókhoz) egyetlen gombnyomással egy új, harmadik feladatsort hozhat létre. Az egyesítés teljesen nem-destruktív (az eredeti dolgozatok és feladataik érintetlenek maradnak), az összes kérdés (ABCD, TF, SHORT típusok, magyarázatok, instrukciók és pontszámok) folytonos sorszámozással kerül át a célkvízbe. A kérdésekhez csatolt ábrák és diagramok fájlütközésmentes biztonsági prefixeléssel másolódnak át az új teszt médiakönyvtárába. A funkció elérhető közvetlenül a tesztkártyák műveleti gombsorából (zöld `call_merge` gyorsgomb), valamint a szerkesztő fejlécében található **[ 🔀 Tesztek egyesítése ]** eszköztárgombbal. A műveletet támogató Calm modális ablak intelligens évfolyam-csoportosítással (`<optgroup>`), önmagával való egyesítés elleni védelemmel, automatikus címajánlással, célmappa-választással és dinamikus kérdésszám/összpontszám statisztikai összegzővel rendelkezik. A sikeres összevonást követően a rendszer azonnal megnyitja a szerkesztőben a frissen létrejött új dolgozatot.
+Kiemelt tanári kényelmi és tananyag-szervezési kiadás: a Tesztszerkesztő felületen megjelent a tesztek egyesítése („Merge”) lehetősége. A pedagógus két tetszőleges korábbi dolgozatból (például félévi vagy év végi összefoglalókhoz, témazárókhoz) egyetlen gombnyomással egy új, harmadik feladatsort hozhat létre. Az egyesítés teljesen nem-destruktív (az eredeti dolgozatok és feladataik érintetlenek maradnak), az összes kérdés (ABCD, TF, SHORT típusok, magyarázatok, instrukciók és pontszámok) folytonos sorszámozással kerül át a célkvízbe. A kérdésekhez csatolt ábrák és diagramok fájlütközésmentes biztonsági prefixeléssel másolódnak át az új teszt médiakönyvtárába. A funkció elérhető közvetlenül a tesztkártyák műveleti gombsorából (zöld `call_merge` gyorsgomb), valamint a szerkesztő fejlécében található **[ 🔀 Tesztek egyesítése ]** eszköztárgombbal. A műveletet támogató Calm modális ablak intelligens évfolyam-csoportosítással (`<optgroup>`), önmagával való egyesítés elleni védelemmel, automatikus címajánlással, célmappa-választással és dinamikus kérdésszám/összpontszám statisztikai összegzővel rendelkezik. A sikeres összevonást követően a rendszer azonnal megnyitja a szerkesztőben a frissen létrejött új dolgozatot. Emellett a tanári fejlécben található Okoskodó logó közvetlen kezdőképernyő-funkciót kapott: a logóra kattintva a felület bármelyik menüpontból azonnal a fő Eredménytábla fül tiszta, „Jelenleg nincs folyamatban lévő dolgozat” kezdőállapotára vált az **[ Új dolgozat indítása ]** gombbal.
 
 #### Hozzáadva és megújítva (Added and Redesigned)
 * **Tesztek egyesítése (Merge) funkció és nem-destruktív kérdésmásolás:**
@@ -20,6 +20,12 @@ Kiemelt tanári kényelmi és tananyag-szervezési kiadás: a Tesztszerkesztő f
   - Új eszköztárgomb a Tesztszerkesztő fejlécében (`#btn-merge-quizzes`).
   - Automatikus navigáció: az új dolgozat létrehozása után az admin felület azonnal megnyitja azt a szerkesztőben.
   - Automatikus rendszerteszt (`scratch/test_merge_quizzes.js`), integrálva az `npm test` tesztcsomagba.
+
+* **Tanári fejléc logó kezdőképernyő-navigáció („Nincs folyamatban lévő dolgozat”):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A felső fejlécben az Okoskodó márkalogó (`#admin-logo-link`) közvetlen eseménykezelőt kapott: kattintásra az adminisztrációs felület bármely fülről (pl. Tesztszerkesztő, Beállítások, Korábbi dolgozatok) azonnal az Eredménytábla fülre ugrik (`switchTab('tab-live')`).
+  - A nézet visszaáll a letisztult „Jelenleg nincs folyamatban lévő dolgozat” kezdőállapotra (`showNoSessionView()`), a csatornakijelölés megszűnik a felső jelvénysávban, miközben az aktív dolgozatok továbbra is elérhetők maradnak a fejlécben.
+  - A logó diszkrét hover átmenetet és pointer egérkurzort kapott.
 
 ---
 
