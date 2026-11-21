@@ -1286,6 +1286,166 @@ console.log('✓ Az indításkori kompatibilitás-védelem az újabb sémaverzi�
 
 try { fs.unlinkSync(testCompatDbPath); } catch {}
 
+// 32. TESZT: Sikertelen sémamigráció megállítása, fejléc-védelem és a kész séma lekérdezéseinek ellenőrzése (Report 21 / 1. pont)
+console.log('\n--- 32. TESZT: Sikertelen sémamigráció fail-fast kezelése és a kész séma lekérdezései (Report 21 / 1. pont) ---');
+
+// A) Sikertelen migrációs lépés kivételt dob és nem írja be az új sémaverziót
+const brokenMigrateDbPath = path.join(path.dirname(testDbPath), 'broken_migrate.db');
+const brokenMigrateDb = new Database(brokenMigrateDbPath);
+brokenMigrateDb.pragma('application_id = 1330335571');
+brokenMigrateDb.pragma('user_version = 12000'); // Régi verzió
+brokenMigrateDb.exec(`
+  CREATE TABLE quizzes (id INTEGER PRIMARY KEY, subject_id INTEGER, title TEXT, subject_grade TEXT);
+  CREATE TABLE questions (id INTEGER PRIMARY KEY, quiz_id INTEGER, question_type TEXT, points REAL);
+  CREATE TABLE students (id INTEGER PRIMARY KEY, class_name TEXT, student_name TEXT);
+  CREATE TABLE sessions (id INTEGER PRIMARY KEY, quiz_id INTEGER, status TEXT, mode TEXT, class_name TEXT DEFAULT '');
+  CREATE TABLE participants (id INTEGER PRIMARY KEY, session_id INTEGER, student_id INTEGER, student_name TEXT);
+  CREATE TABLE answers (id INTEGER PRIMARY KEY, session_id INTEGER, participant_id INTEGER, question_id INTEGER, points_earned REAL);
+  -- Zároló trigger felhelyezése a sessions táblára a migrációs lépés szándékos megállításához
+  CREATE TRIGGER trg_break_sessions_update BEFORE UPDATE ON sessions BEGIN SELECT RAISE(ABORT, 'Migráció szándékos blokkolása'); END;
+  INSERT INTO sessions (id, quiz_id, status, mode, class_name) VALUES (999, 1, 'ACTIVE', 'STUDENT_PACED', '');
+  INSERT INTO students (id, class_name, student_name) VALUES (999, '6.a', 'Teszt');
+  INSERT INTO participants (id, session_id, student_id, student_name) VALUES (999, 999, 999, 'Teszt');
+`);
+let migrateFailedThrown = false;
+try {
+  db.migrateDatabase(brokenMigrateDb);
+} catch (err) {
+  migrateFailedThrown = true;
+  assert.ok(err.message.includes('Sikertelen sémamigráció'), 'Nem a várt hiba: ' + err.message);
+}
+assert.strictEqual(migrateFailedThrown, true, 'A sikertelen migráció nem dobott hibát!');
+const unmigratedVersion = brokenMigrateDb.pragma('user_version', { simple: true });
+assert.strictEqual(unmigratedVersion, 12000, 'A sikertelen migráció felülbélyegezte a sémaverziót!');
+brokenMigrateDb.close();
+try { fs.unlinkSync(brokenMigrateDbPath); } catch {}
+
+// B) Régi séma (created_at / updated_at hiányával) sikeres migrációja és a valódi quizRepo lekérdezés működése
+const legacySchemaDbPath = path.join(path.dirname(testDbPath), 'legacy_nocreated.db');
+const legacySchemaZipPath = path.join(path.dirname(testDbPath), 'legacy_nocreated.zip');
+const legacySchemaDb = new Database(legacySchemaDbPath);
+legacySchemaDb.pragma('application_id = 0');
+legacySchemaDb.pragma('user_version = 0');
+legacySchemaDb.exec(`
+  CREATE TABLE subjects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, is_default INTEGER DEFAULT 0);
+  INSERT INTO subjects (id, name, is_default) VALUES (1, 'Digitális kultúra', 1);
+  CREATE TABLE students (id INTEGER PRIMARY KEY AUTOINCREMENT, class_name TEXT NOT NULL, student_name TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  INSERT INTO students (class_name, student_name) VALUES ('6.a', 'NoCreated Tanuló');
+  -- quizzes tábla created_at és updated_at nélkül (pontosan a Report 21 / 1. pont szerint!)
+  CREATE TABLE quizzes (id INTEGER PRIMARY KEY AUTOINCREMENT, subject_id INTEGER NOT NULL, title TEXT NOT NULL, subject_grade TEXT DEFAULT '', default_time_limit_min INTEGER DEFAULT 0, locked_at DATETIME DEFAULT NULL);
+  INSERT INTO quizzes (id, subject_id, title, subject_grade) VALUES (88, 1, 'Régi Kvíz NoCreated', '6');
+  CREATE TABLE questions (id INTEGER PRIMARY KEY AUTOINCREMENT, quiz_id INTEGER NOT NULL, question_order INTEGER NOT NULL, question_type TEXT NOT NULL, question_text TEXT NOT NULL, image_path TEXT DEFAULT NULL, options_json TEXT DEFAULT '["A","B"]', correct_answer TEXT DEFAULT 'A', explanation TEXT DEFAULT '', points REAL NOT NULL DEFAULT 1.0);
+  INSERT INTO questions (id, quiz_id, question_order, question_type, question_text, points) VALUES (881, 88, 1, 'ABCD', 'Kérdés', 1.0);
+  CREATE TABLE sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, subject_id INTEGER NOT NULL DEFAULT 1, grade_level TEXT NOT NULL, quiz_id INTEGER NOT NULL, class_name TEXT DEFAULT '', mode TEXT NOT NULL DEFAULT 'STUDENT_PACED', status TEXT NOT NULL DEFAULT 'ACTIVE', time_limit_min INTEGER DEFAULT 0, shuffle_questions INTEGER DEFAULT 0, shuffle_options INTEGER DEFAULT 0, show_feedback_on_end INTEGER DEFAULT 1, current_question_index INTEGER DEFAULT 0, grade_thresholds_json TEXT NOT NULL DEFAULT '{"2":30,"3":55,"4":75,"5":90}', started_at DATETIME DEFAULT CURRENT_TIMESTAMP, ended_at DATETIME DEFAULT NULL);
+  CREATE TABLE participants (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, student_id INTEGER DEFAULT NULL, pc_number INTEGER DEFAULT NULL, student_name TEXT NOT NULL, session_token TEXT NOT NULL, question_order_json TEXT DEFAULT '[]', team_color TEXT DEFAULT NULL, focus_lost_count INTEGER DEFAULT 0, is_finished INTEGER DEFAULT 0, joined_at DATETIME DEFAULT CURRENT_TIMESTAMP, deadline_at DATETIME DEFAULT NULL, finished_at DATETIME DEFAULT NULL);
+  CREATE TABLE answers (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, participant_id INTEGER NOT NULL, question_id INTEGER NOT NULL, submitted_answer TEXT NOT NULL, eval_status TEXT NOT NULL DEFAULT 'WRONG', is_correct INTEGER NOT NULL DEFAULT 0, points_earned REAL NOT NULL DEFAULT 0.0, original_points_earned REAL NOT NULL DEFAULT 0.0, is_manually_overridden INTEGER DEFAULT 0, overridden_at DATETIME DEFAULT NULL, time_spent_sec INTEGER DEFAULT 0, answered_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+`);
+legacySchemaDb.close();
+
+const legacySchemaArchive = archiver('zip', { zlib: { level: 9 } });
+await new Promise((resolve, reject) => {
+  const ws = fs.createWriteStream(legacySchemaZipPath);
+  legacySchemaArchive.pipe(ws);
+  ws.on('finish', resolve);
+  ws.on('error', reject);
+  legacySchemaArchive.file(legacySchemaDbPath, { name: 'data/ropdolgozat.db' });
+  legacySchemaArchive.finalize();
+});
+
+const legacyRestoreResult = await backup.restoreSystemBackup(legacySchemaZipPath);
+assert.strictEqual(legacyRestoreResult.success, true, 'A hiányos időbélyegű régi mentés visszaállítása elhasalt!');
+
+// Igazoljuk, hogy a tényleges tanári tesztlista (quizRepo.getQuizzes) hiba nélkül lefut!
+const allQuizzesAfterRestore = quizRepo.getQuizzes();
+assert.ok(allQuizzesAfterRestore.length > 0, 'Nincs kvíz a visszaállítás után!');
+const restoredQuizItem = allQuizzesAfterRestore.find(q => q.id === 88);
+assert.ok(restoredQuizItem !== undefined, 'A 88-as kvíz nem található a listában!');
+assert.ok(restoredQuizItem.created_at !== undefined && restoredQuizItem.created_at !== null, 'A created_at hiányzik a migrált kvízből!');
+assert.ok(restoredQuizItem.updated_at !== undefined && restoredQuizItem.updated_at !== null, 'Az updated_at hiányzik a migrált kvízből!');
+console.log('✓ A sikertelen migráció azonnal leáll és nem kap új verziót; a hiányos időbélyegű régi mentés sikeresen migrált és a tanári tesztlista hibátlanul megnyílik');
+
+try { fs.unlinkSync(legacySchemaDbPath); } catch {}
+try { fs.unlinkSync(legacySchemaZipPath); } catch {}
+
+// 33. TESZT: Tényleges indítási folyamat elutasítása fájlmódosítás és WAL váltás nélkül (Report 21 / 2. pont)
+console.log('\n--- 33. TESZT: Tényleges indítási folyamat elutasítása fájlmódosítás és WAL váltás nélkül (Report 21 / 2. pont) ---');
+const spawnDbPath = path.join(path.dirname(testDbPath), 'spawn_unsupported.db');
+const spawnDb = new Database(spawnDbPath);
+spawnDb.pragma('journal_mode = DELETE');
+spawnDb.pragma('application_id = 1330335571');
+spawnDb.pragma('user_version = 99999'); // Jövőbeli sémaverzió
+spawnDb.exec(`CREATE TABLE quizzes (id INTEGER PRIMARY KEY, title TEXT, subject_id INTEGER, subject_grade TEXT);`);
+spawnDb.close();
+
+// Kezdeti SHA-256 hash és naplózási mód kiszámítása
+const initialSpawnHash = crypto.createHash('sha256').update(fs.readFileSync(spawnDbPath)).digest('hex');
+
+// Külön Node folyamatban megkíséreljük betölteni az init.js-t
+const spawnRes = require('child_process').spawnSync(process.execPath, [
+  '-e',
+  `process.env.DB_PATH = ${JSON.stringify(spawnDbPath)}; require('./src/db/init');`
+], {
+  cwd: path.join(__dirname, '..'),
+  encoding: 'utf8'
+});
+
+assert.strictEqual(spawnRes.status !== 0, true, 'Az újabb sémaverziójú indítás nem dobott hibát a gyermekfolyamatban!');
+assert.ok(spawnRes.stderr.includes('újabb sémaverziójú'), 'Nem a várt hibaüzenet jelent meg stderr-en: ' + spawnRes.stderr);
+
+// Ellenőrizzük, hogy a fájl bájtra változatlan maradt-e
+const finalSpawnHash = crypto.createHash('sha256').update(fs.readFileSync(spawnDbPath)).digest('hex');
+assert.strictEqual(finalSpawnHash, initialSpawnHash, 'A meglévő adatbázis fájl módosult az elutasított indulás során!');
+
+// Ellenőrizzük, hogy a naplózási mód maradt-e DELETE (nem váltott WAL-ra)
+const checkSpawnDb = new Database(spawnDbPath, { readonly: true });
+const finalJournalMode = checkSpawnDb.pragma('journal_mode', { simple: true });
+checkSpawnDb.close();
+assert.strictEqual(finalJournalMode.toLowerCase(), 'delete', 'A naplózási mód átváltott WAL-ra az elutasított induláskor!');
+
+// Ellenőrizzük, hogy sem -wal, sem -shm fájl nem jött létre
+assert.strictEqual(fs.existsSync(spawnDbPath + '-wal'), false, 'Létrejött -wal fájl az elutasított induláskor!');
+assert.strictEqual(fs.existsSync(spawnDbPath + '-shm'), false, 'Létrejött -shm fájl az elutasított induláskor!');
+console.log('✓ A tényleges indítófolyamat elutasította az újabb sémát: a fájl hash-e, DELETE naplózási módja változatlan maradt, és nem keletkezett -wal/-shm');
+
+try { fs.unlinkSync(spawnDbPath); } catch {}
+
+// 34. TESZT: Üres (0 táblás) SQLite adatbázis elutasítása a restore pre-checkben, és üres tantermi mentés sikeres visszatöltése (Report 21 / 3. pont)
+console.log('\n--- 34. TESZT: Üres (0 táblás) SQLite mentés elutasítása és üres tantermi mentés visszatöltése (Report 21 / 3. pont) ---');
+const emptyDbPath = path.join(path.dirname(testDbPath), 'completely_empty.db');
+const emptyZipPath = path.join(path.dirname(testDbPath), 'completely_empty_backup.zip');
+
+// Létrehozunk egy 0 táblás, teljesen üres SQLite fájlt
+const completelyEmptyDb = new Database(emptyDbPath);
+completelyEmptyDb.close();
+
+const emptyArchive = archiver('zip', { zlib: { level: 9 } });
+await new Promise((resolve, reject) => {
+  const ws = fs.createWriteStream(emptyZipPath);
+  emptyArchive.pipe(ws);
+  ws.on('finish', resolve);
+  ws.on('error', reject);
+  emptyArchive.file(emptyDbPath, { name: 'data/ropdolgozat.db' });
+  emptyArchive.finalize();
+});
+
+const preHashBeforeEmpty = crypto.createHash('sha256').update(fs.readFileSync(testDbPath)).digest('hex');
+
+let emptyRestoreFailed = false;
+try {
+  await backup.restoreSystemBackup(emptyZipPath);
+} catch (err) {
+  emptyRestoreFailed = true;
+  assert.ok(err.message.includes('üres') || err.message.includes('Inkompatibilis'), 'Nem a várt hibaüzenet: ' + err.message);
+}
+assert.strictEqual(emptyRestoreFailed, true, 'A teljesen üres (0 táblás) mentés visszaállítása nem dobott hibát!');
+
+const postHashAfterEmpty = crypto.createHash('sha256').update(fs.readFileSync(testDbPath)).digest('hex');
+assert.strictEqual(postHashAfterEmpty, preHashBeforeEmpty, 'Az aktív adatbázis módosult az üres mentés elutasítása során!');
+console.log('✓ A 0 táblás teljesen üres SQLite mentést a pre-check azonnal elutasította, az éles adatbázis érintetlen maradt');
+
+try { fs.unlinkSync(emptyDbPath); } catch {}
+try { fs.unlinkSync(emptyZipPath); } catch {}
+
 try { sessionRepo.deleteSession(triggerSession.id); } catch {}
 try { sessionRepo.deleteSession(legacySession.id); } catch {}
 try { sessionRepo.deleteSession(v26Session.id); } catch {}

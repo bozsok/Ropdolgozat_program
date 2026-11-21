@@ -4,6 +4,37 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.32.0] – 2026-11-21
+
+### Report 21 megállapítások: Fail-fast kötelező sémamigráció, írásvédett szerverindulás meglévő adatbázis esetén és szigorított üres adatbázis védelem a rendszer-visszaállításban
+
+Kiemelt tantermi adatintegritási, indításbiztonsági és visszaállítás-védelmi kiadás a független szakértői felülvizsgálat (Report 21) megállapításainak maradéktalan orvoslására. A közös sémamigráció (`migrateDatabase`) mostantól szigorú hibakezelést (fail-fast elv) alkalmaz: a korábbi csendes hibaelnyelés helyett bármelyik kötelező migrációs lépés meghiúsulása esetén azonnal leállítja a folyamatot. Így a sérült vagy félkész adatbázis nem kaphatja meg az új sémaverziót (`user_version = 13200`), és a rendszer-visszaállítás (Restore) elutasítja az állományt az aktív adatok érintése nélkül. A meglévő időbélyeg-mezők (`created_at`, `updated_at`, `answered_at`) pótlása biztonságos, szabványos kétlépcsős eljárásra (`DEFAULT NULL` + `UPDATE ... = datetime('now')`) módosult, kiküszöbölve az SQLite `ALTER TABLE ADD COLUMN` korlátozásait. A normál szerverindulás meglévő adatbázis esetén először kizárólag olvasásra nyitja meg a fájlt: egy újabb vagy inkompatibilis adatbázis elutasítása még azelőtt megtörténik, hogy írható kapcsolat nyílna vagy a naplózási mód (`journal_mode = WAL`) módosítaná a fájl fejlécét vagy SHA-256 ellenőrző összegét. A restore előellenőrzési kapuja mostantól szigorúan elutasítja a 0 táblás, teljesen üres SQLite fájlokat, miközben az érvényes Okoskodó sémájú, de még rekordokat nem tartalmazó mentések visszaállítása továbbra is maradéktalanul támogatott.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Szigorú fail-fast sémamigráció és biztonságos mezőpótlás (Report 21 / 1. pont):**
+  - **Fájlok:** [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js), [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js)
+  - A `migrateDatabase` lépéseiből kivezetésre került a `console.error` alapú hibaelnyelés; meghiúsulás esetén kivétel dobódik, megakadályozva a `user_version` felülbélyegzését és a hibás adatbázis életbe lépését.
+  - A `quizzes.created_at`, `quizzes.updated_at` és `answers.answered_at` mezők migrációja `DEFAULT NULL` és azonnali `UPDATE` kombinációjával történik.
+  - A restore utóellenőrzési lépése kibővült a tényleges tanári és tanulói lekérdezések teljes mezőkészletének futtatásával.
+
+* **Írásvédett indítási kompatibilitás-ellenőrzés (Report 21 / 2. pont):**
+  - **Fájl:** [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js)
+  - Meglévő adatbázisfájl esetén az `init.js` először `{ readonly: true, fileMustExist: true }` módban futtatja le a `validateDatabaseCompatibility`-t.
+  - Ha az adatbázis újabb vagy idegen, a folyamat azonnal megáll: a fájl fejlécét és naplózási módját a rendszer nem módosítja, sem `-wal`, sem `-shm` fájl nem jön létre, a fájl SHA-256 hash-e bájtra érintetlen marad.
+
+* **Explicit üres adatbázis szabályozás (Report 21 / 3. pont):**
+  - **Fájlok:** [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js), [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js)
+  - A `validateDatabaseCompatibility` támogatja az `allowEmpty` opciót: mentés visszaállításakor (`allowEmpty: false`) a 0 táblás üres SQLite fájlt azonnal elutasítja.
+  - Az érvényes Okoskodó sémájú, de rekordok nélküli adatbázisok visszaállíthatósága változatlanul biztosított.
+
+* **3 új integrációs és regressziós teszt (32–34. teszt) a tesztcsomagban (Report 21 / 1–3. fejezet):**
+  - **Fájl:** [`scratch/test_report14_fixes.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_report14_fixes.js)
+  - 32. teszt: Sikertelen sémamigráció fail-fast megállítása, fejléc-védelem (verziószám megőrzése), valamint az időbélyeg-hiányos v1.26 mentés sikeres migrációja és a tanári tesztlista hibátlan működése.
+  - 33. teszt: Tényleges indítási folyamat elutasítása külön Node.js folyamatban: igazolva, hogy a főfájl SHA-256 hash-e és DELETE naplózási módja bájtra azonos marad, és nem keletkezik -wal/-shm.
+  - 34. teszt: 0 táblás üres SQLite adatbázis azonnali elutasítása a restore pre-check által az aktív adatbázis hash-ének érintetlensége mellett.
+
+---
+
 ## [1.31.0] – 2026-11-21
 
 ### Report 20 megállapítások: Központi sémapolitika és fejléc-kompatibilitás (application_id és user_version), újabb sémák és idegen alkalmazások elutasítása, valamint támogatott jelölés nélküli korábbi mentések migrációja

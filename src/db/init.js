@@ -11,12 +11,9 @@ if (!fs.existsSync(config.uploadsDir)) {
   fs.mkdirSync(config.uploadsDir, { recursive: true });
 }
 
-// Konstansok: Hivatalos Okoskodó SQLite formátum- és sémaverzió (Report 19 & 20)
+// Konstansok: Hivatalos Okoskodó SQLite formátum- és sémaverzió (Report 19, 20 & 21)
 const OKOS_APPLICATION_ID = 1330335571; // ASCII: 'OKOS' (0x4F4B4F53)
-const CURRENT_SCHEMA_VERSION = 13100;   // v1.31.0 sémaverzió
-
-// SQLite adatbázis megnyitása
-let currentDb = new Database(config.dbPath);
+const CURRENT_SCHEMA_VERSION = 13200;   // v1.32.0 sémaverzió
 
 function applyPragmas(targetDb) {
   targetDb.pragma('journal_mode = WAL');
@@ -24,15 +21,13 @@ function applyPragmas(targetDb) {
   targetDb.pragma('foreign_keys = ON');
 }
 
-applyPragmas(currentDb);
-
 /**
  * Adatbázis sémakompatibilitás és alkalmazásazonosító ellenőrzése
- * (Közös eljárás a restore pre-checkhez és az alkalmazás indításához - Report 20)
+ * (Közös eljárás a restore pre-checkhez és az alkalmazás indításához - Report 20 & 21)
  * @param {Database} targetDb - Az ellenőrizendő SQLite adatbázis kapcsolat
- * @param {Object} options - { context: 'indítás'|'mentés visszaállítása'|'migráció' }
+ * @param {Object} options - { context: 'indítás'|'mentés visszaállítása'|'migráció', allowEmpty: boolean }
  */
-function validateDatabaseCompatibility(targetDb, { context = 'indítás' } = {}) {
+function validateDatabaseCompatibility(targetDb, { context = 'indítás', allowEmpty = null } = {}) {
   // 1. Integritás ellenőrzése
   const integrity = targetDb.prepare('PRAGMA integrity_check').get();
   if (!integrity || integrity.integrity_check !== 'ok') {
@@ -53,37 +48,58 @@ function validateDatabaseCompatibility(targetDb, { context = 'indítás' } = {})
     throw new Error(`Inkompatibilis adatbázis (${context}): az adatbázis újabb sémaverziójú (${userVersion}), mint a jelenleg futó Okoskodó szoftver (${CURRENT_SCHEMA_VERSION})! Kérjük, frissítse az alkalmazást a legfrissebb kiadásra!`);
   }
 
-  // 3. Tartalmi és táblastruktúra ellenőrzés (ha már nem üres adatbázis)
+  // 3. Tartalmi és táblastruktúra ellenőrzés (Report 21 / 3. pont)
+  const isRestore = context === 'mentés visszaállítása';
+  const effectiveAllowEmpty = allowEmpty !== null ? allowEmpty : (!isRestore);
   const existingTables = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(t => t.name);
-  if (existingTables.length > 0) {
-    // Ha jelölés nélküli (appId === 0) vagy korábbi verziójú mentés: ellenőrizzük a magtáblákat
-    const requiredCoreTables = ['quizzes', 'questions', 'students', 'sessions', 'participants', 'answers'];
-    for (const t of requiredCoreTables) {
-      if (!existingTables.includes(t)) {
-        throw new Error(`Inkompatibilis adatbázis (${context}): az adatbázis nem egy érvényes Okoskodó adatbázis (a kötelező '${t}' alaptábla hiányzik)!`);
+  if (existingTables.length === 0) {
+    if (!effectiveAllowEmpty) {
+      throw new Error(`Inkompatibilis adatbázis (${context}): az adatbázis üres, nem tartalmazza az Okoskodó magtábláit!`);
+    }
+    return { appId, userVersion }; // Kizárólag explicit engedélyezés (pl. friss telepítés) esetén engedélyezett az üres adatbázis
+  }
+
+  // Magtáblák meglétének ellenőrzése
+  const requiredCoreTables = ['quizzes', 'questions', 'students', 'sessions', 'participants', 'answers'];
+  for (const t of requiredCoreTables) {
+    if (!existingTables.includes(t)) {
+      throw new Error(`Inkompatibilis adatbázis (${context}): az adatbázis nem egy érvényes Okoskodó adatbázis (a kötelező '${t}' alaptábla hiányzik)!`);
+    }
+  }
+
+  // Magtáblák kötelező oszlop-ujjlenyomatának ellenőrzése
+  const checkTableCols = (tableName, requiredCols) => {
+    const cols = targetDb.prepare(`PRAGMA table_info(${tableName})`).all().map(c => c.name);
+    for (const col of requiredCols) {
+      if (!cols.includes(col)) {
+        throw new Error(`Inkompatibilis adatbázis (${context}): az adatbázis '${tableName}' táblája érvénytelen (a kötelező '${col}' oszlop hiányzik)!`);
       }
     }
+  };
 
-    // Magtáblák kötelező oszlop-ujjlenyomatának ellenőrzése
-    const checkTableCols = (tableName, requiredCols) => {
-      const cols = targetDb.prepare(`PRAGMA table_info(${tableName})`).all().map(c => c.name);
-      for (const col of requiredCols) {
-        if (!cols.includes(col)) {
-          throw new Error(`Inkompatibilis adatbázis (${context}): az adatbázis '${tableName}' táblája érvénytelen (a kötelező '${col}' oszlop hiányzik)!`);
-        }
-      }
-    };
-
-    checkTableCols('quizzes', ['title', 'subject_id', 'subject_grade']);
-    checkTableCols('questions', ['quiz_id', 'question_type', 'points']);
-    checkTableCols('students', ['class_name', 'student_name']);
-    checkTableCols('sessions', ['quiz_id', 'status', 'mode']);
-    checkTableCols('participants', ['session_id', 'student_name']);
-    checkTableCols('answers', ['session_id', 'participant_id', 'question_id', 'points_earned']);
-  }
+  checkTableCols('quizzes', ['title', 'subject_id', 'subject_grade']);
+  checkTableCols('questions', ['quiz_id', 'question_type', 'points']);
+  checkTableCols('students', ['class_name', 'student_name']);
+  checkTableCols('sessions', ['quiz_id', 'status', 'mode']);
+  checkTableCols('participants', ['session_id', 'student_name']);
+  checkTableCols('answers', ['session_id', 'participant_id', 'question_id', 'points_earned']);
 
   return { appId, userVersion };
 }
+
+// Ha a fájl már létezik, előbb KIZÁRÓLAG OLVASÁSRA ellenőrizzük a kompatibilitást még mielőtt írható kapcsolatot nyitnánk vagy WAL-ra váltanánk! (Report 21 / 2. pont)
+if (fs.existsSync(config.dbPath)) {
+  const preCheckDb = new Database(config.dbPath, { readonly: true, fileMustExist: true });
+  try {
+    validateDatabaseCompatibility(preCheckDb, { context: 'indítás', allowEmpty: true });
+  } finally {
+    preCheckDb.close();
+  }
+}
+
+// SQLite adatbázis megnyitása és futásidejű kapcsolat-beállítások
+let currentDb = new Database(config.dbPath);
+applyPragmas(currentDb);
 
 // Proxy wrapper a futásidejű biztonsági mentés visszatöltéséhez (Hot-Reload)
 const db = new Proxy({}, {
@@ -164,15 +180,18 @@ function migrateDatabase(targetDb = currentDb) {
       }
       const hasCreatedAt = quizColumns.some(c => c.name === 'created_at');
       if (!hasCreatedAt) {
-        targetDb.prepare('ALTER TABLE quizzes ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP').run();
+        targetDb.prepare('ALTER TABLE quizzes ADD COLUMN created_at DATETIME DEFAULT NULL').run();
+        targetDb.prepare("UPDATE quizzes SET created_at = datetime('now') WHERE created_at IS NULL").run();
       }
       const hasUpdatedAt = quizColumns.some(c => c.name === 'updated_at');
       if (!hasUpdatedAt) {
-        targetDb.prepare('ALTER TABLE quizzes ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP').run();
+        targetDb.prepare('ALTER TABLE quizzes ADD COLUMN updated_at DATETIME DEFAULT NULL').run();
+        targetDb.prepare("UPDATE quizzes SET updated_at = datetime('now') WHERE updated_at IS NULL").run();
       }
     }
   } catch (err) {
-    console.error('Hiba a quizzes.folder_id / is_deleted migrációjakor:', err);
+    console.error('Hiba a quizzes tábla migrációjakor:', err);
+    throw new Error(`Sikertelen sémamigráció (quizzes tábla): ${err.message}`);
   }
 
   // 2. Migráció: sessions.max_points és quiz_snapshot_json a történeti jegymegőrzéshez (Report 14 & Report 15)
@@ -190,7 +209,8 @@ function migrateDatabase(targetDb = currentDb) {
       }
     }
   } catch (err) {
-    console.error('Hiba a sessions migrációjakor:', err);
+    console.error('Hiba a sessions tábla migrációjakor:', err);
+    throw new Error(`Sikertelen sémamigráció (sessions tábla): ${err.message}`);
   }
 
   // 3. Participants tábla migrációja: student_id NULL engedélyezése és ON DELETE SET NULL
@@ -275,6 +295,7 @@ function migrateDatabase(targetDb = currentDb) {
     }
   } catch (err) {
     console.error('Hiba a participants tábla migrációjakor:', err);
+    throw new Error(`Sikertelen sémamigráció (participants tábla): ${err.message}`);
   }
 
   // 4. Korábbi triggerek eldobása a migrációhoz és frissítéshez (Report 18 / 1. pont)
@@ -284,8 +305,9 @@ function migrateDatabase(targetDb = currentDb) {
     targetDb.exec('DROP TRIGGER IF EXISTS trg_validate_answer_question;');
     targetDb.exec('DROP TRIGGER IF EXISTS trg_validate_answer_points_limit;');
     targetDb.exec('DROP TRIGGER IF EXISTS trg_validate_answer_points_limit_update;');
-  } catch {
-    // Ha nem létezik, folytatás
+  } catch (err) {
+    console.error('Hiba a korábbi triggerek eldobásakor:', err);
+    throw new Error(`Sikertelen sémamigráció (triggerek eldobása): ${err.message}`);
   }
 
   // 5. Történeti lezárt dolgozatok osztálynevének (sessions.class_name) beégetése és függetlenítése a névsortól
@@ -311,6 +333,7 @@ function migrateDatabase(targetDb = currentDb) {
     }
   } catch (err) {
     console.error('Hiba a sessions.class_name migrációjakor:', err);
+    throw new Error(`Sikertelen sémamigráció (sessions.class_name): ${err.message}`);
   }
 
   // 6. Questions tábla migrációja: instructions oszlop meglétének biztosítása
@@ -325,6 +348,7 @@ function migrateDatabase(targetDb = currentDb) {
     }
   } catch (err) {
     console.error('Hiba a questions.instructions migrációjakor:', err);
+    throw new Error(`Sikertelen sémamigráció (questions.instructions): ${err.message}`);
   }
 
   // 7. Answers tábla defenzív migrációja régebbi mentésekhez
@@ -351,17 +375,24 @@ function migrateDatabase(targetDb = currentDb) {
       }
       const hasAnsweredAt = ansCols.some(c => c.name === 'answered_at');
       if (!hasAnsweredAt) {
-        targetDb.prepare('ALTER TABLE answers ADD COLUMN answered_at DATETIME DEFAULT CURRENT_TIMESTAMP').run();
+        targetDb.prepare('ALTER TABLE answers ADD COLUMN answered_at DATETIME DEFAULT NULL').run();
+        targetDb.prepare("UPDATE answers SET answered_at = datetime('now') WHERE answered_at IS NULL").run();
       }
     }
   } catch (err) {
     console.error('Hiba az answers tábla migrációjakor:', err);
+    throw new Error(`Sikertelen sémamigráció (answers tábla): ${err.message}`);
   }
 
-  // 7. Séma és frissített triggerek futtatása (Report 16-18)
-  targetDb.exec(schemaSql);
+  // 8. Séma és frissített triggerek futtatása (Report 16-18)
+  try {
+    targetDb.exec(schemaSql);
+  } catch (err) {
+    console.error('Hiba az alapséma és triggerek végrehajtásakor:', err);
+    throw new Error(`Sikertelen sémamigráció (schemaSql): ${err.message}`);
+  }
 
-  // 8. Kizárólag a sikeres migráció legvégén rögzítjük az alkalmazás- és sémaverziót (Report 20)
+  // 9. Kizárólag a sikeres migráció legvégén rögzítjük az alkalmazás- és sémaverziót (Report 20 & 21)
   targetDb.pragma(`application_id = ${OKOS_APPLICATION_ID}`);
   targetDb.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
 }

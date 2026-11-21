@@ -105,10 +105,10 @@ function restoreSystemBackup(zipFilePath) {
       throw new Error('Érvénytelen mentésfájl: a csomag nem tartalmazza a ropdolgozat.db adatbázist!');
     }
 
-    // 3. Előzetes alkalmazás- és formátumkompatibilitás-ellenőrzés a migráció ELŐTT (Report 19 / 1. tétel & Report 20)
+    // 3. Előzetes alkalmazás- és formátumkompatibilitás-ellenőrzés a migráció ELŐTT (Report 19, 20 & 21)
     const preCheckDb = new Database(extractedDbPath, { readonly: true });
     try {
-      db.validateDatabaseCompatibility(preCheckDb, { context: 'mentés visszaállítása' });
+      db.validateDatabaseCompatibility(preCheckDb, { context: 'mentés visszaállítása', allowEmpty: false });
     } finally {
       preCheckDb.close();
     }
@@ -123,7 +123,7 @@ function restoreSystemBackup(zipFilePath) {
       migrateDb.close();
     }
 
-    // 5. Integritás- és sémakompatibilitás-ellenőrzés a kicsomagolt adatbázison (Report 14 / 43., Report 17 / 2.1 & Report 18 / 1. pont)
+    // 5. Integritás- és sémakompatibilitás-ellenőrzés a kicsomagolt adatbázison (Report 14, 17, 18, 20 & Report 21 / 1. pont)
     const testDb = new Database(extractedDbPath, { readonly: true });
     try {
       const integrity = testDb.prepare('PRAGMA integrity_check').get();
@@ -141,8 +141,37 @@ function restoreSystemBackup(zipFilePath) {
           throw new Error(`Inkompatibilis mentés: a kötelező '${t}' tábla hiányzik az adatbázisból!`);
         }
       }
-      // Tesztlekérdezések a v1.28+ sémakompatibilitás és a triggerek meglétének igazolására
-      testDb.prepare("SELECT q.id FROM quizzes q WHERE COALESCE(q.is_deleted, 0) = 0 LIMIT 1").all();
+      // Valódi tanári és diák lekérdezések futtatása a migrált sémán (Report 21 / 1. pont)
+      testDb.prepare(`
+        SELECT 
+          q.id, q.subject_id, q.folder_id, f.name AS folder_name, s.name AS subject_name,
+          q.title, q.subject_grade, q.default_time_limit_min, q.locked_at, q.created_at, q.updated_at,
+          COUNT(qst.id) AS question_count, COALESCE(SUM(qst.points), 0.0) AS total_points
+        FROM quizzes q
+        JOIN subjects s ON s.id = q.subject_id
+        LEFT JOIN quiz_folders f ON f.id = q.folder_id
+        LEFT JOIN questions qst ON qst.quiz_id = q.id
+        WHERE COALESCE(q.is_deleted, 0) = 0
+        GROUP BY q.id
+        LIMIT 1
+      `).all();
+
+      testDb.prepare(`
+        SELECT a.id, a.session_id, a.participant_id, a.question_id, a.submitted_answer,
+               a.eval_status, a.is_correct, a.points_earned, a.original_points_earned,
+               a.is_manually_overridden, a.overridden_at, a.time_spent_sec, a.answered_at
+        FROM answers a
+        LIMIT 1
+      `).all();
+
+      testDb.prepare(`
+        SELECT p.id, p.session_id, p.student_id, p.pc_number, p.student_name, p.session_token,
+               p.question_order_json, p.team_color, p.focus_lost_count, p.is_finished,
+               p.joined_at, p.deadline_at, p.finished_at
+        FROM participants p
+        LIMIT 1
+      `).all();
+
       const existingTriggers = testDb.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all().map(t => t.name);
       const requiredTriggers = ['trg_validate_answer_points_limit', 'trg_validate_answer_points_limit_update', 'trg_validate_answer_question'];
       for (const trg of requiredTriggers) {
