@@ -4,6 +4,24 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.34.3] – 2026-11-21
+
+### Éles tantermi felkészítés: Aszinkron diagnosztikai export-előellenőrzés és éles indítókonfiguráció
+
+Teljesítménybeli és üzemeltetési finomhangolás az éles tantermi használathoz, SQLite-sémamódosítás nélkül.
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Aszinkron, nem blokkoló export-előellenőrzés (`src/services/diagnostics.js`, `src/routes/api.js`):**
+  - **Fájlok:** [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - Az `inspectExport()` átírásra került aszinkron `fs.promises` és `fs.createReadStream` (`for await`) alapra, így nagy naplóméretnél és aktív dolgozat közbeni tanári letöltésnél sem blokkolja a Node.js fő szálát.
+  - A `GET /api/admin/diagnostics/export` végpont aszinkron módon várja meg az előellenőrzést, és megszakított klienskapcsolat esetén időben leáll.
+
+* **Éles szerverindító frissítése (`start_server.bat`):**
+  - **Fájl:** [`start_server.bat`](file:///d:/dev/Röpdolgozat%20program/start_server.bat)
+  - Alapértelmezett `DIAGNOSTICS_ENABLED=true` beállítás (kívülről továbbra is felülbírálható), induláskori állapotkijelzés, valamint kommentelt sablon az egyedi `ADMIN_PIN` és `COOKIE_SECRET` éles beállításához.
+
+---
+
 ## [1.34.2] – 2026-11-21
 
 ### DH 01 záró javítás: Átirányított helyreállítási mappák fizikai feloldása és rövidített diagnosztikai export egyértelmű jelzése

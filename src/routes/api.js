@@ -1382,7 +1382,7 @@ router.get('/admin/diagnostics/status', requireAdminAuth, (req, res) => {
 });
 
 // Diagnosztikai eseménynapló exportálása streamelve (Admin)
-router.get('/admin/diagnostics/export', requireAdminAuth, (req, res) => {
+router.get('/admin/diagnostics/export', requireAdminAuth, async (req, res) => {
   try {
     res.setHeader('Cache-Control', 'no-store');
     const dirCheck = diagnosticsService.writer.validateDirectory();
@@ -1393,7 +1393,9 @@ router.get('/admin/diagnostics/export', requireAdminAuth, (req, res) => {
       });
     }
 
-    const meta = diagnosticsService.inspectExport({ hours: 24 });
+    const meta = await diagnosticsService.inspectExport({ hours: 24 });
+    if (res.writableEnded || res.destroyed) return;
+
     const timestamp = new Date(meta.exportNowMs).toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const filenameSuffix = meta.truncated ? '_reszleges' : '';
 

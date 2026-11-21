@@ -820,7 +820,7 @@ class DiagnosticsFileWriter {
 class DiagnosticsService {
   constructor(options = {}) {
     this.enabled = options.enabled !== undefined ? options.enabled : config.diagnosticsEnabled;
-    this.appVersion = packageJson.version || '1.34.2';
+    this.appVersion = packageJson.version || '1.34.3';
     this.runId = options.runId || crypto.randomBytes(16).toString('hex');
     this.startedAt = new Date().toISOString();
 
@@ -1210,9 +1210,9 @@ class DiagnosticsService {
   }
 
   /**
-   * Export előzetes méret- és rövidítés-ellenőrzése (HTTP válaszfejléc pontos beállításához)
+   * Export aszinkron, non-blocking előzetes méret- és rövidítés-ellenőrzése (HTTP válaszfejléc pontos beállításához)
    */
-  inspectExport(options = 24) {
+  async inspectExport(options = 24) {
     const opts = typeof options === 'number' ? { hours: options } : (options || {});
     const hours = opts.hours !== undefined ? opts.hours : 24;
     const exportNowMs = opts.nowMs !== undefined ? opts.nowMs : Date.now();
@@ -1228,12 +1228,12 @@ class DiagnosticsService {
 
     const validFiles = [];
     try {
-      const entries = fs.readdirSync(this.writer.dir, { withFileTypes: true });
+      const entries = await fs.promises.readdir(this.writer.dir, { withFileTypes: true });
       for (const ent of entries) {
         if (!ent.isFile() || !LOG_FILE_REGEX.test(ent.name)) continue;
         const full = path.join(this.writer.dir, ent.name);
         try {
-          const stats = fs.statSync(full);
+          const stats = await fs.promises.stat(full);
           if (stats.size > 0) {
             validFiles.push({ full, mtimeMs: stats.mtimeMs, endByte: stats.size - 1 });
           }
@@ -1243,21 +1243,25 @@ class DiagnosticsService {
 
     validFiles.sort((a, b) => a.mtimeMs - b.mtimeMs);
 
-    // Gyors ellenőrzés: túllépik-e a 24 órás érvényes sorok a maxExportBytes keretet
+    // Aszinkron ellenőrzés streamenként: csak akkor olvas bele, ha az összméret meghaladja a maxExportBytes keretet
     let totalBytes = 0;
     let truncated = false;
     const totalFileSizes = validFiles.reduce((sum, f) => sum + f.endByte + 1, 0);
 
     if (totalFileSizes > maxExportBytes) {
       outer: for (const fileInfo of validFiles) {
+        let rs = null;
         try {
-          const fd = fs.openSync(fileInfo.full, 'r');
-          try {
-            const len = fileInfo.endByte + 1;
-            const buf = Buffer.alloc(len);
-            fs.readSync(fd, buf, 0, len, 0);
-            const lines = buf.toString('utf8').split('\n');
-            lines.pop(); // utolsó csonka sor eldobása
+          rs = fs.createReadStream(fileInfo.full, {
+            encoding: 'utf8',
+            start: 0,
+            end: fileInfo.endByte
+          });
+          let remainder = '';
+          for await (const chunk of rs) {
+            const text = remainder + chunk;
+            const lines = text.split('\n');
+            remainder = lines.pop(); // utolsó csonka sor a következő chunkhoz vagy eldobásra
             for (const rawLine of lines) {
               const trimmed = rawLine.trim();
               if (!trimmed) continue;
@@ -1270,16 +1274,19 @@ class DiagnosticsService {
                   const lineBytes = Buffer.byteLength(trimmed + '\n', 'utf8');
                   if (totalBytes + lineBytes > maxExportBytes) {
                     truncated = true;
+                    rs.destroy();
                     break outer;
                   }
                   totalBytes += lineBytes;
                 }
               } catch {}
             }
-          } finally {
-            fs.closeSync(fd);
           }
-        } catch {}
+        } catch {} finally {
+          if (rs && !rs.destroyed) {
+            try { rs.destroy(); } catch {}
+          }
+        }
       }
     }
 

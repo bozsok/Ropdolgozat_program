@@ -31,8 +31,14 @@ node src/db/init.js
 if %errorlevel% neq 0 goto db_error
 echo.
 
-:: 6. Webszerver inditasa a 3000-es porton
-echo Webszerver inditasa a 3000-es porton...
+:: 6. Eles uzemelesi kornyezeti valtozok (helyi diagnosztika bekapcsolva)
+if not defined DIAGNOSTICS_ENABLED set DIAGNOSTICS_ENABLED=true
+:: Egyedi tanari PIN es suti-titkositasi kulcs beallitasahoz vedd ki az alabbi sorok elejerol a :: jelet:
+:: if not defined ADMIN_PIN set ADMIN_PIN=valassz_egyedi_jelszot
+:: if not defined COOKIE_SECRET set COOKIE_SECRET=valassz_egyedi_titkos_kulcsot
+
+:: 7. Webszerver inditasa a 3000-es porton
+echo Webszerver inditasa a 3000-es porton (helyi diagnosztika: %DIAGNOSTICS_ENABLED%)...
 node server.js
 goto server_ended
 
