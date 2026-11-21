@@ -18,6 +18,8 @@ function applyPragmas(targetDb) {
   targetDb.pragma('journal_mode = WAL');
   targetDb.pragma('synchronous = NORMAL');
   targetDb.pragma('foreign_keys = ON');
+  targetDb.pragma('application_id = 1330335571');
+  targetDb.pragma('user_version = 13000');
 }
 
 applyPragmas(currentDb);

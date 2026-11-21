@@ -361,7 +361,7 @@ assert.ok(archive, 'createSystemBackupStream nem adott vissza archívumot!');
 console.log('✓ SQLite Online Backup API konzisztens pillanatkép-mentés sikeresen lefutott (41. pont)');
 
 // 2. Sérült mentés visszaállításának elutasítása
-const corruptZip = path.join(__dirname, 'corrupt_test.zip');
+const corruptZip = path.join(path.dirname(testDbPath), 'corrupt_test_' + Date.now() + '.zip');
 fs.writeFileSync(corruptZip, 'Ez nem egy érvényes zip fájl');
 let restoreFailed = false;
 try {
@@ -847,8 +847,8 @@ try {
 assert.strictEqual(startDeletedBlocked, true, 'Sikerült elindítani egy soft-deleted tesztet!');
 console.log('✓ A logikailag törölt sablon újbóli elindítását a rendszer szigorúan megakadályozza');
 
-// 24. TESZT: Restore után az SQLite pontozási trigger azonnal frissül, és sablon pontcsökkentés mellett is ment (Report 18 / 1. pont)
-console.log('\n--- 24. TESZT: Restore után a pontozási trigger frissül és sabloncsökkentés mellett is ment (Report 18 / 1. pont) ---');
+// 24. TESZT: Restore után az SQLite pontozási trigger azonnal frissül, és sablon pontcsökkentés mellett is ment (Report 18 / 1. pont & Report 19 / 2. tétel)
+console.log('\n--- 24. TESZT: Restore után a pontozási trigger frissül és sabloncsökkentés mellett is ment (Report 18 / 1. pont & Report 19 / 2. tétel) ---');
 const restoreQuiz = quizRepo.createQuiz({
   subject_id: 1,
   title: 'Restore Trigger Teszt Kvíz',
@@ -865,18 +865,7 @@ const restoreQuiz = quizRepo.createQuiz({
   }]
 });
 
-// Érvényes rendszermentés készítése
-const backupZipPath = path.join(path.dirname(testDbPath), 'test_backup_r18.zip');
-const bStream = await backup.createSystemBackupStream();
-await new Promise((resolve, reject) => {
-  const ws = fs.createWriteStream(backupZipPath);
-  bStream.pipe(ws);
-  ws.on('finish', resolve);
-  ws.on('error', reject);
-  bStream.finalize();
-});
-
-// Szimuláljuk a régi elavult triggert az adatbázisban a restore előtt
+// 1. Előbb telepítjük a régi elavult triggert az adatbázisba a mentés készítése előtt! (Report 19 / 2. tétel)
 db.exec('DROP TRIGGER IF EXISTS trg_validate_answer_points_limit;');
 db.exec(`
   CREATE TRIGGER trg_validate_answer_points_limit
@@ -889,12 +878,31 @@ db.exec(`
   END;
 `);
 
-// Restore futtatása: le kell futnia az automatikus triggermegújításnak!
+// Ellenőrizzük, hogy a mentésbe ténylegesen a régi elavult trigger kerül!
+const trgBefore = db.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='trg_validate_answer_points_limit'").get();
+assert.ok(trgBefore && !trgBefore.sql.includes('quiz_snapshot_json'), 'A mentés előtt nem a régi trigger volt jelen!');
+
+// 2. Érvényes rendszermentés készítése a régi triggerrel rendelkező adatbázisból
+const backupZipPath = path.join(path.dirname(testDbPath), 'test_backup_r18.zip');
+const bStream = await backup.createSystemBackupStream();
+await new Promise((resolve, reject) => {
+  const ws = fs.createWriteStream(backupZipPath);
+  bStream.pipe(ws);
+  ws.on('finish', resolve);
+  ws.on('error', reject);
+  bStream.finalize();
+});
+
+// 3. Restore futtatása: le kell futnia az automatikus triggermegújításnak a kicsomagolt adatbázison!
 const r18RestoreResult = await backup.restoreSystemBackup(backupZipPath);
 assert.strictEqual(r18RestoreResult.success, true, 'Restore sikertelen!');
 if (fs.existsSync(backupZipPath)) { try { fs.unlinkSync(backupZipPath); } catch {} }
 
-// Új dolgozat indítása 4 pontos kérdéssel
+// Ellenőrizzük, hogy a restore után a trigger megújult és már tartalmazza a snapshot védelmet!
+const trgAfter = db.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='trg_validate_answer_points_limit'").get();
+assert.ok(trgAfter && trgAfter.sql.includes('quiz_snapshot_json'), 'A restore után a trigger nem újult meg!');
+
+// 4. Új dolgozat indítása 4 pontos kérdéssel
 const triggerSession = sessionRepo.startSession({
   subject_id: 1,
   grade_level: '85',
@@ -911,7 +919,7 @@ const { participant: triggerPart } = sessionRepo.joinSession({ session_id: trigg
 const triggerAnsRes = sessionRepo.submitAnswer({ participant_id: triggerPart.id, question_id: restoreQuiz.questions[0].id, submitted_answer: 'A' });
 assert.strictEqual(triggerAnsRes.answer.eval_status, 'CORRECT', 'Nem lett helyes az értékelés!');
 assert.strictEqual(triggerAnsRes.answer.points_earned, 4.0, 'Nem a 4.0 pont került jóváírásra!');
-console.log('✓ Visszaállítás után a frissített trigger snapshot alapján 4.0 ponttal mentette a választ a sablon 1.0 pontja mellett');
+console.log('✓ Visszaállítás után a mentésből érkezett régi trigger automatikusan megújult, és 4.0 ponttal mentette a választ a sablon 1.0 pontja mellett');
 
 // 25. TESZT: Restore rollback példány megőrzése és felülírás-védelme (Report 18 / 2. pont)
 console.log('\n--- 25. TESZT: Restore rollback másolatok megőrzése és felülírás-védelme (Report 18 / 2. pont) ---');
@@ -995,6 +1003,43 @@ assert.ok(legacyMatrix !== null, 'A tanári mátrix nem nyílt meg!');
 assert.strictEqual(legacyMatrix.participants[0].total_points, 2.0, 'A diák pontszáma sérült!');
 console.log('✓ Pillanatkép nélküli régi dolgozatnál a sablon törlése után a diák és tanári eredmény hibátlanul megnyílik');
 
+// 27. TESZT: Idegen SQLite adatbázis azonnali elutasítása a migráció előtt (Report 19 / 1. tétel)
+console.log('\n--- 27. TESZT: Idegen SQLite adatbázis azonnali elutasítása a pre-check által (Report 19 / 1. tétel) ---');
+const archiver = require('archiver');
+const foreignDbPath = path.join(path.dirname(testDbPath), 'foreign_fake.db');
+const foreignZipPath = path.join(path.dirname(testDbPath), 'foreign_backup.zip');
+
+const foreignDb = new Database(foreignDbPath);
+foreignDb.exec(`
+  CREATE TABLE chrome_history (id INTEGER PRIMARY KEY, url TEXT, visit_count INTEGER);
+  INSERT INTO chrome_history VALUES (1, 'https://example.com', 42);
+`);
+foreignDb.close();
+
+// ZIP-be csomagoljuk úgy, mintha ropdolgozat.db lenne
+const foreignArchive = archiver('zip', { zlib: { level: 9 } });
+await new Promise((resolve, reject) => {
+  const ws = fs.createWriteStream(foreignZipPath);
+  foreignArchive.pipe(ws);
+  ws.on('finish', resolve);
+  ws.on('error', reject);
+  foreignArchive.file(foreignDbPath, { name: 'data/ropdolgozat.db' });
+  foreignArchive.finalize();
+});
+
+let foreignRejected = false;
+try {
+  backup.restoreSystemBackup(foreignZipPath);
+} catch (err) {
+  foreignRejected = true;
+  assert.ok(err.message.includes('Inkompatibilis mentésfájl'), 'Nem a várt inkompatibilitási hiba: ' + err.message);
+}
+assert.strictEqual(foreignRejected, true, 'Az idegen SQLite adatbázist engedte visszaállítani!');
+console.log('✓ Az idegen SQLite adatbázist a rendszer már a migráció előtt, az aktív adatok érintése nélkül szigorúan elutasította');
+
+try { fs.unlinkSync(foreignDbPath); } catch {}
+try { fs.unlinkSync(foreignZipPath); } catch {}
+
 sessionRepo.deleteSession(triggerSession.id);
 sessionRepo.deleteSession(legacySession.id);
 db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(restoreQuiz.id);
@@ -1037,7 +1082,7 @@ if (fs.existsSync(testDbPath + '-wal')) { try { fs.unlinkSync(testDbPath + '-wal
 if (fs.existsSync(testDbPath + '-shm')) { try { fs.unlinkSync(testDbPath + '-shm'); } catch {} }
 if (fs.existsSync(testUploadsDir)) { try { fs.rmSync(testUploadsDir, { recursive: true, force: true }); } catch {} }
 
-console.log('\n🎉 MINDEN REPORT 14-18 TESZT SIKERESEN LEFUTOTT! 🎉\n');
+console.log('\n🎉 MINDEN REPORT 14-19 TESZT SIKERESEN LEFUTOTT! 🎉\n');
 })().catch(err => {
   console.error('Kritikus teszthiba:', err);
   process.exit(1);

@@ -1,6 +1,6 @@
 # Válasz a Report 18 felülvizsgálati megállapításokra
 
-**Okoskodó · v1.28.0 · 2026. november 21.**
+**Okoskodó · v1.29.0 · 2026. november 21.**
 
 Ez a dokumentum a független szakértői felülvizsgálat ([`Source/Report_18_Megallapitasok.md`](file:///d:/dev/Röpdolgozat%20program/Source/Report_18_Megallapitasok.md)) észrevételeire adott hivatalos fejlesztői válasz és a végrehajtott javítások tételes igazolása a magyar helyesírás szabályai (MTA 12. kiadása) szerint.
 

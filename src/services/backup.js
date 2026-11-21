@@ -105,7 +105,44 @@ function restoreSystemBackup(zipFilePath) {
       throw new Error('Érvénytelen mentésfájl: a csomag nem tartalmazza a ropdolgozat.db adatbázist!');
     }
 
-    // 3. Automatikus sémamigráció és triggermegújítás a korábbi mentésekhez az ideiglenes könyvtárban (Report 15, 17 & Report 18 / 1. pont)
+    // 3. Előzetes alkalmazás- és formátumkompatibilitás-ellenőrzés a migráció ELŐTT (Report 19 / 1. tétel)
+    const preCheckDb = new Database(extractedDbPath, { readonly: true });
+    try {
+      const integrity = preCheckDb.prepare('PRAGMA integrity_check').get();
+      if (!integrity || integrity.integrity_check !== 'ok') {
+        throw new Error('A mentésben lévő adatbázis integritása sérült (PRAGMA integrity_check failed)!');
+      }
+
+      // Ellenőrizzük az Okoskodó alapvető magtábláit még a migráció előtt
+      const requiredCoreTables = ['quizzes', 'questions', 'students', 'sessions', 'participants', 'answers'];
+      const existingTables = preCheckDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(t => t.name);
+      for (const t of requiredCoreTables) {
+        if (!existingTables.includes(t)) {
+          throw new Error(`Inkompatibilis mentésfájl: az adatbázis nem egy érvényes Okoskodó mentés (a kötelező '${t}' alaptábla hiányzik)!`);
+        }
+      }
+
+      // Ellenőrizzük a magtáblák specifikus oszlop-ujjlenyomatát az idegen SQLite adatbázisok kizárására
+      const checkTableCols = (tableName, requiredCols) => {
+        const cols = preCheckDb.prepare(`PRAGMA table_info(${tableName})`).all().map(c => c.name);
+        for (const col of requiredCols) {
+          if (!cols.includes(col)) {
+            throw new Error(`Inkompatibilis mentésfájl: az adatbázis '${tableName}' táblája érvénytelen (a kötelező '${col}' oszlop hiányzik)!`);
+          }
+        }
+      };
+
+      checkTableCols('quizzes', ['title', 'subject_id', 'subject_grade']);
+      checkTableCols('questions', ['quiz_id', 'question_type', 'points']);
+      checkTableCols('students', ['class_name', 'student_name']);
+      checkTableCols('sessions', ['quiz_id', 'status', 'mode']);
+      checkTableCols('participants', ['session_id', 'student_name']);
+      checkTableCols('answers', ['session_id', 'participant_id', 'question_id', 'points_earned']);
+    } finally {
+      preCheckDb.close();
+    }
+
+    // 4. Automatikus sémamigráció és triggermegújítás a korábbi mentésekhez az ideiglenes könyvtárban (Report 15, 17 & Report 18 / 1. pont)
     const migrateDb = new Database(extractedDbPath);
     try {
       db.applyPragmas(migrateDb);
@@ -115,7 +152,7 @@ function restoreSystemBackup(zipFilePath) {
       migrateDb.close();
     }
 
-    // 4. Integritás- és sémakompatibilitás-ellenőrzés a kicsomagolt adatbázison (Report 14 / 43., Report 17 / 2.1 & Report 18 / 1. pont)
+    // 5. Integritás- és sémakompatibilitás-ellenőrzés a kicsomagolt adatbázison (Report 14 / 43., Report 17 / 2.1 & Report 18 / 1. pont)
     const testDb = new Database(extractedDbPath, { readonly: true });
     try {
       const integrity = testDb.prepare('PRAGMA integrity_check').get();

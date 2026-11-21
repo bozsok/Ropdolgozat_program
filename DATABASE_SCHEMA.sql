@@ -7,6 +7,8 @@
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 PRAGMA foreign_keys = ON;
+PRAGMA application_id = 1330335571; -- ASCII: 'OKOS' (Okoskodó hivatalos SQLite formátumazonosító)
+PRAGMA user_version = 13000;        -- v1.30.0 sémaverzió
 
 -- ----------------------------------------------------------------------------
 -- 1. TÁBLA: subjects (Választható tantárgyak – alapértelmezetten 'Digitális kultúra')
