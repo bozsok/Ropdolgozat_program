@@ -38,12 +38,14 @@
   let diagnosticsBatchLimit = 20;
   let diagnosticsAuthPaused = false;
   let hasConnectedOnce = false;
+  let lastConnectErrorLoggedAt = 0;
 
   const DIAG_STORAGE_KEY = 'ropdolgozat_diagnostics_buffer';
   const DIAG_MAX_ITEMS = 50;
   const DIAG_MAX_BYTES = 32768; // 32 KiB
   const DIAG_MAX_BATCH_BYTES = 8192; // 8 KiB
   const DIAG_TTL_MS = 7200000; // 2 óra
+  const CONNECT_ERROR_THROTTLE_MS = 30000; // 30 mp ritkítás hibasorozatnál
 
   const utf8Encoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
   function utf8ByteLength(str) {
@@ -661,14 +663,19 @@
     });
 
     socket.on('connect_error', () => {
-      pushDiagnosticEvent({
-        event: 'socket.connect_error',
-        reasonCode: 'CONNECT_ERROR'
-      });
+      const now = Date.now();
+      if (now - lastConnectErrorLoggedAt >= CONNECT_ERROR_THROTTLE_MS) {
+        lastConnectErrorLoggedAt = now;
+        pushDiagnosticEvent({
+          event: 'socket.connect_error',
+          reasonCode: 'CONNECT_ERROR'
+        });
+      }
     });
 
     // Újracsatlakozáskor a foglaltsági állapot és az aktív szobatagság megújítása (Report 14 / 20.)
     socket.on('connect', () => {
+      lastConnectErrorLoggedAt = 0;
       if (hasConnectedOnce) {
         pushDiagnosticEvent({
           event: 'socket.reconnected'

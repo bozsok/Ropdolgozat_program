@@ -606,6 +606,7 @@ router.get('/sessions/active-by-channel', (req, res) => {
 
 // Új dolgozat indítása (Admin)
 router.post('/admin/sessions/start', requireAdminAuth, (req, res) => {
+  req.routeLogged = 'admin.start_session';
   try {
     const session = sessionRepo.startSession(req.body);
     // Socket.io értesítés küldése KIZÁRÓLAG nyilvános metaadatokkal (Report 16 / 1.1 - megoldókulcs és pillanatkép-szivárgás ellen)
@@ -648,6 +649,7 @@ function broadcastMatrixUpdate(io, sessionId) {
 
 // Dolgozat befejezése / lezárása (Admin)
 router.post('/admin/sessions/:id/finish', requireAdminAuth, (req, res) => {
+  req.routeLogged = 'admin.finish_session';
   try {
     const finished = sessionRepo.finishSession(req.params.id);
     const io = req.app.get('io');
@@ -681,6 +683,7 @@ router.delete('/admin/sessions/:id', requireAdminAuth, (req, res) => {
 
 // Űrhajós verseny indítása (Közös Rajt - Space Race)
 router.post('/admin/sessions/:id/start-race', requireAdminAuth, (req, res) => {
+  req.routeLogged = 'admin.start_race';
   try {
     const session = sessionRepo.startRace(req.params.id);
     const io = req.app.get('io');
@@ -909,6 +912,7 @@ router.post('/admin/participants/:id/unlock', requireAdminAuth, (req, res) => {
 
 // Belépés dolgozatba (vagy Session Recovery)
 router.post('/student/join', (req, res) => {
+  req.routeLogged = 'student.join';
   try {
     const { session_id, student_id, student_name, pc_number, team_color, session_token } = req.body;
     const clientToken = session_token || req.headers['x-session-token'] || null;
@@ -1206,14 +1210,26 @@ router.post('/student/submit-answer', (req, res) => {
         time_spent_sec
       });
     } catch (persErr) {
-      diagnosticsService.logEvent({
-        source: 'server',
-        event: 'answer.failed',
-        requestId: req.requestId,
-        operationId: opId,
-        reasonCode: 'PERSISTENCE_CALL_FAILED',
-        httpStatus: 400
-      });
+      const businessRejectCodes = new Set(['SESSION_INACTIVE', 'DEADLINE_EXCEEDED', 'RACE_NOT_STARTED', 'PARTICIPANT_UNKNOWN']);
+      if (persErr && typeof persErr.code === 'string' && businessRejectCodes.has(persErr.code)) {
+        diagnosticsService.logEvent({
+          source: 'server',
+          event: 'answer.rejected',
+          requestId: req.requestId,
+          operationId: opId,
+          reasonCode: persErr.code,
+          httpStatus: 400
+        });
+      } else {
+        diagnosticsService.logEvent({
+          source: 'server',
+          event: 'answer.failed',
+          requestId: req.requestId,
+          operationId: opId,
+          reasonCode: 'PERSISTENCE_CALL_FAILED',
+          httpStatus: 400
+        });
+      }
       throw persErr;
     }
 
@@ -1324,6 +1340,7 @@ router.post('/student/finish', (req, res) => {
    ========================================================================== */
 
 router.get('/admin/export/excel/:sessionId', requireAdminAuth, async (req, res) => {
+  req.routeLogged = 'admin.export_results';
   try {
     const buffer = await exporter.generateExcelReport(req.params.sessionId);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -1335,6 +1352,7 @@ router.get('/admin/export/excel/:sessionId', requireAdminAuth, async (req, res) 
 });
 
 router.get('/admin/export/html/:sessionId', requireAdminAuth, (req, res) => {
+  req.routeLogged = 'admin.export_results';
   try {
     const html = exporter.generateInteractiveHtml(req.params.sessionId);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -1346,6 +1364,7 @@ router.get('/admin/export/html/:sessionId', requireAdminAuth, (req, res) => {
 });
 
 router.get('/admin/export/zip/:sessionId', requireAdminAuth, (req, res) => {
+  req.routeLogged = 'admin.export_results';
   try {
     const archive = exporter.createIndividualZipStream(req.params.sessionId);
     res.setHeader('Content-Type', 'application/zip');
@@ -1370,10 +1389,10 @@ router.get('/admin/backup', requireAdminAuth, async (req, res) => {
   }
 });
 
-// Diagnosztikai állapot lekérdezése (Admin)
-router.get('/admin/diagnostics/status', requireAdminAuth, (req, res) => {
+// Diagnosztikai állapot lekérdezése (Admin - aszinkron, nem blokkoló)
+router.get('/admin/diagnostics/status', requireAdminAuth, async (req, res) => {
   try {
-    const status = diagnosticsService.getStatus();
+    const status = await diagnosticsService.getStatusAsync();
     res.setHeader('Cache-Control', 'no-store');
     res.json({ success: true, status });
   } catch (err) {
@@ -1393,8 +1412,13 @@ router.get('/admin/diagnostics/export', requireAdminAuth, async (req, res) => {
       });
     }
 
-    const meta = await diagnosticsService.inspectExport({ hours: 24 });
-    if (res.writableEnded || res.destroyed) return;
+    const abortController = new AbortController();
+    const onInspectAbort = () => abortController.abort();
+    res.once('close', onInspectAbort);
+
+    const meta = await diagnosticsService.inspectExport({ hours: 24, signal: abortController.signal });
+    res.removeListener('close', onInspectAbort);
+    if (meta.aborted || res.writableEnded || res.destroyed) return;
 
     const timestamp = new Date(meta.exportNowMs).toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const filenameSuffix = meta.truncated ? '_reszleges' : '';

@@ -726,7 +726,9 @@ function submitAnswer({
     WHERE p.id = ?
   `).get(participant_id);
 
-  if (!preCheck) throw new Error('A résztvevő nem található!');
+  const makeRejectError = (msg, code) => Object.assign(new Error(msg), { code });
+
+  if (!preCheck) throw makeRejectError('A résztvevő nem található!', 'PARTICIPANT_UNKNOWN');
 
   // Idempotens védelem: ha erre a kérdésre már mentve van válasz, azt hiba nélkül visszaadjuk (befejezett dolgozatnál is!)
   const existingAnswer = db.prepare(`
@@ -762,12 +764,12 @@ function submitAnswer({
   }
 
   if (preCheck.session_status !== 'ACTIVE' || preCheck.is_finished === 1) {
-    throw new Error('A dolgozat már befejeződött, új válasz nem küldhető be!');
+    throw makeRejectError('A dolgozat már befejeződött, új válasz nem küldhető be!', 'SESSION_INACTIVE');
   }
 
   // Űrhajós verseny közös rajt előtti válaszvédelem (Report 14 / 16. pont)
   if (preCheck.session_mode === 'SPACE_RACE' && (preCheck.current_question_index === 0 || preCheck.current_question_index === null)) {
-    throw new Error('A verseny még nem indult el, válasz még nem küldhető be!');
+    throw makeRejectError('A verseny még nem indult el, válasz még nem küldhető be!', 'RACE_NOT_STARTED');
   }
 
   if (preCheck.deadline_at) {
@@ -776,7 +778,7 @@ function submitAnswer({
     if (now >= deadline) {
       // Idő lejárt: tartósan befejezettre állítjuk a tanulót az adatbázisban
       db.prepare('UPDATE participants SET is_finished = 1, finished_at = CURRENT_TIMESTAMP WHERE id = ?').run(participant_id);
-      throw new Error('Az egyéni időkorlát lejárt, a dolgozat automatikusan lezárásra került!');
+      throw makeRejectError('Az egyéni időkorlát lejárt, a dolgozat automatikusan lezárásra került!', 'DEADLINE_EXCEEDED');
     }
   }
 

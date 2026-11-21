@@ -4,6 +4,35 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.34.4] – 2026-11-22
+
+### Diagnosztikai finomhangolás: Megszakítható export-előellenőrzés, üzleti hibakódok, teljes útvonallefedettség, `connect_error` ritkítás és aszinkron állapotlekérés
+
+Célzott teljesítménybeli, esemény-elkülönítési és puffervédelmi finomítások a diagnosztikai alrendszerben, SQLite-sémamódosítás nélkül.
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Megszakítható (`AbortSignal`) export-előellenőrzés (`src/services/diagnostics.js`, `src/routes/api.js`):**
+  - **Fájlok:** [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - A `GET /api/admin/diagnostics/export` végpont `AbortController` jelet ad át az `inspectExport()` számára; kliensoldali megszakításnál az aktív fájlolvasás azonnal leáll és felszabadul.
+
+* **Üzleti elutasítások és adatbázishibák szétválasztása (`src/db/sessionRepo.js`, `src/routes/api.js`):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - A `sessionRepo.submitAnswer()` strukturált `err.code` kóddal (`SESSION_INACTIVE`, `DEADLINE_EXCEEDED`, `RACE_NOT_STARTED`, `PARTICIPANT_UNKNOWN`) látja el az üzleti kivételeket, így a diagnosztikai naplóban ezek pontosan `answer.rejected`-ként válnak el a valódi `answer.failed` (`PERSISTENCE_CALL_FAILED`) hibáktól, a meglévő HTTP 400 válaszkód megőrzésével.
+
+* **Fő dolgozatműveletek HTTP-időtartam naplózása (`src/routes/api.js`):**
+  - **Fájl:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - A `student.join`, `admin.start_session`, `admin.start_race`, `admin.finish_session` és `admin.export_results` végpontok is megkapták a rögzített `req.routeLogged` azonosítót a `http.finished` / `http.closed_early` futásidő-naplózáshoz.
+
+* **Kliensoldali `socket.connect_error` ritkítása (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Hibasorozatban legfeljebb 30 másodpercenként rögzül új `socket.connect_error` esemény a következő sikeres `connect`-ig, megvédve az 50 elemű klienspuffert a korábbi `answer.no_ack` események kiszorításától.
+
+* **Aszinkron, nem blokkoló állapotlekérdezés (`src/services/diagnostics.js`, `src/routes/api.js`):**
+  - **Fájlok:** [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - Új `getStatusAsync()` metódus (`fs.promises.readdir` / `stat`) a `GET /api/admin/diagnostics/status` végponthoz.
+
+---
+
 ## [1.34.3] – 2026-11-21
 
 ### Éles tantermi felkészítés: Aszinkron diagnosztikai export-előellenőrzés és éles indítókonfiguráció

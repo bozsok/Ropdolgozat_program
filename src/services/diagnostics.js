@@ -820,7 +820,7 @@ class DiagnosticsFileWriter {
 class DiagnosticsService {
   constructor(options = {}) {
     this.enabled = options.enabled !== undefined ? options.enabled : config.diagnosticsEnabled;
-    this.appVersion = packageJson.version || '1.34.3';
+    this.appVersion = packageJson.version || '1.34.4';
     this.runId = options.runId || crypto.randomBytes(16).toString('hex');
     this.startedAt = new Date().toISOString();
 
@@ -1155,33 +1155,7 @@ class DiagnosticsService {
     }
   }
 
-  /**
-   * Állapotlekérdezés tanári felülethez
-   */
-  getStatus() {
-    if (!this.writer.isConfigurationValid) {
-      this.writer.validateDirectory();
-    }
-
-    let diskSizeBytes = 0;
-    let exportAvailable = false;
-
-    if (this.writer.isConfigurationValid && fs.existsSync(this.writer.dir)) {
-      try {
-        const files = fs.readdirSync(this.writer.dir);
-        for (const f of files) {
-          if (LOG_FILE_REGEX.test(f)) {
-            const fullPath = path.join(this.writer.dir, f);
-            const stats = fs.statSync(fullPath);
-            if (stats.isFile()) {
-              diskSizeBytes += stats.size;
-              if (stats.size > 0) exportAvailable = true;
-            }
-          }
-        }
-      } catch {}
-    }
-
+  _buildStatusObject(diskSizeBytes, exportAvailable) {
     let statusCode = 'OK';
     if (!this.enabled) {
       statusCode = 'DISABLED';
@@ -1210,26 +1184,95 @@ class DiagnosticsService {
   }
 
   /**
-   * Export aszinkron, non-blocking előzetes méret- és rövidítés-ellenőrzése (HTTP válaszfejléc pontos beállításához)
+   * Állapotlekérdezés (szinkron - tesztekhez és belső használatra)
+   */
+  getStatus() {
+    if (!this.writer.isConfigurationValid) {
+      this.writer.validateDirectory();
+    }
+
+    let diskSizeBytes = 0;
+    let exportAvailable = false;
+
+    if (this.writer.isConfigurationValid && fs.existsSync(this.writer.dir)) {
+      try {
+        const files = fs.readdirSync(this.writer.dir);
+        for (const f of files) {
+          if (LOG_FILE_REGEX.test(f)) {
+            const fullPath = path.join(this.writer.dir, f);
+            const stats = fs.statSync(fullPath);
+            if (stats.isFile()) {
+              diskSizeBytes += stats.size;
+              if (stats.size > 0) exportAvailable = true;
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return this._buildStatusObject(diskSizeBytes, exportAvailable);
+  }
+
+  /**
+   * Aszinkron, nem blokkoló állapotlekérdezés a tanári HTTP végponthoz
+   */
+  async getStatusAsync() {
+    if (!this.writer.isConfigurationValid) {
+      this.writer.validateDirectory();
+    }
+
+    let diskSizeBytes = 0;
+    let exportAvailable = false;
+
+    if (this.writer.isConfigurationValid) {
+      try {
+        const entries = await fs.promises.readdir(this.writer.dir, { withFileTypes: true });
+        for (const ent of entries) {
+          if (ent.isFile() && LOG_FILE_REGEX.test(ent.name)) {
+            try {
+              const stats = await fs.promises.stat(path.join(this.writer.dir, ent.name));
+              if (stats.isFile()) {
+                diskSizeBytes += stats.size;
+                if (stats.size > 0) exportAvailable = true;
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    return this._buildStatusObject(diskSizeBytes, exportAvailable);
+  }
+
+  /**
+   * Export aszinkron, non-blocking és megszakítható (AbortSignal) előzetes méret- és rövidítés-ellenőrzése
    */
   async inspectExport(options = 24) {
     const opts = typeof options === 'number' ? { hours: options } : (options || {});
     const hours = opts.hours !== undefined ? opts.hours : 24;
     const exportNowMs = opts.nowMs !== undefined ? opts.nowMs : Date.now();
+    const signal = opts.signal || null;
     const maxExportBytes = opts.maxExportBytes !== undefined
       ? opts.maxExportBytes
       : (parseInt(process.env.DIAGNOSTICS_MAX_EXPORT_BYTES || '', 10) || config.diagnosticsMaxExportBytes || 25 * 1024 * 1024);
     const cutoffMs = exportNowMs - (hours * 3600000);
 
+    if (signal && signal.aborted) {
+      return { valid: true, aborted: true, truncated: false, maxExportBytes, exportNowMs, validFiles: [] };
+    }
+
     const dirCheck = this.writer.validateDirectory();
     if (!dirCheck.valid || !fs.existsSync(this.writer.dir)) {
-      return { valid: dirCheck.valid, truncated: false, maxExportBytes, exportNowMs, validFiles: [] };
+      return { valid: dirCheck.valid, aborted: false, truncated: false, maxExportBytes, exportNowMs, validFiles: [] };
     }
 
     const validFiles = [];
     try {
       const entries = await fs.promises.readdir(this.writer.dir, { withFileTypes: true });
       for (const ent of entries) {
+        if (signal && signal.aborted) {
+          return { valid: true, aborted: true, truncated: false, maxExportBytes, exportNowMs, validFiles: [] };
+        }
         if (!ent.isFile() || !LOG_FILE_REGEX.test(ent.name)) continue;
         const full = path.join(this.writer.dir, ent.name);
         try {
@@ -1246,11 +1289,25 @@ class DiagnosticsService {
     // Aszinkron ellenőrzés streamenként: csak akkor olvas bele, ha az összméret meghaladja a maxExportBytes keretet
     let totalBytes = 0;
     let truncated = false;
+    let aborted = false;
     const totalFileSizes = validFiles.reduce((sum, f) => sum + f.endByte + 1, 0);
 
     if (totalFileSizes > maxExportBytes) {
       outer: for (const fileInfo of validFiles) {
+        if (signal && signal.aborted) {
+          aborted = true;
+          break outer;
+        }
         let rs = null;
+        const onAbort = () => {
+          aborted = true;
+          if (rs && !rs.destroyed) {
+            try { rs.destroy(); } catch {}
+          }
+        };
+        if (signal) {
+          signal.addEventListener('abort', onAbort, { once: true });
+        }
         try {
           rs = fs.createReadStream(fileInfo.full, {
             encoding: 'utf8',
@@ -1259,9 +1316,14 @@ class DiagnosticsService {
           });
           let remainder = '';
           for await (const chunk of rs) {
+            if (signal && signal.aborted) {
+              aborted = true;
+              rs.destroy();
+              break outer;
+            }
             const text = remainder + chunk;
             const lines = text.split('\n');
-            remainder = lines.pop(); // utolsó csonka sor a következő chunkhoz vagy eldobásra
+            remainder = lines.pop();
             for (const rawLine of lines) {
               const trimmed = rawLine.trim();
               if (!trimmed) continue;
@@ -1283,6 +1345,9 @@ class DiagnosticsService {
             }
           }
         } catch {} finally {
+          if (signal) {
+            signal.removeEventListener('abort', onAbort);
+          }
           if (rs && !rs.destroyed) {
             try { rs.destroy(); } catch {}
           }
@@ -1290,7 +1355,7 @@ class DiagnosticsService {
       }
     }
 
-    return { valid: true, truncated, maxExportBytes, exportNowMs, validFiles };
+    return { valid: true, aborted, truncated, maxExportBytes, exportNowMs, validFiles };
   }
 
   /**
