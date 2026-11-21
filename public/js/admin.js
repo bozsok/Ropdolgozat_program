@@ -4011,8 +4011,70 @@
         isMatrixAnonymous = Boolean(classroom_settings.anonym_mode_default);
         if (lastMatrixData) renderMatrix(lastMatrixData);
       }
+
+      // Diagnosztikai állapot betöltése
+      await loadDiagnosticsStatus();
     } catch (err) {
       console.error('Hiba a beállítások betöltésekor:', err);
+    }
+  }
+
+  async function loadDiagnosticsStatus() {
+    try {
+      const res = await fetch('/api/admin/diagnostics/status');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.success || !data.status) return;
+
+      const s = data.status;
+      const badge = document.getElementById('diagnostics-status-badge');
+      const runIdEl = document.getElementById('diag-run-id');
+      const startedAtEl = document.getElementById('diag-started-at');
+      const totalEventsEl = document.getElementById('diag-total-events');
+      const droppedEventsEl = document.getElementById('diag-dropped-events');
+      const diskSizeEl = document.getElementById('diag-disk-size');
+      const btnDownload = document.getElementById('btn-download-diagnostics');
+
+      if (runIdEl) runIdEl.textContent = s.runId ? s.runId.slice(0, 8) : '-';
+      if (startedAtEl) {
+        startedAtEl.textContent = s.startedAt ? new Date(s.startedAt).toLocaleTimeString('hu-HU') : '-';
+      }
+      if (totalEventsEl) totalEventsEl.textContent = String(s.totalWritten || 0);
+      if (droppedEventsEl) droppedEventsEl.textContent = String(s.droppedEventsCount || 0);
+      if (diskSizeEl) {
+        const kb = Math.round((s.diskSizeBytes || 0) / 1024);
+        diskSizeEl.textContent = `${kb} KB`;
+      }
+
+      if (badge) {
+        if (!s.enabled) {
+          badge.textContent = 'Kikapcsolva';
+          badge.style.backgroundColor = 'var(--surface-variant, #e7e0ec)';
+          badge.style.color = 'var(--text-muted, #79747e)';
+        } else if (s.isDegraded || s.configurationError) {
+          badge.textContent = s.configurationError ? 'Konfigurációs hiba' : 'Korlátozott / Túlterhelt';
+          badge.style.backgroundColor = 'var(--danger-bg, #fef2f2)';
+          badge.style.color = 'var(--danger, #b91c1c)';
+        } else {
+          badge.textContent = 'Bekapcsolva (Aktív)';
+          badge.style.backgroundColor = '#ecfdf5';
+          badge.style.color = '#047857';
+        }
+      }
+
+      if (btnDownload) {
+        if (!s.exportAvailable) {
+          btnDownload.classList.add('disabled');
+          btnDownload.style.pointerEvents = 'none';
+          btnDownload.style.opacity = '0.5';
+        } else {
+          btnDownload.classList.remove('disabled');
+          btnDownload.style.pointerEvents = 'auto';
+          btnDownload.style.opacity = '1';
+        }
+      }
+    } catch (err) {
+      console.warn('Nem sikerült lekérni a diagnosztikai állapotot:', err);
     }
   }
 
@@ -4130,6 +4192,15 @@
     const btnSave = document.getElementById('btn-save-settings');
     if (btnSave) {
       btnSave.addEventListener('click', saveSettings);
+    }
+
+    // Diagnosztikai állapot frissítése gomb
+    const btnRefreshDiag = document.getElementById('btn-refresh-diagnostics');
+    if (btnRefreshDiag) {
+      btnRefreshDiag.addEventListener('click', () => {
+        loadDiagnosticsStatus();
+        showSettingsToast('Diagnosztikai állapot frissítve!');
+      });
     }
 
     // Alapértelmezések visszaállítása gomb (modal megnyitása)

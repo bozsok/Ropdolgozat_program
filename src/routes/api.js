@@ -23,6 +23,7 @@ const backup = require('../services/backup');
 const presenceService = require('../services/presenceService');
 const settingsRepo = require('../db/settingsRepo');
 const socrativePdfParser = require('../services/socrativePdfParser');
+const diagnosticsService = require('../services/diagnostics');
 
 const router = express.Router();
 const ExcelJS = require('exceljs');
@@ -943,6 +944,7 @@ router.post('/student/join', (req, res) => {
 
     res.json({
       success: true,
+      diagnosticsEnabled: config.diagnosticsEnabled,
       isRecovery: joinResult.isRecovery,
       token: joinResult.participant.session_token,
       participant: joinResult.participant,
@@ -1096,6 +1098,7 @@ router.get('/student/session-data', (req, res) => {
     const exposedQuestions = isRaceStarted ? orderedQuestions : [];
 
     res.json({
+      diagnosticsEnabled: config.diagnosticsEnabled,
       session: {
         id: participant.session_id,
         subject_name: participant.subject_name,
@@ -1143,43 +1146,119 @@ router.get('/student/session-data', (req, res) => {
 
 // Válasz beküldése
 router.post('/student/submit-answer', (req, res) => {
+  req.routeLogged = 'student.submit_answer';
+  const opId = req.headers['x-operation-id'];
+
+  diagnosticsService.logEvent({
+    source: 'server',
+    event: 'answer.received',
+    requestId: req.requestId,
+    operationId: opId,
+    route: 'student.submit_answer'
+  });
+
   try {
     const token = req.body.session_token || req.headers['x-session-token'];
     const { question_id, submitted_answer, time_spent_sec } = req.body;
 
-    if (!token) return res.status(401).json({ error: 'Munkamenet token hiányzik!' });
-    if (!question_id) return res.status(400).json({ error: 'A kérdés azonosítója hiányzik!' });
-
-    const participant = sessionRepo.getParticipantByToken(token);
-    if (!participant) return res.status(404).json({ error: 'Érvénytelen munkamenet!' });
-
-    const submission = sessionRepo.submitAnswer({
-      participant_id: participant.id,
-      question_id: Number(question_id),
-      submitted_answer,
-      time_spent_sec
-    });
-
-    // Értesítés a tanári mátrixnak valós időben (csak tanári szobába)
-    const io = req.app.get('io');
-    if (io) {
-      broadcastMatrixUpdate(io, participant.session_id);
+    if (!token) {
+      diagnosticsService.logEvent({
+        source: 'server',
+        event: 'answer.rejected',
+        requestId: req.requestId,
+        operationId: opId,
+        reasonCode: 'TOKEN_MISSING',
+        httpStatus: 401
+      });
+      return res.status(401).json({ error: 'Munkamenet token hiányzik!' });
+    }
+    if (!question_id) {
+      diagnosticsService.logEvent({
+        source: 'server',
+        event: 'answer.rejected',
+        requestId: req.requestId,
+        operationId: opId,
+        reasonCode: 'QUESTION_ID_MISSING',
+        httpStatus: 400
+      });
+      return res.status(400).json({ error: 'A kérdés azonosítója hiányzik!' });
     }
 
-    const session = sessionRepo.getSessionById(participant.session_id);
-    const hideFeedback = session ? (session.show_feedback_on_end === 0) : false;
+    const participant = sessionRepo.getParticipantByToken(token);
+    if (!participant) {
+      diagnosticsService.logEvent({
+        source: 'server',
+        event: 'answer.rejected',
+        requestId: req.requestId,
+        operationId: opId,
+        reasonCode: 'PARTICIPANT_UNKNOWN',
+        httpStatus: 404
+      });
+      return res.status(404).json({ error: 'Érvénytelen munkamenet!' });
+    }
 
-    res.json({
-      success: true,
-      alreadySubmitted: submission.alreadySubmitted,
-      eval_status: hideFeedback ? null : submission.answer.eval_status,
-      is_correct: hideFeedback ? null : submission.answer.is_correct,
-      points_earned: hideFeedback ? null : submission.answer.points_earned,
-      isFinished: submission.isFinished,
-      correctAnswer: hideFeedback ? null : submission.correctAnswer,
-      explanation: hideFeedback ? null : submission.explanation,
-      hideFeedback: hideFeedback
+    let submission;
+    try {
+      submission = sessionRepo.submitAnswer({
+        participant_id: participant.id,
+        question_id: Number(question_id),
+        submitted_answer,
+        time_spent_sec
+      });
+    } catch (persErr) {
+      diagnosticsService.logEvent({
+        source: 'server',
+        event: 'answer.failed',
+        requestId: req.requestId,
+        operationId: opId,
+        reasonCode: 'PERSISTENCE_CALL_FAILED',
+        httpStatus: 400
+      });
+      throw persErr;
+    }
+
+    const durationMs = req.startTimeHr ? Number((process.hrtime.bigint() - req.startTimeHr) / 1000000n) : undefined;
+    diagnosticsService.logEvent({
+      source: 'server',
+      event: 'answer.persisted',
+      requestId: req.requestId,
+      operationId: opId,
+      outcome: submission.alreadySubmitted ? 'duplicate' : 'saved',
+      durationMs
     });
+
+    try {
+      // Értesítés a tanári mátrixnak valós időben (csak tanári szobába)
+      const io = req.app.get('io');
+      if (io) {
+        broadcastMatrixUpdate(io, participant.session_id);
+      }
+
+      const session = sessionRepo.getSessionById(participant.session_id);
+      const hideFeedback = session ? (session.show_feedback_on_end === 0) : false;
+
+      res.json({
+        success: true,
+        alreadySubmitted: submission.alreadySubmitted,
+        eval_status: hideFeedback ? null : submission.answer.eval_status,
+        is_correct: hideFeedback ? null : submission.answer.is_correct,
+        points_earned: hideFeedback ? null : submission.answer.points_earned,
+        isFinished: submission.isFinished,
+        correctAnswer: hideFeedback ? null : submission.correctAnswer,
+        explanation: hideFeedback ? null : submission.explanation,
+        hideFeedback: hideFeedback
+      });
+    } catch (afterErr) {
+      diagnosticsService.logEvent({
+        source: 'server',
+        event: 'answer.failed',
+        requestId: req.requestId,
+        operationId: opId,
+        reasonCode: 'AFTER_PERSISTENCE_FAILED',
+        httpStatus: 400
+      });
+      throw afterErr;
+    }
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -1286,6 +1365,31 @@ router.get('/admin/backup', requireAdminAuth, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="ropdolgozat_backup_${timestamp}.zip"`);
     archive.pipe(res);
     archive.finalize();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Diagnosztikai állapot lekérdezése (Admin)
+router.get('/admin/diagnostics/status', requireAdminAuth, (req, res) => {
+  try {
+    const status = diagnosticsService.getStatus();
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ success: true, status });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Diagnosztikai eseménynapló exportálása streamelve (Admin)
+router.get('/admin/diagnostics/export', requireAdminAuth, (req, res) => {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="okoskodo_diagnostics_${timestamp}.jsonl"`);
+    res.setHeader('Cache-Control', 'no-store');
+    const exportStream = diagnosticsService.createExportStream(24);
+    exportStream.pipe(res);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

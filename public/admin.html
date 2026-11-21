@@ -787,6 +787,51 @@
           </div>
         </div>
 
+        <!-- 2. SZEKCIÓ: RENDSZERDIAGNOSZTIKA ÉS ESEMÉNYNAPLÓ (v1.2) -->
+        <div class="card settings-card" style="margin-top: 24px;">
+          <div class="settings-card-header">
+            <div class="settings-card-icon" style="background-color: var(--secondary-fixed, #e8def8); color: var(--on-secondary-fixed, #1d192b);">
+              <span class="material-symbols-outlined">troubleshoot</span>
+            </div>
+            <div>
+              <h3 class="settings-card-title">Rendszerdiagnosztika és tantermi eseménynapló</h3>
+              <p class="settings-card-subtitle">Helyi hálózati események, kapcsolatbontások és válaszbeküldési előzmények ellenőrzése.</p>
+            </div>
+          </div>
+
+          <div class="settings-backup-grid">
+            <div class="settings-action-tile">
+              <div class="settings-action-tile-top">
+                <div class="settings-action-tile-icon" style="background-color: var(--surface-variant, #e7e0ec); color: var(--primary);">
+                  <span class="material-symbols-outlined">summarize</span>
+                </div>
+                <div>
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                    <h4 class="settings-action-tile-title" style="margin: 0;">Diagnosztikai állapot</h4>
+                    <span id="diagnostics-status-badge" class="report-badge" style="background-color: #ecfdf5; color: #047857; font-weight: 700;">
+                      Ellenőrzés...
+                    </span>
+                  </div>
+                  <p id="diagnostics-status-desc" class="settings-action-tile-desc">
+                    Szerverfutás azonosító: <code id="diag-run-id">-</code> | Indult: <span id="diag-started-at">-</span><br>
+                    Naplózott események: <strong id="diag-total-events">0</strong> db | Eldobott események: <strong id="diag-dropped-events">0</strong> db | Tárhely: <span id="diag-disk-size">0 KB</span>
+                  </p>
+                </div>
+              </div>
+              <div class="settings-action-tile-bottom" style="display: flex; gap: 12px; align-items: center;">
+                <a href="/api/admin/diagnostics/export" id="btn-download-diagnostics" class="btn btn-secondary" target="_blank">
+                  <span class="material-symbols-outlined">download</span>
+                  <span>Eseménynapló letöltése (.jsonl)</span>
+                </a>
+                <button id="btn-refresh-diagnostics" type="button" class="btn btn-outlined">
+                  <span class="material-symbols-outlined">refresh</span>
+                  <span>Frissítés</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 2. SZEKCIÓ: ÉRTÉKELÉSI HATÁROK (GRADE THRESHOLDS) -->
         <div class="card settings-card">
           <div class="settings-card-header">

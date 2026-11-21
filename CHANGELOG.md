@@ -4,6 +4,48 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.34.0] – 2026-11-21
+
+### Beépítési terv 01: Helyi aszinkron diagnosztika és tantermi eseménynaplózó alrendszer
+
+Kiemelt tantermi megbízhatósági és diagnosztikai kiadás a tantermi próba támogatására a `Source/Beepitesi_terv_01.md`, a `Source/Pontositasi_terv_01.md` és a véglegesített `Source/Beepitesi_terv_01_vegrehajtasi_terv_01.md` (v1.2) specifikációi alapján. Az új alrendszer segítségével a tanár a tantermi próba után közvetlenül a vezérlőpultról letölthető helyi naplóból visszakeresheti a hálózati mikromegszakadásokat, a válaszbeküldések szerveroldali perzisztálását, a böngészőoldali visszaigazolások feldolgozását és az újrapróbálkozások eredményét anélkül, hogy a rendszer relációs adatbázisához (`ropdolgozat.db`) hozzá kellene nyúlni.
+
+Az alrendszer garantálja a nulla lebegőpontos blokkolást: az események átadása szinkron memóriasorba (`RingBufferQueue`) történik, a fizikai lemezre írás aszinkron adatfolyamban (`fs.createWriteStream`) fut backpressure és `drain` vezérléssel. Az OWASP adatminimalizálási irányelveknek megfelelően a naplóba semmilyen személyes adat (tanulónév, osztály), hitelesítő token, PIN, jelszó, kérdésszöveg vagy beadott válasz nem kerülhet. A diagnosztika konfigurációs kapcsolóval (`DIAGNOSTICS_ENABLED`) teljesen lekapcsolható, a könyvtárkezelés pedig fizikai elérési út szintjén el van szigetelve a webgyökértől, a képtártól és a rendszermentésektől.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Központi diagnosztikai szervizmodul (`src/services/diagnostics.js`):**
+  - **Fájl:** [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js)
+  - `RingBufferQueue`: max. 2048 elem vagy 2 MiB in-memory kapacitás, atomi csomagátvétel (`204 No Content` vs. `503 Service Unavailable`).
+  - `DeduplicationCache`: FIFO memóriagyűrű (1024 elem) a kliensoldali ismételt csomagok kiszűrésére.
+  - `SlidingWindowRateLimiter`: résztvevőnkénti (6 csomag/perc) és globális (300 csomag/perc) sebességkorlátozás (`429 Too Many Requests`).
+  - `DiagnosticsFileWriter`: napi (UTC) és méretalapú (5 MiB) rotáció, automatikus 7 napos megőrzés és 25 MiB össztárhely-takarítás szigorú fájlnév-maszkkal (`diagnostics-YYYY-MM-DD.log`).
+  - Fizikai útvonal-validáció (`fs.realpathSync` és junction/symlink feloldás): kizárva az átfedés a `public/`, `data/uploads/` és a restore mappákkal.
+
+* **Szerveroldali életciklus és kérésazonosítás (`server.js`, `src/routes/api.js`):**
+  - **Fájlok:** [`server.js`](file:///d:/dev/Röpdolgozat%20program/server.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - `X-Request-Id` és monoton futásidőmérés (`process.hrtime.bigint()`) middleware minden bejövő kéréshez.
+  - Korai 8 KiB-os diagnosztikai JSON body parser a globális parserek előtt az azonnali `413 Payload Too Large` elutasításhoz.
+  - `answer.received`, `answer.persisted (saved/duplicate)`, `answer.rejected`, `answer.failed`, `http.finished` és `http.closed_early` események pontos korrelációja a meglévő HTTP státuszkódok megőrzésével.
+  - Új tanári végpontok: `GET /api/admin/diagnostics/status` és `GET /api/admin/diagnostics/export` streamelt JSONL formátumban.
+  - Egységes `gracefulShutdown(signal)` folyamat: Socket.IO és HTTP szerver közös lezárása (`io.close`), 5 másodperces türelmi idő az aktív kérések befejezésére, `server.stopping` esemény rögzítése és 2 másodperces leürítés (`flushAndClose`).
+
+* **Kliensoldali eseménymodul és atomi pufferelés (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Kétszintű azonosító: `operationId` (ugyanazon válaszkísérlethez rögzített, retry esetén változatlan) és `requestId` (minden próbálkozáshoz új 32 hex karakteres azonosító `crypto.getRandomValues` alapon).
+  - `sessionStorage` körpuffer (max. 50 esemény / 32 KiB / 2 órás TTL) memóriás fallbackkel és belső `syncVersion` verziószámmal a késve érkező válaszok elszigetelésére.
+  - `answer.acknowledged`, `answer.response_error`, `answer.no_ack`, valamint Socket.io `disconnect`, `connect_error` és `reconnected` események követése.
+  - Calm modál hibaüzenet kiegészítése a kérésazonosítóval és a bizonytalan mentés egyértelmű jelzésével.
+
+* **Tanári vezérlőpult Beállítások kártya (`public/admin.html`, `public/js/admin.js`):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Új "Rendszerdiagnosztika és tantermi eseménynapló" kártya állapotjelző jelvénnyel (Aktív / Kikapcsolva / Konfigurációs hiba), szerverazonosítóval, eseményszámlálókkal és közvetlen JSONL letöltési gombbal.
+
+* **Átfogó automatizált elfogadási tesztcsomag (T-01 – T-08):**
+  - **Fájlok:** [`scratch/test_diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_diagnostics.js), [`scratch/run_all_tests.js`](file:///d:/dev/Röpdolgozat%20program/scratch/run_all_tests.js)
+  - Mind a 8 teszteset (normál beküldés, elakadt kérés, elveszett ack, visszacsatlakozás és puffer-életciklus, kapacitáshiány és sebességkorlát, adatvédelem és korai méretkorlát, könyvtár-elkülönítés, szabályos leállás) teljesen automatizáltan és elszigetelten lefut.
+
+---
+
 ## [1.33.0] – 2026-11-21
 
 ### Report 22 megállapítások: Explicit SQLite időbélyeg-rögzítés tesztlétrehozáskor és megbízható tanári listarendezés régi mentések visszaállítása után

@@ -23,7 +23,18 @@ const config = {
 
   // Munkamenet és Cookie beállítások
   cookieSecret: process.env.COOKIE_SECRET || 'ropdolgozat-titkos-kulcs-2026',
-  cookieName: 'ropdolgozat_admin_auth'
+  cookieName: 'ropdolgozat_admin_auth',
+
+  // Diagnosztikai alrendszer beállításai (Report Beépítési terv 01 & Pontosítási terv 01)
+  diagnosticsEnabled: process.env.DIAGNOSTICS_ENABLED === 'true' || false,
+  diagnosticsDir: process.env.DIAGNOSTICS_DIR || path.join(__dirname, 'data', 'diagnostics'),
+  diagnosticsMaxQueueSize: parseInt(process.env.DIAGNOSTICS_MAX_QUEUE_SIZE || '2048', 10),
+  diagnosticsMaxQueueBytes: parseInt(process.env.DIAGNOSTICS_MAX_QUEUE_BYTES || '2097152', 10), // 2 MiB
+  diagnosticsMaxFileSizeBytes: parseInt(process.env.DIAGNOSTICS_MAX_FILE_BYTES || '5242880', 10), // 5 MiB
+  diagnosticsMaxTotalSizeBytes: parseInt(process.env.DIAGNOSTICS_MAX_TOTAL_BYTES || '26214400', 10), // 25 MiB
+  diagnosticsRetentionDays: parseInt(process.env.DIAGNOSTICS_RETENTION_DAYS || '7', 10),
+  diagnosticsRateLimitParticipantPerMin: parseInt(process.env.DIAGNOSTICS_RATE_LIMIT_PARTICIPANT || '6', 10),
+  diagnosticsRateLimitGlobalPerMin: parseInt(process.env.DIAGNOSTICS_RATE_LIMIT_GLOBAL || '300', 10)
 };
 
 module.exports = config;

@@ -22,6 +22,188 @@
   let questionStartTime = Date.now();
   let timerInterval = null;
 
+  // Diagnosztikai alrendszer kliensoldali állapota (v1.2)
+  let diagnosticsEnabled = false;
+  let diagnosticsScope = null; // helyi hatókör: `${sessionId}_${participantId}`
+  let diagnosticsMemoryBuffer = [];
+  let currentOperationId = null;
+  let currentOperationQuestionId = null;
+  let isSyncingDiagnostics = false;
+  let syncVersion = 0;
+  let syncRetryCount = 0;
+  let syncTimer = null;
+  let hasConnectedOnce = false;
+
+  const DIAG_STORAGE_KEY = 'ropdolgozat_diagnostics_buffer';
+  const DIAG_MAX_ITEMS = 50;
+  const DIAG_MAX_BYTES = 32768; // 32 KiB
+  const DIAG_TTL_MS = 7200000; // 2 óra
+
+  function generateHexId() {
+    if (window.crypto && window.crypto.getRandomValues) {
+      const arr = new Uint8Array(16);
+      window.crypto.getRandomValues(arr);
+      return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+    }
+    return 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.replace(/[x]/g, () => (Math.random() * 16 | 0).toString(16));
+  }
+
+  function getDiagnosticsBuffer() {
+    const now = Date.now();
+    let items = [];
+    try {
+      const raw = sessionStorage.getItem(DIAG_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.scope === diagnosticsScope && Array.isArray(parsed.events)) {
+          items = parsed.events.filter(e => {
+            const ts = e._ts || (e.clientAt ? Date.parse(e.clientAt) : now);
+            return (now - ts) < DIAG_TTL_MS;
+          });
+        }
+      }
+    } catch {
+      items = diagnosticsMemoryBuffer.filter(e => {
+        const ts = e._ts || (e.clientAt ? Date.parse(e.clientAt) : now);
+        return (now - ts) < DIAG_TTL_MS;
+      });
+    }
+    return items;
+  }
+
+  function saveDiagnosticsBuffer(items) {
+    const now = Date.now();
+    let valid = items.filter(e => {
+      const ts = e._ts || (e.clientAt ? Date.parse(e.clientAt) : now);
+      return (now - ts) < DIAG_TTL_MS;
+    });
+    if (valid.length > DIAG_MAX_ITEMS) {
+      valid = valid.slice(valid.length - DIAG_MAX_ITEMS);
+    }
+
+    diagnosticsMemoryBuffer = valid;
+    try {
+      const payload = {
+        scope: diagnosticsScope,
+        events: valid
+      };
+      let json = JSON.stringify(payload);
+      while (json.length > DIAG_MAX_BYTES && valid.length > 1) {
+        valid.shift();
+        payload.events = valid;
+        json = JSON.stringify(payload);
+      }
+      sessionStorage.setItem(DIAG_STORAGE_KEY, json);
+    } catch {}
+  }
+
+  function clearDiagnosticsBuffer() {
+    syncVersion++;
+    diagnosticsMemoryBuffer = [];
+    try {
+      sessionStorage.removeItem(DIAG_STORAGE_KEY);
+    } catch {}
+  }
+
+  function pushDiagnosticEvent(eventData) {
+    if (!diagnosticsEnabled) return;
+    const entry = {
+      eventId: generateHexId(),
+      event: eventData.event,
+      clientAt: new Date().toISOString(),
+      _ts: Date.now()
+    };
+    if (eventData.route) entry.route = eventData.route;
+    if (eventData.requestId) entry.requestId = eventData.requestId;
+    if (eventData.operationId) entry.operationId = eventData.operationId;
+    if (eventData.outcome) entry.outcome = eventData.outcome;
+    if (eventData.reasonCode) entry.reasonCode = eventData.reasonCode;
+    if (typeof eventData.httpStatus === 'number') entry.httpStatus = eventData.httpStatus;
+    if (typeof eventData.durationMs === 'number') entry.durationMs = eventData.durationMs;
+
+    const items = getDiagnosticsBuffer();
+    items.push(entry);
+    saveDiagnosticsBuffer(items);
+  }
+
+  async function flushDiagnosticsQueue() {
+    if (!diagnosticsEnabled || isSyncingDiagnostics || !sessionToken) return;
+
+    const items = getDiagnosticsBuffer();
+    if (items.length === 0) return;
+
+    isSyncingDiagnostics = true;
+    const currentSyncVer = syncVersion;
+
+    const batch = items.slice(0, 20).map(i => {
+      const copy = { ...i };
+      delete copy._ts;
+      return copy;
+    });
+    const batchEventIds = new Set(batch.map(b => b.eventId));
+
+    try {
+      const res = await fetch('/api/student/diagnostics/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-token': sessionToken
+        },
+        body: JSON.stringify({ events: batch })
+      });
+
+      if (currentSyncVer !== syncVersion) {
+        isSyncingDiagnostics = false;
+        return;
+      }
+
+      if (res.status === 204) {
+        syncRetryCount = 0;
+        const currentItems = getDiagnosticsBuffer();
+        const remaining = currentItems.filter(e => !batchEventIds.has(e.eventId));
+        saveDiagnosticsBuffer(remaining);
+
+        if (remaining.length > 0) {
+          setTimeout(flushDiagnosticsQueue, 200);
+        }
+      } else if (res.status === 403) {
+        diagnosticsEnabled = false;
+        clearDiagnosticsBuffer();
+      } else if (res.status === 400) {
+        const currentItems = getDiagnosticsBuffer();
+        const remaining = currentItems.filter(e => !batchEventIds.has(e.eventId));
+        saveDiagnosticsBuffer(remaining);
+      } else if (res.status === 413) {
+        if (batch.length <= 1) {
+          const currentItems = getDiagnosticsBuffer();
+          const remaining = currentItems.filter(e => !batchEventIds.has(e.eventId));
+          saveDiagnosticsBuffer(remaining);
+        }
+      } else if (res.status === 429 || res.status === 503) {
+        scheduleDiagnosticsRetry();
+      }
+    } catch {
+      scheduleDiagnosticsRetry();
+    } finally {
+      isSyncingDiagnostics = false;
+    }
+  }
+
+  function scheduleDiagnosticsRetry() {
+    if (syncTimer) clearTimeout(syncTimer);
+    syncRetryCount = Math.min(syncRetryCount + 1, 5);
+    const delay = Math.min(16000, Math.pow(2, syncRetryCount - 1) * 1000) + Math.floor(Math.random() * 500);
+    syncTimer = setTimeout(() => {
+      flushDiagnosticsQueue();
+    }, delay);
+  }
+
+  setInterval(() => {
+    if (diagnosticsEnabled && sessionToken) {
+      flushDiagnosticsQueue();
+    }
+  }, 30000);
+
   // DOM elemek gyors elérése
   const studentEntryWrapper = document.querySelector('.student-entry-wrapper');
   const studentEntryInner = document.querySelector('.student-entry-inner');
@@ -255,6 +437,7 @@
 
       if (!isTargeted || matchesParticipant || matchesStudent) {
         sessionStorage.removeItem('ropdolgozat_token');
+        clearDiagnosticsBuffer();
         showCalmAlert('A tanár feloldotta a munkamenetedet vagy engedélyezte a gépváltást. Az oldal újratöltődik.', 'Munkamenet feloldva', 'info', () => {
           window.location.reload();
         });
@@ -285,8 +468,31 @@
       }
     });
 
+    // Diagnosztikai socket események követése
+    socket.on('disconnect', (reason) => {
+      pushDiagnosticEvent({
+        event: 'socket.disconnected',
+        reasonCode: typeof reason === 'string' ? reason.toUpperCase().replace(/[^A-Z0-9_]/g, '_').slice(0, 30) : undefined
+      });
+    });
+
+    socket.on('connect_error', () => {
+      pushDiagnosticEvent({
+        event: 'socket.connect_error'
+      });
+    });
+
     // Újracsatlakozáskor a foglaltsági állapot és az aktív szobatagság megújítása (Report 14 / 20.)
     socket.on('connect', () => {
+      if (hasConnectedOnce) {
+        pushDiagnosticEvent({
+          event: 'socket.reconnected'
+        });
+        setTimeout(flushDiagnosticsQueue, 200);
+      } else {
+        hasConnectedOnce = true;
+      }
+
       if (selectedClass && loginStep2 && loginStep2.style.display !== 'none') {
         socket.emit('student:get_occupied', { className: selectedClass });
       }
@@ -965,6 +1171,15 @@
       sessionToken = data.token;
       sessionStorage.setItem('ropdolgozat_token', sessionToken);
 
+      // Diagnosztikai állapot és hatókör beállítása
+      diagnosticsEnabled = !!data.diagnosticsEnabled;
+      if (data.participant) {
+        diagnosticsScope = `${data.participant.session_id}_${data.participant.id}`;
+      }
+      if (!diagnosticsEnabled) {
+        clearDiagnosticsBuffer();
+      }
+
       // Socket szobához csatlakozás hitelesítő tokennel
       if (socket) {
         socket.emit('join:session', { sessionId: activeSession.id, role: 'student', token: sessionToken });
@@ -994,11 +1209,23 @@
       });
       if (!res.ok) {
         sessionStorage.removeItem('ropdolgozat_token');
+        clearDiagnosticsBuffer();
         return false;
       }
 
       const data = await res.json();
       sessionToken = token;
+      diagnosticsEnabled = !!data.diagnosticsEnabled;
+      if (data.participant) {
+        const newScope = `${data.participant.session_id}_${data.participant.id}`;
+        if (diagnosticsScope && diagnosticsScope !== newScope) {
+          clearDiagnosticsBuffer();
+        }
+        diagnosticsScope = newScope;
+      }
+      if (!diagnosticsEnabled) {
+        clearDiagnosticsBuffer();
+      }
       activeSession = {
         id: data.participant.session_id,
         title: data.quiz.title,
@@ -1029,6 +1256,7 @@
       return true;
     } catch {
       sessionStorage.removeItem('ropdolgozat_token');
+      clearDiagnosticsBuffer();
       return false;
     }
   }
@@ -1157,6 +1385,9 @@
    * Kérdés megjelenítése a képernyőn (Calm Learner stílusban)
    */
   function renderQuestion(index) {
+    currentOperationId = null;
+    currentOperationQuestionId = null;
+
     if (index >= currentQuestions.length) {
       finishQuiz();
       return;
@@ -1323,14 +1554,25 @@
 
     btnSubmitAnswer.disabled = true;
 
+    // Diagnosztikai azonosítók képzése (v1.2: az operationId retry esetén azonos marad)
+    if (!currentOperationId || currentOperationQuestionId !== q.id) {
+      currentOperationId = generateHexId();
+      currentOperationQuestionId = q.id;
+    }
+    const thisRequestId = generateHexId();
+    const thisOperationId = currentOperationId;
+
     const timeSpent = Math.round((Date.now() - questionStartTime) / 1000);
+    const fetchStartTime = Date.now();
 
     try {
       const res = await fetch('/api/student/submit-answer', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-session-token': sessionToken
+          'x-session-token': sessionToken,
+          'x-request-id': thisRequestId,
+          'x-operation-id': thisOperationId
         },
         body: JSON.stringify({
           session_token: sessionToken,
@@ -1340,12 +1582,60 @@
         })
       });
 
-      const result = await res.json();
-      if (!res.ok) {
-        showCalmAlert(result.error || 'Hiba a válasz mentésekor!', 'Hiba a mentéskor', 'error');
+      const durationMs = Date.now() - fetchStartTime;
+      let result;
+      try {
+        result = await res.json();
+      } catch (jsonErr) {
+        pushDiagnosticEvent({
+          event: 'answer.response_error',
+          requestId: thisRequestId,
+          operationId: thisOperationId,
+          httpStatus: res.status,
+          durationMs
+        });
+        showCalmAlert(
+          `A kiszolgáló válasza feldolgozhatatlan volt! (Kérés: #${thisRequestId.slice(0, 8)})\nA válasz mentésének eredménye bizonytalan. Kérlek, próbáld újra!`,
+          'Hiba a mentéskor',
+          'error'
+        );
         btnSubmitAnswer.disabled = false;
         return;
       }
+
+      if (!res.ok) {
+        pushDiagnosticEvent({
+          event: 'answer.response_error',
+          requestId: thisRequestId,
+          operationId: thisOperationId,
+          httpStatus: res.status,
+          durationMs
+        });
+        showCalmAlert(
+          `${result.error || 'Hiba a válasz mentésekor!'} (Kérés: #${thisRequestId.slice(0, 8)})`,
+          'Hiba a mentéskor',
+          'error'
+        );
+        btnSubmitAnswer.disabled = false;
+        return;
+      }
+
+      // Sikeresen visszaigazolt válasz
+      pushDiagnosticEvent({
+        event: 'answer.acknowledged',
+        requestId: thisRequestId,
+        operationId: thisOperationId,
+        httpStatus: res.status,
+        outcome: 'ok',
+        durationMs
+      });
+
+      // Sikeres művelet lezárása
+      currentOperationId = null;
+      currentOperationQuestionId = null;
+
+      // Háttérürítés megindítása sikeres normál kérés után
+      setTimeout(flushDiagnosticsQueue, 100);
 
       answeredQuestionIds.add(q.id);
       studentSubmittedAnswers.set(q.id, {
@@ -1384,8 +1674,20 @@
       showFeedback(result);
 
     } catch (err) {
+      const durationMs = Date.now() - fetchStartTime;
       console.error('Hiba a válasz beküldésekor:', err);
-      showCalmAlert('Hálózati hiba a válasz beküldésekor! Kérlek, próbáld újra.', 'Hálózati hiba', 'error');
+      pushDiagnosticEvent({
+        event: 'answer.no_ack',
+        requestId: thisRequestId,
+        operationId: thisOperationId,
+        outcome: 'no_ack',
+        durationMs
+      });
+      showCalmAlert(
+        `Hálózati megszakadás a válasz beküldésekor! (Kérés: #${thisRequestId.slice(0, 8)})\nA válasz mentésének eredménye bizonytalan a kapcsolat megszakadása miatt. Kérlek, próbáld újra!`,
+        'Hálózati hiba',
+        'error'
+      );
       btnSubmitAnswer.disabled = false;
     }
   }
