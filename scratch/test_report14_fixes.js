@@ -1446,6 +1446,84 @@ console.log('✓ A 0 táblás teljesen üres SQLite mentést a pre-check azonnal
 try { fs.unlinkSync(emptyDbPath); } catch {}
 try { fs.unlinkSync(emptyZipPath); } catch {}
 
+// 35. TESZT: Új tesztek explicit időbélyegei és helyes tanári listarendezése régi mentés visszaállítása után (Report 22)
+console.log('\n--- 35. TESZT: Új tesztek időbélyege és listarendezése régi mentés visszaállítása után (Report 22) ---');
+const legacyOrderDbPath = path.join(path.dirname(testDbPath), 'legacy_order.db');
+const legacyOrderZipPath = path.join(path.dirname(testDbPath), 'legacy_order_backup.zip');
+
+const legacyOrderDb = new Database(legacyOrderDbPath);
+legacyOrderDb.pragma('application_id = 0');
+legacyOrderDb.pragma('user_version = 0');
+legacyOrderDb.exec(`
+  CREATE TABLE subjects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, is_default INTEGER DEFAULT 0);
+  INSERT INTO subjects (id, name, is_default) VALUES (1, 'Digitális kultúra', 1);
+  CREATE TABLE students (id INTEGER PRIMARY KEY AUTOINCREMENT, class_name TEXT NOT NULL, student_name TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  INSERT INTO students (class_name, student_name) VALUES ('6.a', 'Order Tanuló');
+  -- quizzes tábla created_at és updated_at nélkül (Report 22 peremhelyzet)
+  CREATE TABLE quizzes (id INTEGER PRIMARY KEY AUTOINCREMENT, subject_id INTEGER NOT NULL, title TEXT NOT NULL, subject_grade TEXT DEFAULT '', default_time_limit_min INTEGER DEFAULT 0, locked_at DATETIME DEFAULT NULL);
+  INSERT INTO quizzes (id, subject_id, title, subject_grade) VALUES (77, 1, 'Régi Teszt 2026-01-01', '6');
+  CREATE TABLE questions (id INTEGER PRIMARY KEY AUTOINCREMENT, quiz_id INTEGER NOT NULL, question_order INTEGER NOT NULL, question_type TEXT NOT NULL, question_text TEXT NOT NULL, image_path TEXT DEFAULT NULL, options_json TEXT DEFAULT '["A","B"]', correct_answer TEXT DEFAULT 'A', explanation TEXT DEFAULT '', points REAL NOT NULL DEFAULT 1.0);
+  INSERT INTO questions (id, quiz_id, question_order, question_type, question_text, points) VALUES (771, 77, 1, 'ABCD', 'Kérdés', 1.0);
+  CREATE TABLE sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, subject_id INTEGER NOT NULL DEFAULT 1, grade_level TEXT NOT NULL, quiz_id INTEGER NOT NULL, class_name TEXT DEFAULT '', mode TEXT NOT NULL DEFAULT 'STUDENT_PACED', status TEXT NOT NULL DEFAULT 'ACTIVE', time_limit_min INTEGER DEFAULT 0, shuffle_questions INTEGER DEFAULT 0, shuffle_options INTEGER DEFAULT 0, show_feedback_on_end INTEGER DEFAULT 1, current_question_index INTEGER DEFAULT 0, grade_thresholds_json TEXT NOT NULL DEFAULT '{"2":30,"3":55,"4":75,"5":90}', started_at DATETIME DEFAULT CURRENT_TIMESTAMP, ended_at DATETIME DEFAULT NULL);
+  CREATE TABLE participants (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, student_id INTEGER DEFAULT NULL, pc_number INTEGER DEFAULT NULL, student_name TEXT NOT NULL, session_token TEXT NOT NULL, question_order_json TEXT DEFAULT '[]', team_color TEXT DEFAULT NULL, focus_lost_count INTEGER DEFAULT 0, is_finished INTEGER DEFAULT 0, joined_at DATETIME DEFAULT CURRENT_TIMESTAMP, deadline_at DATETIME DEFAULT NULL, finished_at DATETIME DEFAULT NULL);
+  CREATE TABLE answers (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, participant_id INTEGER NOT NULL, question_id INTEGER NOT NULL, submitted_answer TEXT NOT NULL, eval_status TEXT NOT NULL DEFAULT 'WRONG', is_correct INTEGER NOT NULL DEFAULT 0, points_earned REAL NOT NULL DEFAULT 0.0, original_points_earned REAL NOT NULL DEFAULT 0.0, is_manually_overridden INTEGER DEFAULT 0, overridden_at DATETIME DEFAULT NULL, time_spent_sec INTEGER DEFAULT 0, answered_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+`);
+legacyOrderDb.close();
+
+const legacyOrderArchive = archiver('zip', { zlib: { level: 9 } });
+await new Promise((resolve, reject) => {
+  const ws = fs.createWriteStream(legacyOrderZipPath);
+  legacyOrderArchive.pipe(ws);
+  ws.on('finish', resolve);
+  ws.on('error', reject);
+  legacyOrderArchive.file(legacyOrderDbPath, { name: 'data/ropdolgozat.db' });
+  legacyOrderArchive.finalize();
+});
+
+// 1. Mentés visszaállítása
+const orderRestoreRes = await backup.restoreSystemBackup(legacyOrderZipPath);
+assert.strictEqual(orderRestoreRes.success, true, 'A mentés visszaállítása sikertelen!');
+
+// A régi teszt időbélyegét rögzített múltbéli időpontra állítjuk a független rendezési teszthez (Report 22 / 3. pont)
+db.prepare("UPDATE quizzes SET created_at = '2026-01-01 10:00:00', updated_at = '2026-01-01 10:00:00' WHERE id = 77").run();
+
+// 2. Új teszt létrehozása a közös createQuiz művelettel
+const brandNewQuiz = quizRepo.createQuiz({
+  subject_id: 1,
+  title: 'Vadonatúj Teszt 2026',
+  subject_grade: '6',
+  default_time_limit_min: 15,
+  questions: [
+    {
+      question_order: 1,
+      question_type: 'ABCD',
+      question_text: 'Új kérdés szöveg',
+      options: ['A', 'B'],
+      correct_answer: 'A',
+      explanation: 'Magyarázat',
+      points: 1.0
+    }
+  ]
+});
+
+// Ellenőrizzük, hogy az új teszt mindkét időbélyege ki van töltve (nem NULL és nem üres)
+assert.ok(brandNewQuiz.created_at !== null && brandNewQuiz.created_at !== undefined && brandNewQuiz.created_at !== '', 'Az új teszt created_at mezője üres maradt!');
+assert.ok(brandNewQuiz.updated_at !== null && brandNewQuiz.updated_at !== undefined && brandNewQuiz.updated_at !== '', 'Az új teszt updated_at mezője üres maradt!');
+
+// 3. Ellenőrizzük a tényleges getQuizzes listázási sorrendjét
+const quizzesList = quizRepo.getQuizzes();
+assert.ok(quizzesList.length >= 2, 'Nem található mindkét teszt a listában!');
+const firstQuiz = quizzesList[0];
+const secondQuiz = quizzesList.find(q => q.id === 77);
+
+assert.strictEqual(firstQuiz.id, brandNewQuiz.id, 'Az újonnan létrehozott teszt nem a lista élére került rendezéskor! (Első: #' + firstQuiz.id + ', új teszt: #' + brandNewQuiz.id + ')');
+assert.ok(secondQuiz !== undefined, 'A régi teszt eltűnt a listából!');
+assert.strictEqual(secondQuiz.updated_at, '2026-01-01 10:00:00', 'A régi teszt időbélyege megváltozott!');
+console.log('✓ Az új teszt érvényes created_at és updated_at időbélyegeket kapott a migrált sémán is, és a lista legelső helyére került');
+
+try { fs.unlinkSync(legacyOrderDbPath); } catch {}
+try { fs.unlinkSync(legacyOrderZipPath); } catch {}
+
 try { sessionRepo.deleteSession(triggerSession.id); } catch {}
 try { sessionRepo.deleteSession(legacySession.id); } catch {}
 try { sessionRepo.deleteSession(v26Session.id); } catch {}

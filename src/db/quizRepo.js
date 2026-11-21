@@ -350,8 +350,11 @@ function createQuiz({ subject_id = 1, folder_id = null, title, subject_grade = '
 
   const tx = db.transaction(() => {
     const insertQuiz = db.prepare(`
-      INSERT INTO quizzes (subject_id, folder_id, title, subject_grade, default_time_limit_min)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO quizzes (
+        subject_id, folder_id, title, subject_grade, default_time_limit_min,
+        created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `);
     const quizResult = insertQuiz.run(
       Number(subject_id) || 1,

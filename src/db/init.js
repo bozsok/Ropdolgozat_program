@@ -11,9 +11,9 @@ if (!fs.existsSync(config.uploadsDir)) {
   fs.mkdirSync(config.uploadsDir, { recursive: true });
 }
 
-// Konstansok: Hivatalos Okoskodó SQLite formátum- és sémaverzió (Report 19, 20 & 21)
+// Konstansok: Hivatalos Okoskodó SQLite formátum- és sémaverzió (Report 19, 20, 21 & 22)
 const OKOS_APPLICATION_ID = 1330335571; // ASCII: 'OKOS' (0x4F4B4F53)
-const CURRENT_SCHEMA_VERSION = 13200;   // v1.32.0 sémaverzió
+const CURRENT_SCHEMA_VERSION = 13300;   // v1.33.0 sémaverzió
 
 function applyPragmas(targetDb) {
   targetDb.pragma('journal_mode = WAL');
@@ -409,8 +409,11 @@ function initializeDatabase() {
     const quizCount = db.prepare('SELECT COUNT(*) as count FROM quizzes').get().count;
     if (quizCount === 0) {
       const insertQuiz = db.prepare(`
-        INSERT INTO quizzes (subject_id, title, subject_grade, default_time_limit_min)
-        VALUES (@subject_id, @title, @subject_grade, @default_time_limit_min)
+        INSERT INTO quizzes (
+          subject_id, title, subject_grade, default_time_limit_min,
+          created_at, updated_at
+        )
+        VALUES (@subject_id, @title, @subject_grade, @default_time_limit_min, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `);
 
       const quizResult = insertQuiz.run({

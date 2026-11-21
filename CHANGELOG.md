@@ -4,6 +4,24 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.33.0] – 2026-11-21
+
+### Report 22 megállapítások: Explicit SQLite időbélyeg-rögzítés tesztlétrehozáskor és megbízható tanári listarendezés régi mentések visszaállítása után
+
+Kiemelt tantermi adatintegritási és felületkonzisztencia kiadás a független szakértői felülvizsgálat (Report 22) megállapításainak maradéktalan orvoslására. Amikor egy korábbi verziójú (v1.26-os) biztonsági mentésből kicsomagolt adatbázis sémamigrációja lefut, a `quizzes.created_at` és `quizzes.updated_at` mezők az SQLite `ALTER TABLE ADD COLUMN` megszorításai miatt `DEFAULT NULL` beállítással jönnek létre. Annak érdekében, hogy a mentés visszaállítása után a tanár által újonnan létrehozott, lemásolt vagy egyesített tesztek ne kapjanak üres (`NULL`) időbélyegeket, a központi tesztlétrehozó művelet (`quizRepo.createQuiz`) és a mintaadat-inicializálás mostantól az `INSERT INTO quizzes` utasításban közvetlenül és expliciten átadja a `created_at` és `updated_at` mezőket az SQLite beépített `CURRENT_TIMESTAMP` értékével. Ezzel garantált, hogy mind a friss telepítésű, mind a régi mentésből visszaállított adatbázisban az új tesztek érvényes, kitöltött időbélyeggel rögzülnek, és a tanári vezérlőpult tesztlistája (`ORDER BY q.updated_at DESC, q.id DESC`) az újonnan létrehozott teszteket megbízhatóan a lista legtetejére rendezi a korábbi tesztek elé.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Explicit `created_at` és `updated_at` rögzítés tesztbeszúráskor (Report 22):**
+  - **Fájlok:** [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js)
+  - A `createQuiz` eljárásban az `INSERT INTO quizzes` lekérdezés explicit `CURRENT_TIMESTAMP, CURRENT_TIMESTAMP` értékkel rögzíti a `created_at` és `updated_at` mezőket, kiszolgálva a közvetlen létrehozást, a duplikálást (`duplicateQuiz`), az összefésülést (`mergeQuizzes`) és a Socrative importot is.
+  - Az `init.js` mintaadat-beszúrása szintén megkapta az explicit időbélyeg-rögzítést.
+
+* **Új célzott integrációs és rendezési teszt (35. teszt) a tesztcsomagban (Report 22):**
+  - **Fájl:** [`scratch/test_report14_fixes.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_report14_fixes.js)
+  - 35. teszt: Időbélyeg nélküli v1.26 mentés visszaállítása után új teszt létrehozása igazolja, hogy mindkét időbélyeg kitöltött és érvényes, a régi teszt sértetlen maradt, és a tanári `quizRepo.getQuizzes()` lekérdezés az új tesztet megelőzve, a lista élén jeleníti meg.
+
+---
+
 ## [1.32.0] – 2026-11-21
 
 ### Report 21 megállapítások: Fail-fast kötelező sémamigráció, írásvédett szerverindulás meglévő adatbázis esetén és szigorított üres adatbázis védelem a rendszer-visszaállításban
