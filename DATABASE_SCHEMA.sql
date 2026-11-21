@@ -7,8 +7,6 @@
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 PRAGMA foreign_keys = ON;
-PRAGMA application_id = 1330335571; -- ASCII: 'OKOS' (Okoskodó hivatalos SQLite formátumazonosító)
-PRAGMA user_version = 13000;        -- v1.30.0 sémaverzió
 
 -- ----------------------------------------------------------------------------
 -- 1. TÁBLA: subjects (Választható tantárgyak – alapértelmezetten 'Digitális kultúra')
@@ -172,6 +170,15 @@ CREATE TABLE IF NOT EXISTS answers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_answers_session_participant ON answers(session_id, participant_id);
+
+-- ----------------------------------------------------------------------------
+-- 7. TÁBLA: system_settings (Rendszerbeállítások, értékelési határok és tantermi opciók)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS system_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
 -- ============================================================================
 -- 8. INTEGRITÁSI TRIGGEREK (Adatbázisszintű garanciák)

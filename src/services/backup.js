@@ -105,39 +105,10 @@ function restoreSystemBackup(zipFilePath) {
       throw new Error('Érvénytelen mentésfájl: a csomag nem tartalmazza a ropdolgozat.db adatbázist!');
     }
 
-    // 3. Előzetes alkalmazás- és formátumkompatibilitás-ellenőrzés a migráció ELŐTT (Report 19 / 1. tétel)
+    // 3. Előzetes alkalmazás- és formátumkompatibilitás-ellenőrzés a migráció ELŐTT (Report 19 / 1. tétel & Report 20)
     const preCheckDb = new Database(extractedDbPath, { readonly: true });
     try {
-      const integrity = preCheckDb.prepare('PRAGMA integrity_check').get();
-      if (!integrity || integrity.integrity_check !== 'ok') {
-        throw new Error('A mentésben lévő adatbázis integritása sérült (PRAGMA integrity_check failed)!');
-      }
-
-      // Ellenőrizzük az Okoskodó alapvető magtábláit még a migráció előtt
-      const requiredCoreTables = ['quizzes', 'questions', 'students', 'sessions', 'participants', 'answers'];
-      const existingTables = preCheckDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(t => t.name);
-      for (const t of requiredCoreTables) {
-        if (!existingTables.includes(t)) {
-          throw new Error(`Inkompatibilis mentésfájl: az adatbázis nem egy érvényes Okoskodó mentés (a kötelező '${t}' alaptábla hiányzik)!`);
-        }
-      }
-
-      // Ellenőrizzük a magtáblák specifikus oszlop-ujjlenyomatát az idegen SQLite adatbázisok kizárására
-      const checkTableCols = (tableName, requiredCols) => {
-        const cols = preCheckDb.prepare(`PRAGMA table_info(${tableName})`).all().map(c => c.name);
-        for (const col of requiredCols) {
-          if (!cols.includes(col)) {
-            throw new Error(`Inkompatibilis mentésfájl: az adatbázis '${tableName}' táblája érvénytelen (a kötelező '${col}' oszlop hiányzik)!`);
-          }
-        }
-      };
-
-      checkTableCols('quizzes', ['title', 'subject_id', 'subject_grade']);
-      checkTableCols('questions', ['quiz_id', 'question_type', 'points']);
-      checkTableCols('students', ['class_name', 'student_name']);
-      checkTableCols('sessions', ['quiz_id', 'status', 'mode']);
-      checkTableCols('participants', ['session_id', 'student_name']);
-      checkTableCols('answers', ['session_id', 'participant_id', 'question_id', 'points_earned']);
+      db.validateDatabaseCompatibility(preCheckDb, { context: 'mentés visszaállítása' });
     } finally {
       preCheckDb.close();
     }
@@ -178,6 +149,13 @@ function restoreSystemBackup(zipFilePath) {
         if (!existingTriggers.includes(trg)) {
           throw new Error(`Inkompatibilis mentés: a kötelező '${trg}' trigger hiányzik az adatbázisból!`);
         }
+      }
+
+      // Verzió ellenőrzése a sikeres migráció után (Report 20)
+      const postAppId = testDb.pragma('application_id', { simple: true });
+      const postUserVer = testDb.pragma('user_version', { simple: true });
+      if (postAppId !== db.OKOS_APPLICATION_ID || postUserVer !== db.CURRENT_SCHEMA_VERSION) {
+        throw new Error(`Inkompatibilis mentés: a migráció utáni alkalmazásazonosító vagy sémaverzió érvénytelen (appId: ${postAppId}, userVersion: ${postUserVer})!`);
       }
     } finally {
       testDb.close();

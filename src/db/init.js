@@ -11,6 +11,10 @@ if (!fs.existsSync(config.uploadsDir)) {
   fs.mkdirSync(config.uploadsDir, { recursive: true });
 }
 
+// Konstansok: Hivatalos Okoskodó SQLite formátum- és sémaverzió (Report 19 & 20)
+const OKOS_APPLICATION_ID = 1330335571; // ASCII: 'OKOS' (0x4F4B4F53)
+const CURRENT_SCHEMA_VERSION = 13100;   // v1.31.0 sémaverzió
+
 // SQLite adatbázis megnyitása
 let currentDb = new Database(config.dbPath);
 
@@ -18,11 +22,68 @@ function applyPragmas(targetDb) {
   targetDb.pragma('journal_mode = WAL');
   targetDb.pragma('synchronous = NORMAL');
   targetDb.pragma('foreign_keys = ON');
-  targetDb.pragma('application_id = 1330335571');
-  targetDb.pragma('user_version = 13000');
 }
 
 applyPragmas(currentDb);
+
+/**
+ * Adatbázis sémakompatibilitás és alkalmazásazonosító ellenőrzése
+ * (Közös eljárás a restore pre-checkhez és az alkalmazás indításához - Report 20)
+ * @param {Database} targetDb - Az ellenőrizendő SQLite adatbázis kapcsolat
+ * @param {Object} options - { context: 'indítás'|'mentés visszaállítása'|'migráció' }
+ */
+function validateDatabaseCompatibility(targetDb, { context = 'indítás' } = {}) {
+  // 1. Integritás ellenőrzése
+  const integrity = targetDb.prepare('PRAGMA integrity_check').get();
+  if (!integrity || integrity.integrity_check !== 'ok') {
+    throw new Error(`Inkompatibilis adatbázis (${context}): az adatbázis integritása sérült (PRAGMA integrity_check failed)!`);
+  }
+
+  // 2. Fejléc pragma-k ellenőrzése még bármilyen módosítás előtt
+  const appId = targetDb.pragma('application_id', { simple: true });
+  const userVersion = targetDb.pragma('user_version', { simple: true });
+
+  // 2.1. Idegen alkalmazásazonosító vizsgálata
+  if (appId !== 0 && appId !== OKOS_APPLICATION_ID) {
+    throw new Error(`Inkompatibilis adatbázis (${context}): az állomány idegen alkalmazásazonosítóval rendelkezik (application_id: ${appId})! Csak hivatalos Okoskodó vagy támogatott, még nem jelölt korábbi mentés fogadható el.`);
+  }
+
+  // 2.2. Újabb sémaverzió vizsgálata (nem engedünk downgrade-et vagy elavult kóddal futtatást)
+  if (userVersion > CURRENT_SCHEMA_VERSION) {
+    throw new Error(`Inkompatibilis adatbázis (${context}): az adatbázis újabb sémaverziójú (${userVersion}), mint a jelenleg futó Okoskodó szoftver (${CURRENT_SCHEMA_VERSION})! Kérjük, frissítse az alkalmazást a legfrissebb kiadásra!`);
+  }
+
+  // 3. Tartalmi és táblastruktúra ellenőrzés (ha már nem üres adatbázis)
+  const existingTables = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(t => t.name);
+  if (existingTables.length > 0) {
+    // Ha jelölés nélküli (appId === 0) vagy korábbi verziójú mentés: ellenőrizzük a magtáblákat
+    const requiredCoreTables = ['quizzes', 'questions', 'students', 'sessions', 'participants', 'answers'];
+    for (const t of requiredCoreTables) {
+      if (!existingTables.includes(t)) {
+        throw new Error(`Inkompatibilis adatbázis (${context}): az adatbázis nem egy érvényes Okoskodó adatbázis (a kötelező '${t}' alaptábla hiányzik)!`);
+      }
+    }
+
+    // Magtáblák kötelező oszlop-ujjlenyomatának ellenőrzése
+    const checkTableCols = (tableName, requiredCols) => {
+      const cols = targetDb.prepare(`PRAGMA table_info(${tableName})`).all().map(c => c.name);
+      for (const col of requiredCols) {
+        if (!cols.includes(col)) {
+          throw new Error(`Inkompatibilis adatbázis (${context}): az adatbázis '${tableName}' táblája érvénytelen (a kötelező '${col}' oszlop hiányzik)!`);
+        }
+      }
+    };
+
+    checkTableCols('quizzes', ['title', 'subject_id', 'subject_grade']);
+    checkTableCols('questions', ['quiz_id', 'question_type', 'points']);
+    checkTableCols('students', ['class_name', 'student_name']);
+    checkTableCols('sessions', ['quiz_id', 'status', 'mode']);
+    checkTableCols('participants', ['session_id', 'student_name']);
+    checkTableCols('answers', ['session_id', 'participant_id', 'question_id', 'points_earned']);
+  }
+
+  return { appId, userVersion };
+}
 
 // Proxy wrapper a futásidejű biztonsági mentés visszatöltéséhez (Hot-Reload)
 const db = new Proxy({}, {
@@ -46,6 +107,15 @@ const db = new Proxy({}, {
     if (prop === 'applyPragmas') {
       return applyPragmas;
     }
+    if (prop === 'validateDatabaseCompatibility') {
+      return validateDatabaseCompatibility;
+    }
+    if (prop === 'OKOS_APPLICATION_ID') {
+      return OKOS_APPLICATION_ID;
+    }
+    if (prop === 'CURRENT_SCHEMA_VERSION') {
+      return CURRENT_SCHEMA_VERSION;
+    }
     const val = currentDb[prop];
     if (typeof val === 'function') {
       return val.bind(currentDb);
@@ -59,6 +129,9 @@ const db = new Proxy({}, {
  * @param {Database} targetDb - A migrálandó SQLite adatbázis kapcsolat
  */
 function migrateDatabase(targetDb = currentDb) {
+  // 0. Kompatibilitás és sémaverzió ellenőrzése a migráció előtt (Report 20)
+  validateDatabaseCompatibility(targetDb, { context: 'migráció' });
+
   const schemaPath = path.join(__dirname, '..', '..', 'DATABASE_SCHEMA.sql');
   const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 
@@ -84,6 +157,18 @@ function migrateDatabase(targetDb = currentDb) {
       const hasIsDeleted = quizColumns.some(c => c.name === 'is_deleted');
       if (!hasIsDeleted) {
         targetDb.prepare('ALTER TABLE quizzes ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0').run();
+      }
+      const hasLockedAt = quizColumns.some(c => c.name === 'locked_at');
+      if (!hasLockedAt) {
+        targetDb.prepare('ALTER TABLE quizzes ADD COLUMN locked_at DATETIME DEFAULT NULL').run();
+      }
+      const hasCreatedAt = quizColumns.some(c => c.name === 'created_at');
+      if (!hasCreatedAt) {
+        targetDb.prepare('ALTER TABLE quizzes ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP').run();
+      }
+      const hasUpdatedAt = quizColumns.some(c => c.name === 'updated_at');
+      if (!hasUpdatedAt) {
+        targetDb.prepare('ALTER TABLE quizzes ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP').run();
       }
     }
   } catch (err) {
@@ -113,6 +198,35 @@ function migrateDatabase(targetDb = currentDb) {
     const partTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='participants'").get();
     if (partTable) {
       const partCols = targetDb.prepare('PRAGMA table_info(participants)').all();
+      const hasPcNumber = partCols.some(c => c.name === 'pc_number');
+      if (!hasPcNumber) {
+        targetDb.prepare('ALTER TABLE participants ADD COLUMN pc_number INTEGER DEFAULT NULL').run();
+      }
+      const hasQuestionOrder = partCols.some(c => c.name === 'question_order_json');
+      if (!hasQuestionOrder) {
+        targetDb.prepare("ALTER TABLE participants ADD COLUMN question_order_json TEXT DEFAULT '[]'").run();
+      }
+      const hasTeamColor = partCols.some(c => c.name === 'team_color');
+      if (!hasTeamColor) {
+        targetDb.prepare('ALTER TABLE participants ADD COLUMN team_color TEXT DEFAULT NULL').run();
+      }
+      const hasFocusLost = partCols.some(c => c.name === 'focus_lost_count');
+      if (!hasFocusLost) {
+        targetDb.prepare('ALTER TABLE participants ADD COLUMN focus_lost_count INTEGER DEFAULT 0').run();
+      }
+      const hasIsFinished = partCols.some(c => c.name === 'is_finished');
+      if (!hasIsFinished) {
+        targetDb.prepare('ALTER TABLE participants ADD COLUMN is_finished INTEGER DEFAULT 0').run();
+      }
+      const hasDeadlineAt = partCols.some(c => c.name === 'deadline_at');
+      if (!hasDeadlineAt) {
+        targetDb.prepare('ALTER TABLE participants ADD COLUMN deadline_at DATETIME DEFAULT NULL').run();
+      }
+      const hasFinishedAt = partCols.some(c => c.name === 'finished_at');
+      if (!hasFinishedAt) {
+        targetDb.prepare('ALTER TABLE participants ADD COLUMN finished_at DATETIME DEFAULT NULL').run();
+      }
+
       const studentIdCol = partCols.find(c => c.name === 'student_id');
       if (studentIdCol && studentIdCol.notnull === 1) {
         targetDb.pragma('foreign_keys = OFF');
@@ -213,8 +327,43 @@ function migrateDatabase(targetDb = currentDb) {
     console.error('Hiba a questions.instructions migrációjakor:', err);
   }
 
+  // 7. Answers tábla defenzív migrációja régebbi mentésekhez
+  try {
+    const ansTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='answers'").get();
+    if (ansTable) {
+      const ansCols = targetDb.prepare('PRAGMA table_info(answers)').all();
+      const hasOriginalPoints = ansCols.some(c => c.name === 'original_points_earned');
+      if (!hasOriginalPoints) {
+        targetDb.prepare('ALTER TABLE answers ADD COLUMN original_points_earned REAL NOT NULL DEFAULT 0.0').run();
+        targetDb.prepare('UPDATE answers SET original_points_earned = points_earned').run();
+      }
+      const hasOverridden = ansCols.some(c => c.name === 'is_manually_overridden');
+      if (!hasOverridden) {
+        targetDb.prepare('ALTER TABLE answers ADD COLUMN is_manually_overridden INTEGER DEFAULT 0').run();
+      }
+      const hasOverriddenAt = ansCols.some(c => c.name === 'overridden_at');
+      if (!hasOverriddenAt) {
+        targetDb.prepare('ALTER TABLE answers ADD COLUMN overridden_at DATETIME DEFAULT NULL').run();
+      }
+      const hasTimeSpent = ansCols.some(c => c.name === 'time_spent_sec');
+      if (!hasTimeSpent) {
+        targetDb.prepare('ALTER TABLE answers ADD COLUMN time_spent_sec INTEGER DEFAULT 0').run();
+      }
+      const hasAnsweredAt = ansCols.some(c => c.name === 'answered_at');
+      if (!hasAnsweredAt) {
+        targetDb.prepare('ALTER TABLE answers ADD COLUMN answered_at DATETIME DEFAULT CURRENT_TIMESTAMP').run();
+      }
+    }
+  } catch (err) {
+    console.error('Hiba az answers tábla migrációjakor:', err);
+  }
+
   // 7. Séma és frissített triggerek futtatása (Report 16-18)
   targetDb.exec(schemaSql);
+
+  // 8. Kizárólag a sikeres migráció legvégén rögzítjük az alkalmazás- és sémaverziót (Report 20)
+  targetDb.pragma(`application_id = ${OKOS_APPLICATION_ID}`);
+  targetDb.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
 }
 
 /**
@@ -328,8 +477,14 @@ if (require.main === module) {
 
 db.migrateDatabase = migrateDatabase;
 db.applyPragmas = applyPragmas;
+db.validateDatabaseCompatibility = validateDatabaseCompatibility;
+db.OKOS_APPLICATION_ID = OKOS_APPLICATION_ID;
+db.CURRENT_SCHEMA_VERSION = CURRENT_SCHEMA_VERSION;
 
 module.exports = db;
 module.exports.migrateDatabase = migrateDatabase;
 module.exports.applyPragmas = applyPragmas;
+module.exports.validateDatabaseCompatibility = validateDatabaseCompatibility;
+module.exports.OKOS_APPLICATION_ID = OKOS_APPLICATION_ID;
+module.exports.CURRENT_SCHEMA_VERSION = CURRENT_SCHEMA_VERSION;
 

@@ -4,6 +4,34 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.31.0] – 2026-11-21
+
+### Report 20 megállapítások: Központi sémapolitika és fejléc-kompatibilitás (application_id és user_version), újabb sémák és idegen alkalmazások elutasítása, valamint támogatott jelölés nélküli korábbi mentések migrációja
+
+Kiemelt tantermi adatintegritási, formátumbiztonsági és visszaállítás-védelmi kiadás a független szakértői felülvizsgálat (Report 20) megállapításainak maradéktalan orvoslására. A rendszer-visszaállítás (Restore) és a normál szerverindítás mostantól egy közös, szigorú kompatibilitási eljárással (`validateDatabaseCompatibility`) dolgozik, amely még bármilyen írási vagy sémamódosítási művelet előtt kiolvassa és ellenőrzi az SQLite fejléc `PRAGMA application_id` és `PRAGMA user_version` mezőit. Egy jövőbeli, a futó szervernél újabb sémaverziójú (`user_version > CURRENT_SCHEMA_VERSION`), vagy idegen alkalmazásazonosítójú (`application_id !== 0 && application_id !== OKOS_APPLICATION_ID`) mentést vagy állományt a rendszer azonnal elutasít anélkül, hogy felülírná vagy lefelé degradálná (downgrade) a fejlécet, vagy módosítaná az aktív állományokat. Az `applyPragmas` függvényből és a `DATABASE_SCHEMA.sql` állományból kivezetésre került a fejléc automatikus és feltétel nélküli felülírása: a hivatalos formátumazonosító (`application_id = 1330335571`) és az aktuális sémaverzió (`user_version = 13100`) kizárólag a sikeres sémamigráció legvégén kerül beírásra. A jelölés nélküli régebbi (v1.26-os) mentések szerkezeti ujjlenyomatát a rendszer továbbra is automatikusan felismeri, sikeresen migrálja és a legfrissebb verzióra frissíti.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Központi sémapolitika és kompatibilitás-ellenőrzés (Report 20 / 1. pont):**
+  - **Fájlok:** [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js), [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js), [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql)
+  - Megvalósításra került a közös `validateDatabaseCompatibility` eljárás, amely az olvasási pre-check kapuban és a migráció legelején ellenőrzi az SQLite fejlécet és a magtáblák ujjlenyomatát.
+  - Az `applyPragmas` kizárólag a kapcsolat futásidejű beállításait kezeli (`WAL`, `NORMAL`, `foreign_keys = ON`), nem ír verziót.
+  - A `DATABASE_SCHEMA.sql` fájlból törlésre került a fix `PRAGMA application_id` és `user_version`.
+  - A sémaverzió és formátumazonosító beírása kizárólag a `migrateDatabase` sikeres lefutása után történik meg.
+
+* **Dokumentáció és verziójelölés pontosítása (Report 20 / 3. pont):**
+  - **Fájl:** [`Source/Valasz_a_Report_19_Megallapitasokra.md`](file:///d:/dev/Röpdolgozat%20program/Source/Valasz_a_Report_19_Megallapitasokra.md)
+  - Javításra került a szövegtörzsben szereplő `12900`-as sémaverzió-hivatkozás `13000`-re.
+
+* **5 új és kibővített integrációs teszt (27–31. teszt) a tesztcsomagban (Report 20 / 1–2. fejezet):**
+  - **Fájl:** [`scratch/test_report14_fixes.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_report14_fixes.js)
+  - A 27. teszt kibővült az aktív adatbázis SHA-256 ellenőrző összegének változatlanság-ellenőrzésével.
+  - 28. teszt: Újabb sémaverziójú mentés (`user_version = 13200`) elutasítása a pre-check által; igazolva, hogy a fejléc nem degradálódik, és az aktív adatbázis SHA-256 hash-e bitre azonos marad.
+  - 29. teszt: Idegen alkalmazásazonosítójú (`application_id = 999999`) mentés elutasítása a pre-check által.
+  - 30. teszt: Támogatott, jelölés nélküli v1.26 mentés felismerése, migrálása és sémaverzió-frissítése.
+  - 31. teszt: Induláskori védelem közvetlen igazolása (`init.js`), elutasítás újabb sémaverzió esetén.
+
+---
+
 ## [1.30.0] – 2026-11-21
 
 ### Report 19 megállapítások: Mentések előzetes azonosítása még a migráció előtt (kétlépcsős szerkezeti kapu), SQLite formátum- és alkalmazásvédelem (application_id), sorrendhelyes restore teszt és 100%-ban elszigetelt átmeneti tesztfájlok

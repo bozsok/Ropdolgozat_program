@@ -32,7 +32,7 @@ A Report 19 megállapításait maradéktalanul feldolgoztuk és elhárítottuk:
      - Ellenőrizzük a magtáblák specifikus oszlop-ujjlenyomatát (`quizzes.title`, `questions.points`, `students.class_name`, `sessions.mode`, `answers.points_earned`).
      - Ha bármelyik hiányzik, azonnal kivételt dobunk:  
        *„Inkompatibilis mentésfájl: az adatbázis nem egy érvényes Okoskodó mentés!”*
-  2. A [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql) és a [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js) kiegészült a hivatalos `PRAGMA application_id = 1330335571;` (ASCII: 'OKOS') és a `PRAGMA user_version = 12900;` jelöléssel az újabb mentések azonnali felismertetésére.
+  2. A [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql) és a [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js) kiegészült a hivatalos `PRAGMA application_id = 1330335571;` (ASCII: 'OKOS') és a `PRAGMA user_version = 13000;` jelöléssel az újabb mentések azonnali felismertetésére.
   3. A migráció kizárólag a sikeres előzetes azonosítás után, a második fázisban fut le, amelyet a záró foreign-key és trigger-ellenőrzés követ.
 * **Igazolás (27. teszt):**  
   A szintetikus tesztben létrehoztunk egy idegen SQLite adatbázist (`chrome_history` táblával). A `restoreSystemBackup` már az előzetes ellenőrzés során, a migráció és az aktív adatbázis érintése nélkül elutasította azt.

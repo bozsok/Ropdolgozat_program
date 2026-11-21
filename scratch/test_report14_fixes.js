@@ -1003,9 +1003,10 @@ assert.ok(legacyMatrix !== null, 'A tanári mátrix nem nyílt meg!');
 assert.strictEqual(legacyMatrix.participants[0].total_points, 2.0, 'A diák pontszáma sérült!');
 console.log('✓ Pillanatkép nélküli régi dolgozatnál a sablon törlése után a diák és tanári eredmény hibátlanul megnyílik');
 
-// 27. TESZT: Idegen SQLite adatbázis azonnali elutasítása a migráció előtt (Report 19 / 1. tétel)
-console.log('\n--- 27. TESZT: Idegen SQLite adatbázis azonnali elutasítása a pre-check által (Report 19 / 1. tétel) ---');
+// 27. TESZT: Idegen SQLite adatbázis azonnali elutasítása a migráció előtt és aktív DB épsége (Report 19 / 1. tétel & Report 20)
+console.log('\n--- 27. TESZT: Idegen SQLite adatbázis azonnali elutasítása a pre-check által (Report 19 / 1. tétel & Report 20) ---');
 const archiver = require('archiver');
+const crypto = require('crypto');
 const foreignDbPath = path.join(path.dirname(testDbPath), 'foreign_fake.db');
 const foreignZipPath = path.join(path.dirname(testDbPath), 'foreign_backup.zip');
 
@@ -1027,62 +1028,308 @@ await new Promise((resolve, reject) => {
   foreignArchive.finalize();
 });
 
+const hashBefore27 = crypto.createHash('sha256').update(fs.readFileSync(testDbPath)).digest('hex');
 let foreignRejected = false;
 try {
   backup.restoreSystemBackup(foreignZipPath);
 } catch (err) {
   foreignRejected = true;
-  assert.ok(err.message.includes('Inkompatibilis mentésfájl'), 'Nem a várt inkompatibilitási hiba: ' + err.message);
+  assert.ok(err.message.includes('Inkompatibilis'), 'Nem a várt inkompatibilitási hiba: ' + err.message);
 }
 assert.strictEqual(foreignRejected, true, 'Az idegen SQLite adatbázist engedte visszaállítani!');
-console.log('✓ Az idegen SQLite adatbázist a rendszer már a migráció előtt, az aktív adatok érintése nélkül szigorúan elutasította');
+
+// Igazoljuk, hogy az aktív adatbázis bájtra érintetlen maradt
+const hashAfter27 = crypto.createHash('sha256').update(fs.readFileSync(testDbPath)).digest('hex');
+assert.strictEqual(hashBefore27, hashAfter27, 'Az aktív adatbázis SHA-256 ellenőrző összege megváltozott!');
+console.log('✓ Az idegen SQLite adatbázist a pre-check elutasította, az aktív adatbázis SHA-256 ellenőrző összege bájtra változatlan');
 
 try { fs.unlinkSync(foreignDbPath); } catch {}
 try { fs.unlinkSync(foreignZipPath); } catch {}
 
-sessionRepo.deleteSession(triggerSession.id);
-sessionRepo.deleteSession(legacySession.id);
-db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(restoreQuiz.id);
-db.prepare('DELETE FROM quizzes WHERE id = ?').run(restoreQuiz.id);
-db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(legacyQuiz.id);
-db.prepare('DELETE FROM quizzes WHERE id = ?').run(legacyQuiz.id);
+// 28. TESZT: Újabb sémaverziójú mentés elutasítása a pre-check által és fejléc-védelem (Report 20 / 1. pont)
+console.log('\n--- 28. TESZT: Újabb sémaverziójú mentés elutasítása a pre-check által (Report 20 / 1. pont) ---');
+const newerDbPath = path.join(path.dirname(testDbPath), 'newer_fake.db');
+const newerZipPath = path.join(path.dirname(testDbPath), 'newer_backup.zip');
+const futureSchemaVersion = db.CURRENT_SCHEMA_VERSION + 100; // pl. 13200
+
+const newerDb = new Database(newerDbPath);
+newerDb.pragma('journal_mode = WAL');
+newerDb.pragma(`application_id = ${db.OKOS_APPLICATION_ID}`);
+newerDb.pragma(`user_version = ${futureSchemaVersion}`);
+newerDb.exec(`
+  CREATE TABLE quizzes (id INTEGER PRIMARY KEY, title TEXT, subject_id INTEGER, subject_grade TEXT);
+  CREATE TABLE questions (id INTEGER PRIMARY KEY, quiz_id INTEGER, question_type TEXT, points REAL);
+  CREATE TABLE students (id INTEGER PRIMARY KEY, class_name TEXT, student_name TEXT);
+  CREATE TABLE sessions (id INTEGER PRIMARY KEY, quiz_id INTEGER, status TEXT, mode TEXT);
+  CREATE TABLE participants (id INTEGER PRIMARY KEY, session_id INTEGER, student_name TEXT);
+  CREATE TABLE answers (id INTEGER PRIMARY KEY, session_id INTEGER, participant_id INTEGER, question_id INTEGER, points_earned REAL);
+`);
+newerDb.close();
+
+const newerArchive = archiver('zip', { zlib: { level: 9 } });
+await new Promise((resolve, reject) => {
+  const ws = fs.createWriteStream(newerZipPath);
+  newerArchive.pipe(ws);
+  ws.on('finish', resolve);
+  ws.on('error', reject);
+  newerArchive.file(newerDbPath, { name: 'data/ropdolgozat.db' });
+  newerArchive.finalize();
+});
+
+const hashBefore28 = crypto.createHash('sha256').update(fs.readFileSync(testDbPath)).digest('hex');
+let newerRejected = false;
+try {
+  backup.restoreSystemBackup(newerZipPath);
+} catch (err) {
+  newerRejected = true;
+  assert.ok(err.message.includes('újabb sémaverziójú'), 'Nem a várt újabb sémaverziós hibaüzenet: ' + err.message);
+}
+assert.strictEqual(newerRejected, true, 'Az újabb sémaverziójú mentést engedte visszaállítani!');
+
+// Fejléc vizsgálata: a forrásban lévő adatbázis user_version-je nem degradálódhatott
+const checkNewerDb = new Database(newerDbPath, { readonly: true });
+const readUserVer = checkNewerDb.pragma('user_version', { simple: true });
+checkNewerDb.close();
+assert.strictEqual(readUserVer, futureSchemaVersion, 'A mentésfájlban a user_version átíródott / degradálódott!');
+
+const hashAfter28 = crypto.createHash('sha256').update(fs.readFileSync(testDbPath)).digest('hex');
+assert.strictEqual(hashBefore28, hashAfter28, 'Az aktív adatbázis hash-e megváltozott a 28. teszt során!');
+console.log('✓ Az újabb sémaverziójú mentést a rendszer szigorúan elutasította, az eredeti fejléc nem módosult');
+
+try { fs.unlinkSync(newerDbPath); } catch {}
+try { fs.unlinkSync(newerZipPath); } catch {}
+
+// 29. TESZT: Idegen alkalmazásazonosítójú adatbázis elutasítása a pre-check által (Report 20 / 1. pont)
+console.log('\n--- 29. TESZT: Idegen alkalmazásazonosító elutasítása a pre-check által (Report 20 / 1. pont) ---');
+const alienAppDbPath = path.join(path.dirname(testDbPath), 'alien_app_fake.db');
+const alienAppZipPath = path.join(path.dirname(testDbPath), 'alien_app_backup.zip');
+
+const alienAppDb = new Database(alienAppDbPath);
+alienAppDb.pragma(`application_id = 999999`);
+alienAppDb.pragma(`user_version = 13000`);
+alienAppDb.exec(`
+  CREATE TABLE quizzes (id INTEGER PRIMARY KEY, title TEXT, subject_id INTEGER, subject_grade TEXT);
+  CREATE TABLE questions (id INTEGER PRIMARY KEY, quiz_id INTEGER, question_type TEXT, points REAL);
+  CREATE TABLE students (id INTEGER PRIMARY KEY, class_name TEXT, student_name TEXT);
+  CREATE TABLE sessions (id INTEGER PRIMARY KEY, quiz_id INTEGER, status TEXT, mode TEXT);
+  CREATE TABLE participants (id INTEGER PRIMARY KEY, session_id INTEGER, student_name TEXT);
+  CREATE TABLE answers (id INTEGER PRIMARY KEY, session_id INTEGER, participant_id INTEGER, question_id INTEGER, points_earned REAL);
+`);
+alienAppDb.close();
+
+const alienArchive = archiver('zip', { zlib: { level: 9 } });
+await new Promise((resolve, reject) => {
+  const ws = fs.createWriteStream(alienAppZipPath);
+  alienArchive.pipe(ws);
+  ws.on('finish', resolve);
+  ws.on('error', reject);
+  alienArchive.file(alienAppDbPath, { name: 'data/ropdolgozat.db' });
+  alienArchive.finalize();
+});
+
+let alienAppRejected = false;
+try {
+  backup.restoreSystemBackup(alienAppZipPath);
+} catch (err) {
+  alienAppRejected = true;
+  assert.ok(err.message.includes('idegen alkalmazásazonosító'), 'Nem a várt idegen appId hiba: ' + err.message);
+}
+assert.strictEqual(alienAppRejected, true, 'Az idegen alkalmazásazonosítójú mentést engedte visszaállítani!');
+console.log('✓ Az idegen alkalmazásazonosítójú mentést a rendszer azonnal elutasította a migráció előtt');
+
+try { fs.unlinkSync(alienAppDbPath); } catch {}
+try { fs.unlinkSync(alienAppZipPath); } catch {}
+
+// 30. TESZT: Támogatott, jelölés nélküli v1.26 mentés sikeres felismerése és migrációja (Report 20)
+console.log('\n--- 30. TESZT: Támogatott, jelölés nélküli v1.26 mentés sikeres felismerése és migrációja (Report 20) ---');
+const legacyV26DbPath = path.join(path.dirname(testDbPath), 'legacy_v26.db');
+const legacyV26ZipPath = path.join(path.dirname(testDbPath), 'legacy_v26_backup.zip');
+
+const legacyV26Db = new Database(legacyV26DbPath);
+legacyV26Db.pragma('application_id = 0');
+legacyV26Db.pragma('user_version = 0');
+legacyV26Db.exec(`
+  CREATE TABLE subjects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, is_default INTEGER DEFAULT 0);
+  INSERT INTO subjects (id, name, is_default) VALUES (1, 'Digitális kultúra', 1);
+  CREATE TABLE students (id INTEGER PRIMARY KEY AUTOINCREMENT, class_name TEXT NOT NULL, student_name TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  INSERT INTO students (class_name, student_name) VALUES ('6.a', 'V26 Tanuló');
+  CREATE TABLE quizzes (id INTEGER PRIMARY KEY AUTOINCREMENT, subject_id INTEGER NOT NULL, title TEXT NOT NULL, subject_grade TEXT DEFAULT '', default_time_limit_min INTEGER DEFAULT 0, locked_at DATETIME DEFAULT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  INSERT INTO quizzes (id, subject_id, title, subject_grade) VALUES (99, 1, 'V26 Kvíz', '6');
+  CREATE TABLE questions (id INTEGER PRIMARY KEY AUTOINCREMENT, quiz_id INTEGER NOT NULL, question_order INTEGER NOT NULL, question_type TEXT NOT NULL, question_text TEXT NOT NULL, image_path TEXT DEFAULT NULL, options_json TEXT DEFAULT '["A","B","C","D"]', correct_answer TEXT DEFAULT 'A', explanation TEXT DEFAULT '', points REAL NOT NULL DEFAULT 1.0);
+  INSERT INTO questions (id, quiz_id, question_order, question_type, question_text, image_path, options_json, correct_answer, explanation, points) VALUES (991, 99, 1, 'ABCD', 'Kérdés', NULL, '["A","B","C","D"]', 'A', 'Helyes válasz', 4.0);
+  CREATE TABLE sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_id INTEGER NOT NULL DEFAULT 1,
+    grade_level TEXT NOT NULL,
+    quiz_id INTEGER NOT NULL,
+    class_name TEXT DEFAULT '',
+    mode TEXT NOT NULL DEFAULT 'STUDENT_PACED',
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    time_limit_min INTEGER DEFAULT 0,
+    shuffle_questions INTEGER DEFAULT 0,
+    shuffle_options INTEGER DEFAULT 0,
+    show_feedback_on_end INTEGER DEFAULT 1,
+    current_question_index INTEGER DEFAULT 0,
+    grade_thresholds_json TEXT NOT NULL DEFAULT '{"2":30,"3":55,"4":75,"5":90}',
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ended_at DATETIME DEFAULT NULL
+  );
+  CREATE TABLE participants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    student_id INTEGER DEFAULT NULL,
+    pc_number INTEGER DEFAULT NULL,
+    student_name TEXT NOT NULL,
+    session_token TEXT NOT NULL,
+    question_order_json TEXT DEFAULT '[]',
+    team_color TEXT DEFAULT NULL,
+    focus_lost_count INTEGER DEFAULT 0,
+    is_finished INTEGER DEFAULT 0,
+    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deadline_at DATETIME DEFAULT NULL,
+    finished_at DATETIME DEFAULT NULL
+  );
+  CREATE TABLE answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    participant_id INTEGER NOT NULL,
+    question_id INTEGER NOT NULL,
+    submitted_answer TEXT NOT NULL,
+    eval_status TEXT NOT NULL DEFAULT 'WRONG',
+    is_correct INTEGER NOT NULL DEFAULT 0,
+    points_earned REAL NOT NULL DEFAULT 0.0,
+    original_points_earned REAL NOT NULL DEFAULT 0.0,
+    is_manually_overridden INTEGER DEFAULT 0,
+    overridden_at DATETIME DEFAULT NULL,
+    time_spent_sec INTEGER DEFAULT 0,
+    answered_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TRIGGER trg_validate_answer_points_limit
+  BEFORE INSERT ON answers
+  FOR EACH ROW
+  BEGIN
+      SELECT CASE
+          WHEN NEW.points_earned > (SELECT points FROM questions WHERE id = NEW.question_id)
+          THEN RAISE(ABORT, 'A megszerzett pontszám nem lehet nagyobb a kérdés maximális pontszámánál!')
+      END;
+  END;
+`);
+legacyV26Db.close();
+
+const v26Archive = archiver('zip', { zlib: { level: 9 } });
+await new Promise((resolve, reject) => {
+  const ws = fs.createWriteStream(legacyV26ZipPath);
+  v26Archive.pipe(ws);
+  ws.on('finish', resolve);
+  ws.on('error', reject);
+  v26Archive.file(legacyV26DbPath, { name: 'data/ropdolgozat.db' });
+  v26Archive.finalize();
+});
+
+const v26RestoreResult = await backup.restoreSystemBackup(legacyV26ZipPath);
+assert.strictEqual(v26RestoreResult.success, true, 'A jelölés nélküli v1.26 mentés visszaállítása sikertelen!');
+
+// Ellenőrizzük az aktív adatbázisban a migráció eredményét:
+const activeAppId = db.prepare('PRAGMA application_id').get().application_id;
+const activeUserVer = db.prepare('PRAGMA user_version').get().user_version;
+assert.strictEqual(activeAppId, db.OKOS_APPLICATION_ID, 'Nem kapta meg az OKOS application_id-t!');
+assert.strictEqual(activeUserVer, db.CURRENT_SCHEMA_VERSION, 'Nem kapta meg a CURRENT_SCHEMA_VERSION-t!');
+
+// Ellenőrizzük, hogy a v1.26 mentés visszaállítása után működik a 4 pontos feladat sabloncsökkentés mellett (Report 20)
+const v26Session = sessionRepo.startSession({
+  subject_id: 1,
+  grade_level: '6',
+  quiz_id: 99,
+  class_name: '6.a',
+  mode: 'STUDENT_PACED'
+});
+
+// A tanár a feladattárban 1.0 pontra csökkenti a kérdést
+db.prepare('UPDATE questions SET points = 1.0 WHERE id = 991').run();
+
+// A diák belép és beküldi a választ
+const { participant: v26Part } = sessionRepo.joinSession({ session_id: v26Session.id, student_name: 'V26 Diák', pc_number: 2 });
+const v26AnsRes = sessionRepo.submitAnswer({ participant_id: v26Part.id, question_id: 991, submitted_answer: 'A' });
+assert.strictEqual(v26AnsRes.answer.points_earned, 4.0, 'Nem a 4.0 pont került jóváírásra a v1.26 restore után!');
+console.log('✓ A jelölés nélküli régi v1.26 mentést a rendszer felismerte, migrálta, és frissítette a fejléc-jelöléseket (4 pontos válasz működik)');
+
+try { fs.unlinkSync(legacyV26DbPath); } catch {}
+try { fs.unlinkSync(legacyV26ZipPath); } catch {}
+
+// 31. TESZT: Induláskori séma- és verzióvédelem közvetlen ellenőrzése (Report 20 / 1. pont)
+console.log('\n--- 31. TESZT: Induláskori kompatibilitás-védelem közvetlen ellenőrzése (Report 20 / 1. pont) ---');
+const testCompatDbPath = path.join(path.dirname(testDbPath), 'test_compat.db');
+const testCompatDb = new Database(testCompatDbPath);
+testCompatDb.pragma('application_id = 1330335571');
+testCompatDb.pragma('user_version = 99999'); // Jövőbeli sémaverzió
+testCompatDb.exec(`CREATE TABLE quizzes (id INTEGER PRIMARY KEY, title TEXT, subject_id INTEGER, subject_grade TEXT);`);
+testCompatDb.close();
+
+const readCompatDb = new Database(testCompatDbPath);
+let compatErrorThrown = false;
+try {
+  db.validateDatabaseCompatibility(readCompatDb, { context: 'indítás' });
+} catch (err) {
+  compatErrorThrown = true;
+  assert.ok(err.message.includes('újabb sémaverziójú'), 'Nem a várt hiba: ' + err.message);
+} finally {
+  readCompatDb.close();
+}
+assert.strictEqual(compatErrorThrown, true, 'Az indításkori újabb verzió nem dobott hibát!');
+
+// Fejléc érintetlenségének igazolása
+const verifyDb = new Database(testCompatDbPath, { readonly: true });
+const keptUserVersion = verifyDb.pragma('user_version', { simple: true });
+verifyDb.close();
+assert.strictEqual(keptUserVersion, 99999, 'Az indításkori ellenőrzés átírta a user_version-t!');
+console.log('✓ Az indításkori kompatibilitás-védelem az újabb sémaverziójú adatbázist megállítja és a fejléc érintetlen marad');
+
+try { fs.unlinkSync(testCompatDbPath); } catch {}
+
+try { sessionRepo.deleteSession(triggerSession.id); } catch {}
+try { sessionRepo.deleteSession(legacySession.id); } catch {}
+try { sessionRepo.deleteSession(v26Session.id); } catch {}
+try { db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(restoreQuiz.id); } catch {}
+try { db.prepare('DELETE FROM quizzes WHERE id = ?').run(restoreQuiz.id); } catch {}
+try { db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(legacyQuiz.id); } catch {}
+try { db.prepare('DELETE FROM quizzes WHERE id = ?').run(legacyQuiz.id); } catch {}
 
 // Takarítás a tesztadatok után
-sessionRepo.deleteSession(multiPointSession.id);
-quizRepo.deleteQuiz(multiPointQuiz.id);
-sessionRepo.deleteSession(twoQSession.id);
-quizRepo.deleteQuiz(twoQQuiz.id);
-sessionRepo.deleteSession(liveEditSession.id);
-db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(liveEditQuiz.id);
-db.prepare('DELETE FROM quizzes WHERE id = ?').run(liveEditQuiz.id);
-sessionRepo.deleteSession(spaceIsoSession.id);
-quizRepo.deleteQuiz(spaceIsoQuiz.id);
+try { sessionRepo.deleteSession(multiPointSession.id); } catch {}
+try { quizRepo.deleteQuiz(multiPointQuiz.id); } catch {}
+try { sessionRepo.deleteSession(twoQSession.id); } catch {}
+try { quizRepo.deleteQuiz(twoQQuiz.id); } catch {}
+try { sessionRepo.deleteSession(liveEditSession.id); } catch {}
+try { db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(liveEditQuiz.id); } catch {}
+try { db.prepare('DELETE FROM quizzes WHERE id = ?').run(liveEditQuiz.id); } catch {}
+try { sessionRepo.deleteSession(spaceIsoSession.id); } catch {}
+try { quizRepo.deleteQuiz(spaceIsoQuiz.id); } catch {}
 
 // Takarítás a tesztadatok után
-sessionRepo.deleteSession(snapSession.id);
-quizRepo.deleteQuiz(snapQuiz.id);
-sessionRepo.deleteSession(emptyRaceSession.id);
-quizRepo.deleteQuiz(emptyRaceQuiz.id);
-quizRepo.deleteQuiz(noKeyQuiz.id);
+try { sessionRepo.deleteSession(snapSession.id); } catch {}
+try { quizRepo.deleteQuiz(snapQuiz.id); } catch {}
+try { sessionRepo.deleteSession(emptyRaceSession.id); } catch {}
+try { quizRepo.deleteQuiz(emptyRaceQuiz.id); } catch {}
+try { quizRepo.deleteQuiz(noKeyQuiz.id); } catch {}
 
 // Takarítás a tesztadatok után
-sessionRepo.deleteSession(retrySession.id);
-quizRepo.deleteQuiz(retryQuiz.id);
-sessionRepo.deleteSession(testSession.id);
-sessionRepo.deleteSession(sessionHistory.id);
-sessionRepo.deleteSession(spaceSession.id);
-sessionRepo.deleteSession(xssSession.id);
-quizRepo.deleteQuiz(testQuiz.id);
-quizRepo.deleteQuiz(quizHistory.id);
-quizRepo.deleteQuiz(spaceQuiz.id);
-quizRepo.deleteQuiz(xssQuiz.id);
+try { sessionRepo.deleteSession(retrySession.id); } catch {}
+try { quizRepo.deleteQuiz(retryQuiz.id); } catch {}
+try { sessionRepo.deleteSession(testSession.id); } catch {}
+try { sessionRepo.deleteSession(sessionHistory.id); } catch {}
+try { sessionRepo.deleteSession(spaceSession.id); } catch {}
+try { sessionRepo.deleteSession(xssSession.id); } catch {}
+try { quizRepo.deleteQuiz(testQuiz.id); } catch {}
+try { quizRepo.deleteQuiz(quizHistory.id); } catch {}
+try { quizRepo.deleteQuiz(spaceQuiz.id); } catch {}
+try { quizRepo.deleteQuiz(xssQuiz.id); } catch {}
 try { db.__close(); } catch {}
 if (fs.existsSync(testDbPath)) { try { fs.unlinkSync(testDbPath); } catch {} }
 if (fs.existsSync(testDbPath + '-wal')) { try { fs.unlinkSync(testDbPath + '-wal'); } catch {} }
 if (fs.existsSync(testDbPath + '-shm')) { try { fs.unlinkSync(testDbPath + '-shm'); } catch {} }
 if (fs.existsSync(testUploadsDir)) { try { fs.rmSync(testUploadsDir, { recursive: true, force: true }); } catch {} }
 
-console.log('\n🎉 MINDEN REPORT 14-19 TESZT SIKERESEN LEFUTOTT! 🎉\n');
+console.log('\n🎉 MINDEN REPORT 14-20 TESZT SIKERESEN LEFUTOTT! 🎉\n');
 })().catch(err => {
   console.error('Kritikus teszthiba:', err);
   process.exit(1);
