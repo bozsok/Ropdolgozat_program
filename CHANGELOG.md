@@ -4,6 +4,29 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.34.2] – 2026-11-21
+
+### DH 01 záró javítás: Átirányított helyreállítási mappák fizikai feloldása és rövidített diagnosztikai export egyértelmű jelzése
+
+A [`Source/dh_01.md`](file:///d:/dev/Röpdolgozat%20program/Source/dh_01.md) két fennmaradó elfogadási feltételének végleges lezárása, SQLite-sémamódosítás nélkül.
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Átirányított helyreállítási mappák tényleges fizikai céljának feloldása (`src/services/diagnostics.js`):**
+  - **Fájl:** [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js)
+  - A `validateDirectory()` a diagnosztikai cél mellett a `_restore_snapshots` és a `dbDir` alatti létező `temp_restore_*` gyökerek tényleges fizikai célját is feloldja (`resolvePhysicalPath()`), így Windows-csomópont (`junction`) esetén is elutasítja az átfedő célokat és leszármazottaikat.
+
+* **Méretkorlát miatt rövidített export egyértelmű jelzése (`config.js`, `src/services/diagnostics.js`, `src/routes/api.js`, `public/js/admin.js`):**
+  - **Fájlok:** [`config.js`](file:///d:/dev/Röpdolgozat%20program/config.js), [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Új konfigurációs opció (`DIAGNOSTICS_MAX_EXPORT_BYTES`, alapértelmezett 25 MiB) és előzetes `inspectExport()` vizsgálat.
+  - A `GET /api/admin/diagnostics/export` végpont `X-Diagnostics-Export-Truncated: true|false` és `X-Diagnostics-Export-Max-Bytes` válaszfejléceket ad, rövidítés esetén pedig a fájlnévben is jelzi (`_reszleges.jsonl`).
+  - A tanári felület letöltőgombja (`#btn-download-diagnostics`) `fetch` + `Blob` letöltéssel észleli a rövidítést, és egyértelmű figyelmeztetést (`showAdminAlert`) jelenít meg a tanárnak.
+
+* **Célzott elfogadási próbák (`scratch/test_diagnostics.js`):**
+  - **Fájl:** [`scratch/test_diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_diagnostics.js)
+  - Kis méretkeretes (`350` bájt) HTTP export próba (`X-Diagnostics-Export-Truncated: true`, `_reszleges.jsonl`, érvényes JSONL sorok) és Windows-csomópontként létrehozott `_restore_snapshots` elutasításának automatizált igazolása.
+
+---
+
 ## [1.34.1] – 2026-11-21
 
 ### DH 01 javítási kiadás: Sorosított diagnosztikai író, szigorított kliensszerződés, pontos 24 órás export, teljes útvonalvédelem és határidős leállás

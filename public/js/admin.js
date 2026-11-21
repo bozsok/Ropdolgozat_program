@@ -4213,6 +4213,53 @@
       });
     }
 
+    // Diagnosztikai eseménynapló letöltése (részleges/rövidített export egyértelmű jelzésével)
+    const btnDownloadDiag = document.getElementById('btn-download-diagnostics');
+    if (btnDownloadDiag) {
+      btnDownloadDiag.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          const res = await fetch('/api/admin/diagnostics/export', { cache: 'no-store' });
+          if (!res.ok) {
+            let errText = 'Nem sikerült letölteni a diagnosztikai naplót.';
+            try {
+              const errData = await res.json();
+              if (errData && errData.error) errText = errData.error;
+            } catch {}
+            showAdminAlert('⚠️ Exportálási hiba', errText);
+            return;
+          }
+
+          const isTruncated = res.headers.get('X-Diagnostics-Export-Truncated') === 'true';
+          const disposition = res.headers.get('Content-Disposition') || '';
+          const nameMatch = disposition.match(/filename="([^"]+)"/);
+          const fileName = nameMatch ? nameMatch[1] : 'okoskodo_diagnostics.jsonl';
+
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+          if (isTruncated) {
+            showAdminAlert(
+              '⚠️ Részleges diagnosztikai export',
+              'Az eseménynapló mérete meghaladta az exportálási méretkorlátot, ezért a letöltött fájl csak részleges tartalmat tartalmaz (teljes sor határán lezárva).'
+            );
+          } else {
+            showSettingsToast('Diagnosztikai eseménynapló sikeresen letöltve!');
+          }
+        } catch (err) {
+          console.error('Hiba a diagnosztikai export letöltésekor:', err);
+          showAdminAlert('⚠️ Hálózati hiba', 'Nem sikerült letölteni a diagnosztikai naplót.');
+        }
+      });
+    }
+
     // Alapértelmezések visszaállítása gomb (modal megnyitása)
     const btnReset = document.getElementById('btn-reset-settings');
     if (btnReset) {

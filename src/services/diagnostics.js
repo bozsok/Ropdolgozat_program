@@ -375,7 +375,8 @@ class DiagnosticsFileWriter {
       const publicResolved = resolvePhysicalPath(customConfig.publicDir);
       const uploadsResolved = resolvePhysicalPath(customConfig.uploadsDir);
       const dbDirResolved = resolvePhysicalPath(path.dirname(path.resolve(customConfig.dbPath)));
-      const restoreSnapshotsResolved = path.join(dbDirResolved, '_restore_snapshots');
+      const restoreSnapshotsLogical = path.join(dbDirResolved, '_restore_snapshots');
+      const restoreSnapshotsResolved = resolvePhysicalPath(restoreSnapshotsLogical);
 
       // 1. Webgyökér (publicDir): mindkét irányú átfedés tiltott
       if (pathsOverlap(resolvedTarget, publicResolved)) {
@@ -391,8 +392,8 @@ class DiagnosticsFileWriter {
         return { valid: false, reason: this.configurationErrorReason };
       }
 
-      // 3. Adatbázis melletti _restore_snapshots fa: mindkét irányú átfedés tiltott (saját neve és minden alkönyvtára)
-      if (pathsOverlap(resolvedTarget, restoreSnapshotsResolved)) {
+      // 3. Adatbázis melletti _restore_snapshots fa (logikai ÉS fizikai célja, pl. Windows junction esetén is!)
+      if (pathsOverlap(resolvedTarget, restoreSnapshotsLogical) || pathsOverlap(resolvedTarget, restoreSnapshotsResolved)) {
         this.isConfigurationValid = false;
         this.configurationErrorReason = 'A diagnosztikai könyvtár nem fedheti át az adatbázis melletti _restore_snapshots könyvtárat!';
         return { valid: false, reason: this.configurationErrorReason };
@@ -405,7 +406,7 @@ class DiagnosticsFileWriter {
         return { valid: false, reason: this.configurationErrorReason };
       }
 
-      // 5. Adatbázis melletti temp_restore_* munkakönyvtárak és azok összes leszármazottja tiltott
+      // 5. Adatbázis melletti temp_restore_* munkakönyvtárak (logikai és fizikai célja, pl. junction) és leszármazottaik tiltása
       if (isEqualOrSubPath(resolvedTarget, dbDirResolved)) {
         const relFromDb = path.relative(normalizeForCompare(dbDirResolved), normalizeForCompare(resolvedTarget));
         const segments = relFromDb.split(path.sep).filter(Boolean);
@@ -414,6 +415,21 @@ class DiagnosticsFileWriter {
           this.configurationErrorReason = 'A diagnosztikai könyvtár nem mutathat temp_restore_* visszaállítási könyvtárra vagy annak alkönyvtárára!';
           return { valid: false, reason: this.configurationErrorReason };
         }
+      }
+      if (fs.existsSync(dbDirResolved)) {
+        try {
+          const dbEntries = fs.readdirSync(dbDirResolved);
+          for (const entryName of dbEntries) {
+            if (entryName.toLowerCase().startsWith('temp_restore_')) {
+              const tempRestorePhysical = resolvePhysicalPath(path.join(dbDirResolved, entryName));
+              if (pathsOverlap(resolvedTarget, tempRestorePhysical)) {
+                this.isConfigurationValid = false;
+                this.configurationErrorReason = 'A diagnosztikai könyvtár nem fedheti át egy átirányított temp_restore_* könyvtár célját!';
+                return { valid: false, reason: this.configurationErrorReason };
+              }
+            }
+          }
+        } catch {}
       }
 
       // További biztonsági ellenőrzés: ha bárhol az útvonalban _restore_snapshots vagy temp_restore_ szegmens szerepel
@@ -804,7 +820,7 @@ class DiagnosticsFileWriter {
 class DiagnosticsService {
   constructor(options = {}) {
     this.enabled = options.enabled !== undefined ? options.enabled : config.diagnosticsEnabled;
-    this.appVersion = packageJson.version || '1.34.1';
+    this.appVersion = packageJson.version || '1.34.2';
     this.runId = options.runId || crypto.randomBytes(16).toString('hex');
     this.startedAt = new Date().toISOString();
 
@@ -1194,21 +1210,20 @@ class DiagnosticsService {
   }
 
   /**
-   * Biztonságos, rekord-időbélyeg alapú, méretkorlátos és megszakítható exportfolyam (DH 01 / 3. fejezet)
+   * Export előzetes méret- és rövidítés-ellenőrzése (HTTP válaszfejléc pontos beállításához)
    */
-  createExportStream(options = 24) {
+  inspectExport(options = 24) {
     const opts = typeof options === 'number' ? { hours: options } : (options || {});
     const hours = opts.hours !== undefined ? opts.hours : 24;
     const exportNowMs = opts.nowMs !== undefined ? opts.nowMs : Date.now();
-    const maxExportBytes = opts.maxExportBytes !== undefined ? opts.maxExportBytes : 25 * 1024 * 1024;
+    const maxExportBytes = opts.maxExportBytes !== undefined
+      ? opts.maxExportBytes
+      : (parseInt(process.env.DIAGNOSTICS_MAX_EXPORT_BYTES || '', 10) || config.diagnosticsMaxExportBytes || 25 * 1024 * 1024);
     const cutoffMs = exportNowMs - (hours * 3600000);
 
-    // Kikapcsolt gyűjtésnél is kötelező a könyvtárvalidáció!
     const dirCheck = this.writer.validateDirectory();
     if (!dirCheck.valid || !fs.existsSync(this.writer.dir)) {
-      const emptyStream = new Readable({ read() { this.push(null); } });
-      emptyStream.truncated = false;
-      return emptyStream;
+      return { valid: dirCheck.valid, truncated: false, maxExportBytes, exportNowMs, validFiles: [] };
     }
 
     const validFiles = [];
@@ -1220,7 +1235,6 @@ class DiagnosticsService {
         try {
           const stats = fs.statSync(full);
           if (stats.size > 0) {
-            // Az aktív vagy meglevő fájl olvasása az export indulásakor rögzített fájlvégig tart
             validFiles.push({ full, mtimeMs: stats.mtimeMs, endByte: stats.size - 1 });
           }
         } catch {}
@@ -1228,6 +1242,88 @@ class DiagnosticsService {
     } catch {}
 
     validFiles.sort((a, b) => a.mtimeMs - b.mtimeMs);
+
+    // Gyors ellenőrzés: túllépik-e a 24 órás érvényes sorok a maxExportBytes keretet
+    let totalBytes = 0;
+    let truncated = false;
+    const totalFileSizes = validFiles.reduce((sum, f) => sum + f.endByte + 1, 0);
+
+    if (totalFileSizes > maxExportBytes) {
+      outer: for (const fileInfo of validFiles) {
+        try {
+          const fd = fs.openSync(fileInfo.full, 'r');
+          try {
+            const len = fileInfo.endByte + 1;
+            const buf = Buffer.alloc(len);
+            fs.readSync(fd, buf, 0, len, 0);
+            const lines = buf.toString('utf8').split('\n');
+            lines.pop(); // utolsó csonka sor eldobása
+            for (const rawLine of lines) {
+              const trimmed = rawLine.trim();
+              if (!trimmed) continue;
+              try {
+                const parsed = JSON.parse(trimmed);
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+                if (!isValidUtcIsoTimestamp(parsed.receivedAt)) continue;
+                const recMs = Date.parse(parsed.receivedAt);
+                if (recMs >= cutoffMs && recMs <= exportNowMs) {
+                  const lineBytes = Buffer.byteLength(trimmed + '\n', 'utf8');
+                  if (totalBytes + lineBytes > maxExportBytes) {
+                    truncated = true;
+                    break outer;
+                  }
+                  totalBytes += lineBytes;
+                }
+              } catch {}
+            }
+          } finally {
+            fs.closeSync(fd);
+          }
+        } catch {}
+      }
+    }
+
+    return { valid: true, truncated, maxExportBytes, exportNowMs, validFiles };
+  }
+
+  /**
+   * Biztonságos, rekord-időbélyeg alapú, méretkorlátos és megszakítható exportfolyam (DH 01 / 3. fejezet)
+   */
+  createExportStream(options = 24) {
+    const opts = typeof options === 'number' ? { hours: options } : (options || {});
+    const hours = opts.hours !== undefined ? opts.hours : 24;
+    const exportNowMs = opts.nowMs !== undefined ? opts.nowMs : Date.now();
+    const maxExportBytes = opts.maxExportBytes !== undefined
+      ? opts.maxExportBytes
+      : (parseInt(process.env.DIAGNOSTICS_MAX_EXPORT_BYTES || '', 10) || config.diagnosticsMaxExportBytes || 25 * 1024 * 1024);
+    const cutoffMs = exportNowMs - (hours * 3600000);
+
+    // Kikapcsolt gyűjtésnél is kötelező a könyvtárvalidáció!
+    const dirCheck = this.writer.validateDirectory();
+    if (!dirCheck.valid || !fs.existsSync(this.writer.dir)) {
+      const emptyStream = new Readable({ read() { this.push(null); } });
+      emptyStream.truncated = false;
+      return emptyStream;
+    }
+
+    const validFiles = Array.isArray(opts._precomputedFiles) ? opts._precomputedFiles.slice() : [];
+    if (validFiles.length === 0) {
+      try {
+        const entries = fs.readdirSync(this.writer.dir, { withFileTypes: true });
+        for (const ent of entries) {
+          if (!ent.isFile() || !LOG_FILE_REGEX.test(ent.name)) continue;
+          const full = path.join(this.writer.dir, ent.name);
+          try {
+            const stats = fs.statSync(full);
+            if (stats.size > 0) {
+              // Az aktív vagy meglevő fájl olvasása az export indulásakor rögzített fájlvégig tart
+              validFiles.push({ full, mtimeMs: stats.mtimeMs, endByte: stats.size - 1 });
+            }
+          } catch {}
+        }
+      } catch {}
+      validFiles.sort((a, b) => a.mtimeMs - b.mtimeMs);
+    }
 
     let fileIndex = 0;
     let currentReadStream = null;

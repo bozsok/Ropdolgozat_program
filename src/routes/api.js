@@ -1393,11 +1393,21 @@ router.get('/admin/diagnostics/export', requireAdminAuth, (req, res) => {
       });
     }
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="okoskodo_diagnostics_${timestamp}.jsonl"`);
+    const meta = diagnosticsService.inspectExport({ hours: 24 });
+    const timestamp = new Date(meta.exportNowMs).toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filenameSuffix = meta.truncated ? '_reszleges' : '';
 
-    const exportStream = diagnosticsService.createExportStream({ hours: 24 });
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="okoskodo_diagnostics_${timestamp}${filenameSuffix}.jsonl"`);
+    res.setHeader('X-Diagnostics-Export-Truncated', meta.truncated ? 'true' : 'false');
+    res.setHeader('X-Diagnostics-Export-Max-Bytes', String(meta.maxExportBytes));
+
+    const exportStream = diagnosticsService.createExportStream({
+      hours: 24,
+      nowMs: meta.exportNowMs,
+      maxExportBytes: meta.maxExportBytes,
+      _precomputedFiles: meta.validFiles
+    });
 
     const onClientClose = () => {
       if (!exportStream.destroyed) {

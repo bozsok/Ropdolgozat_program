@@ -747,6 +747,42 @@ function waitChildExit(child, timeoutMs = 8000) {
       abortStream.destroy();
     }
 
+    // 6f-2) Tényleges HTTP export végpont kis méretkerettel -> X-Diagnostics-Export-Truncated: true + _reszleges fájlnév
+    {
+      const prevMaxExp = process.env.DIAGNOSTICS_MAX_EXPORT_BYTES;
+      try {
+        process.env.DIAGNOSTICS_MAX_EXPORT_BYTES = '350';
+        const truncHttpRes = await httpRequest({
+          hostname: '127.0.0.1',
+          port: serverPort,
+          path: '/api/admin/diagnostics/export',
+          method: 'GET',
+          headers: { Cookie: adminCookie }
+        });
+        assert.strictEqual(truncHttpRes.status, 200);
+        assert.strictEqual(truncHttpRes.headers['x-diagnostics-export-truncated'], 'true', 'A rövidített export HTTP fejlécben jelezve van!');
+        assert.ok((truncHttpRes.headers['content-disposition'] || '').includes('_reszleges.jsonl'), 'A fájlnév jelzi a részleges exportot!');
+        assert.ok(Buffer.byteLength(truncHttpRes.rawBody, 'utf8') <= 350, 'A kimenet a méretkorláton belül marad!');
+        // Minden kiadott sor érvényes JSON objektum
+        const parsedTruncLines = truncHttpRes.rawBody.trim().split('\n').filter(Boolean).map(JSON.parse);
+        assert.ok(parsedTruncLines.length >= 1);
+      } finally {
+        if (prevMaxExp === undefined) delete process.env.DIAGNOSTICS_MAX_EXPORT_BYTES;
+        else process.env.DIAGNOSTICS_MAX_EXPORT_BYTES = prevMaxExp;
+      }
+
+      // Normál méretkeretnél X-Diagnostics-Export-Truncated: false
+      const fullHttpRes = await httpRequest({
+        hostname: '127.0.0.1',
+        port: serverPort,
+        path: '/api/admin/diagnostics/export',
+        method: 'GET',
+        headers: { Cookie: adminCookie }
+      });
+      assert.strictEqual(fullHttpRes.status, 200);
+      assert.strictEqual(fullHttpRes.headers['x-diagnostics-export-truncated'], 'false');
+    }
+
     // 6g) OWASP ellenőrzés a tényleges naplófájlokon
     const logFiles = fs.readdirSync(isolatedDiagnosticsDir).filter(f => f.endsWith('.log'));
     for (const lf of logFiles) {
@@ -784,14 +820,33 @@ function waitChildExit(child, timeoutMs = 8000) {
     assert.strictEqual(writerCheck.validateDirectory(path.join(dbParentDir, 'temp_restore_12345'), fakeCfg).valid, false);
     assert.strictEqual(writerCheck.validateDirectory(path.join(dbParentDir, 'temp_restore_12345', 'nested', 'diag'), fakeCfg).valid, false);
 
-    // Windows junction próba tiltott célra (publicDir)
+    // Windows junction próba tiltott célra (publicDir) és átirányított _restore_snapshots gyökérre
     const junctionPath = path.join(isolatedDir, 'diag_junction_to_public');
+    const externalSnapshotsTarget = path.join(isolatedDir, 'external_snapshots_target');
+    const restoreSnapshotsJunction = path.join(dbParentDir, '_restore_snapshots');
+    fs.mkdirSync(externalSnapshotsTarget, { recursive: true });
     try {
       fs.symlinkSync(fakeCfg.publicDir, junctionPath, 'junction');
       assert.strictEqual(writerCheck.validateDirectory(junctionPath, fakeCfg).valid, false, 'Tiltott célra mutató junction elutasítva!');
       fs.unlinkSync(junctionPath);
+
+      // Ha maga a _restore_snapshots egy másik könyvtárra mutató Windows-csomópont:
+      fs.symlinkSync(externalSnapshotsTarget, restoreSnapshotsJunction, 'junction');
+      assert.strictEqual(
+        writerCheck.validateDirectory(externalSnapshotsTarget, fakeCfg).valid,
+        false,
+        'Átirányított _restore_snapshots fizikai célja elutasítva!'
+      );
+      assert.strictEqual(
+        writerCheck.validateDirectory(path.join(externalSnapshotsTarget, 'sub', 'diag'), fakeCfg).valid,
+        false,
+        'Átirányított _restore_snapshots fizikai céljának alkönyvtára is elutasítva!'
+      );
+      fs.unlinkSync(restoreSnapshotsJunction);
     } catch (e) {
-      console.log(`  (Megjegyzés: junction teszt kihagyva a környezet jogosultságai miatt: ${e.code || e.message})`);
+      try { if (fs.existsSync(junctionPath)) fs.unlinkSync(junctionPath); } catch {}
+      try { if (fs.existsSync(restoreSnapshotsJunction)) fs.unlinkSync(restoreSnapshotsJunction); } catch {}
+      throw e;
     }
 
     // Valódi ZIP mentés, tartalomjegyzék ellenőrzés és visszaállítás + hash egyezés
