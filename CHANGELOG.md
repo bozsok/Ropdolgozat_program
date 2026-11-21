@@ -4,6 +4,42 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.34.1] – 2026-11-21
+
+### DH 01 javítási kiadás: Sorosított diagnosztikai író, szigorított kliensszerződés, pontos 24 órás export, teljes útvonalvédelem és határidős leállás
+
+Kiemelt stabilitási és adatvédelmi javítókiadás a [`Source/dh_01.md`](file:///d:/dev/Röpdolgozat%20program/Source/dh_01.md) diagnosztikai feltárás minden tételének orvoslására. A kiadás megszünteti a sikeresnek jelzett, de el nem végzett írás lehetőségét, kizárja a régi vagy csonka sorok kijutását a 24 órás tanári exportból, teljes leszármazotti szinten tiltja a helyreállítási munkakönyvtárak átfedését, UTF-8 bájtméréssel és többtételes `413` darabolással erősíti meg a böngészőpuffert, valamint együttes lezárási feltételre és pontos hibakód-kezelésre állítja át a kiszolgáló leállítását – továbbra is SQLite-sémamódosítás nélkül.
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Egyetlen sorosított író és valós elszámolás (`src/services/diagnostics.js`, `public/admin.html`, `public/js/admin.js`):**
+  - **Fájlok:** [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Egyetlen `drain`-vezérelt háttérpumpa (`triggerPump` / `_runPumpLoop`) végzi a sor ürítését; a függő (`inFlight`) tételek darabszáma és UTF-8 + LF bájtmérete is beleszámít a sor korlátjába.
+  - A `totalWritten` kizárólag visszaigazolt írás után nő; a végleg elveszett (`droppedEventsCount`), az átmenetileg elutasított (`rejectedBatchEventsCount` – `503`) és a bizonytalan/hibás írású (`uncertainEventsCount`) események külön számlálódnak, és a tanári felületen az állapotkóddal (`statusCode`) együtt megjelennek.
+  - Használhatatlan vagy lezárás alatt álló írónál az új tételeket tartalmazó klienscsomag `503` (`WRITER_UNAVAILABLE`) választ kap; stream hiba után a helyreállítás új naplófájlt nyit; a `flushAndClose()` strukturált `{ ok, reason }` eredménnyel zár.
+
+* **Szigorított kliensoldali bemeneti szerződés és pontos, méretkorlátos 24 órás export (`src/services/diagnostics.js`, `src/routes/api.js`):**
+  - **Fájlok:** [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - Különválasztott `sanitizeClientEntry`: kizárólag engedélyezett kliensesemények, zárt mezőlista, ellenőrzött UTC ISO `clientAt` és zárt `outcome`/`reasonCode` szótár fogadható el; szerveresemény vagy ismeretlen mező `400`-zal elutasított.
+  - A `createExportStream()` rögzített indulási időponthoz viszonyítva, rekord szintű `receivedAt` alapján szűr az utolsó 24 órára, eldobja a fájlvégi csonka sorokat és az érvénytelen JSON-t, 25 MiB-os sorhatáros méretkorláttal és kliensmegszakítás-kezeléssel (`res.once('close', ...)`) működik; érvénytelen könyvtárnál az export `503`-mal tiltott.
+
+* **Helyreállítási mappák teljes útvonal-ellenőrzése (`src/services/diagnostics.js`):**
+  - **Fájl:** [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js)
+  - Szegmensalapú, Windows kis-/nagybetű-érzéketlen fizikai útvonal-ellenőrzés (`resolvePhysicalPath`, `isEqualOrSubPath`), amely elutasítja a `publicDir`, `uploadsDir`, `_restore_snapshots`, `temp_restore_*` és ezek **összes leszármazottját**, a nem könyvtár (rendes fájl) célokat és a tiltott célra mutató Windows-csomópontokat (junction).
+
+* **Kliensoldali UTF-8 csomagolás, `413` darabolás és szigorú visszaigazolás (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - `TextEncoder` alapú UTF-8 bájtmérés a `{ events: [...] }` burkolással együtt (max. 20 elem / 8 192 bájt), önmagában túlméretes elem eltávolítása, többtételes `413` esetén csomagméret-felezés.
+  - `nextAllowedSyncAt` visszalépési időzítés `429`/`503` után, `401`-nél szüneteltetés újrahitelesítésig, `403`-nál kizárólag `DIAGNOSTICS_DISABLED` kódra történő törlés, `AbortController` + `syncVersion` védelem és `diagnosticsStorageFailed` memóriapuffer-fallback.
+  - A `submitAnswer()` elkülöníti a hálózati/válasz-ellenőrzési ágat a UI feldolgozástól, és szigorúan ellenőrzi a válasz szerkezetét (`isValidSubmitAnswerResponse`).
+
+* **Határidős leállás és tesztizoláció (`server.js`, `scratch/test_diagnostics.js`):**
+  - **Fájlok:** [`server.js`](file:///d:/dev/Röpdolgozat%20program/server.js), [`scratch/test_diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_diagnostics.js)
+  - Az automatikus `server.listen` csak közvetlen indításkor (`require.main === module`) fut, tesztekhez elkülönített `startServer()` érhető el.
+  - A `gracefulShutdown()` együttesen várja az `io.close()` és az aktív kérések/műveletek befejezését (`server.closeIdleConnections()` mellett); határidő-túllépésnél bontja a megmaradt kapcsolatokat, `SHUTDOWN_DEADLINE` okkóddal rögzíti a `server.stopping` eseményt, és megőrzi a hibát jelző `process.exitCode = 1` értéket.
+  - A bővített `scratch/test_diagnostics.js` tesztcsomag elszigetelten igazolja a lassú `drain` visszanyomást, a fájl-helyett-mappa és aktív stream hibákat, a 24 órás exportot, a helyreállítási alkönyvtárak tiltását és a gyermekfolyamatban futtatott normál, íráshibás és `SHUTDOWN_DEADLINE` leállásokat.
+
+---
+
 ## [1.34.0] – 2026-11-21
 
 ### Beépítési terv 01: Helyi aszinkron diagnosztika és tantermi eseménynaplózó alrendszer

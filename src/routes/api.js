@@ -1384,11 +1384,39 @@ router.get('/admin/diagnostics/status', requireAdminAuth, (req, res) => {
 // Diagnosztikai eseménynapló exportálása streamelve (Admin)
 router.get('/admin/diagnostics/export', requireAdminAuth, (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store');
+    const dirCheck = diagnosticsService.writer.validateDirectory();
+    if (!dirCheck.valid) {
+      return res.status(503).json({
+        error: 'A diagnosztikai könyvtár konfigurációja érvénytelen, az export letiltva.',
+        code: 'CONFIG_ERROR'
+      });
+    }
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="okoskodo_diagnostics_${timestamp}.jsonl"`);
-    res.setHeader('Cache-Control', 'no-store');
-    const exportStream = diagnosticsService.createExportStream(24);
+
+    const exportStream = diagnosticsService.createExportStream({ hours: 24 });
+
+    const onClientClose = () => {
+      if (!exportStream.destroyed) {
+        exportStream.destroy();
+      }
+    };
+    res.once('close', onClientClose);
+    exportStream.once('end', () => {
+      res.removeListener('close', onClientClose);
+    });
+    exportStream.once('error', () => {
+      res.removeListener('close', onClientClose);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Hiba a diagnosztikai export olvasása közben!' });
+      } else if (!res.writableEnded) {
+        res.end();
+      }
+    });
+
     exportStream.pipe(res);
   } catch (err) {
     res.status(500).json({ error: err.message });

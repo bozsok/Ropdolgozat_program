@@ -16,9 +16,28 @@ const diagnosticsService = require('./src/services/diagnostics');
 const app = express();
 const server = http.createServer(app);
 
-// Leállási állapot és aktív kérések követése
+// Leállási állapot, aktív kapcsolatok és aktív műveletek követése (DH 01 / 6. fejezet)
 let isShuttingDown = false;
+let shutdownPromise = null;
 let activeRequestsCount = 0;
+let activeOperationsCount = 0;
+const activeSockets = new Set();
+const activeWaiters = new Set();
+
+function notifyActiveChanged() {
+  if (activeRequestsCount <= 0 && activeOperationsCount <= 0) {
+    for (const fn of Array.from(activeWaiters)) {
+      fn();
+    }
+  }
+}
+
+server.on('connection', (socket) => {
+  activeSockets.add(socket);
+  socket.once('close', () => {
+    activeSockets.delete(socket);
+  });
+});
 
 // Socket.io inicializálása
 const io = new Server(server, {
@@ -28,8 +47,15 @@ const io = new Server(server, {
   }
 });
 
-// io példány elérhetővé tétele a routerekben
+// io példány és aktív háttérművelet-követés elérhetővé tétele a routerekben
 app.set('io', io);
+app.set('trackAsyncOperation', (promise) => {
+  activeOperationsCount++;
+  return Promise.resolve(promise).finally(() => {
+    activeOperationsCount = Math.max(0, activeOperationsCount - 1);
+    notifyActiveChanged();
+  });
+});
 
 // Socket.io órai eseménykezelő regisztrálása
 initLiveHandler(io);
@@ -54,10 +80,15 @@ app.use((req, res, next) => {
   req.startTimeHr = startTimeHr;
 
   let requestEnded = false;
+  const cleanupListeners = () => {
+    res.removeListener('finish', onRequestFinished);
+    res.removeListener('close', onRequestClosedEarly);
+  };
+
   const onRequestFinished = () => {
     if (requestEnded) return;
     requestEnded = true;
-    activeRequestsCount = Math.max(0, activeRequestsCount - 1);
+    cleanupListeners();
 
     if (req.routeLogged) {
       const durationMs = Number((process.hrtime.bigint() - startTimeHr) / 1000000n);
@@ -70,12 +101,15 @@ app.use((req, res, next) => {
         durationMs
       });
     }
+
+    activeRequestsCount = Math.max(0, activeRequestsCount - 1);
+    notifyActiveChanged();
   };
 
   const onRequestClosedEarly = () => {
     if (requestEnded) return;
     requestEnded = true;
-    activeRequestsCount = Math.max(0, activeRequestsCount - 1);
+    cleanupListeners();
 
     if (req.routeLogged) {
       const durationMs = Number((process.hrtime.bigint() - startTimeHr) / 1000000n);
@@ -88,6 +122,9 @@ app.use((req, res, next) => {
         durationMs
       });
     }
+
+    activeRequestsCount = Math.max(0, activeRequestsCount - 1);
+    notifyActiveChanged();
   };
 
   res.once('finish', onRequestFinished);
@@ -190,94 +227,204 @@ function getNetworkAddresses() {
   return addresses;
 }
 
-// Szerver indítása az alapértelmezett 3000-es porton minden IPv4 hálózati csatolón (0.0.0.0)
-server.listen(config.port, '0.0.0.0', () => {
-  // Elavult ideiglenes képfeltöltések takarítása induláskor (Report 14 / 39. pont)
-  try {
-    const quizRepo = require('./src/db/quizRepo');
-    quizRepo.cleanExpiredTempImages();
-  } catch (e) {
-    console.warn('Elavult temp képek takarításakor figyelmeztetés:', e.message);
-  }
+// Szerver indítása (alapértelmezetten a 3000-es porton minden IPv4 hálózati csatolón)
+function startServer(options = {}) {
+  const listenPort = options.port !== undefined ? options.port : config.port;
+  const listenHost = options.host || process.env.HOST || '0.0.0.0';
 
-  // Szerver indulási diagnosztikai esemény rögzítése
-  diagnosticsService.logEvent({
-    source: 'server',
-    event: 'server.started',
-    runId: diagnosticsService.runId
-  });
+  return new Promise((resolve, reject) => {
+    const onError = (err) => {
+      server.removeListener('listening', onListening);
+      reject(err);
+    };
 
-  const ips = getNetworkAddresses();
-  console.log('================================================================');
-  console.log(`  Röpdolgozat program szerver elindult a(z) ${config.port}-es porton!`);
-  console.log('----------------------------------------------------------------');
-  console.log(`  Helyi elérés (Localhost):   http://localhost:${config.port}`);
-  if (ips.length > 0) {
-    ips.forEach(ip => {
-      console.log(`  Hálózati elérés (LAN IP):   http://${ip}:${config.port}`);
-    });
-  }
-  console.log('----------------------------------------------------------------');
-  console.log(`  Tanári vezérlőpult:         http://localhost:${config.port}/admin`);
-  console.log(`  Kivetítő monitor:           http://localhost:${config.port}/projector`);
-  console.log('================================================================');
-});
+    const onListening = () => {
+      server.removeListener('error', onError);
+      const addr = server.address();
+      const actualPort = addr && typeof addr === 'object' ? addr.port : listenPort;
 
-// Szabályos leállás folyamata (Graceful Shutdown - v1.2)
-async function gracefulShutdown(signal) {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
-  console.log(`\nSzerver leállási folyamat megkezdve (${signal})...`);
-
-  let deadlineReached = false;
-  const activeOpsTimer = setTimeout(() => {
-    deadlineReached = true;
-  }, 5000);
-
-  // Socket.IO és mögöttes HTTP szerver közös lezárása
-  await new Promise((resolve) => {
-    try {
-      io.close(() => {
-        resolve();
-      });
-    } catch {
-      resolve();
-    }
-
-    const checkInterval = setInterval(() => {
-      if (activeRequestsCount <= 0 || deadlineReached) {
-        clearInterval(checkInterval);
-        resolve();
+      // Elavult ideiglenes képfeltöltések takarítása induláskor (Report 14 / 39. pont)
+      try {
+        const quizRepo = require('./src/db/quizRepo');
+        quizRepo.cleanExpiredTempImages();
+      } catch (e) {
+        console.warn('Elavult temp képek takarításakor figyelmeztetés:', e.message);
       }
-    }, 50);
-  });
-  clearTimeout(activeOpsTimer);
 
-  // Leállási diagnosztikai esemény rögzítése
-  diagnosticsService.logEvent({
-    source: 'server',
-    event: 'server.stopping',
-    runId: diagnosticsService.runId,
-    reasonCode: deadlineReached ? 'SHUTDOWN_DEADLINE' : undefined
-  });
+      // Szerver indulási diagnosztikai esemény rögzítése
+      diagnosticsService.logEvent({
+        source: 'server',
+        event: 'server.started',
+        runId: diagnosticsService.runId
+      });
 
-  // Napló leürítése és lezárása legfeljebb 2 másodperces határidővel
-  try {
-    const flushed = await diagnosticsService.flushAndClose(2000);
-    if (!flushed) {
-      console.warn('Figyelem: A diagnosztikai napló leürítése határidőre nem fejeződött be teljesen.');
-      process.exitCode = 1;
-    } else {
-      process.exitCode = 0;
-    }
-  } catch (err) {
-    console.error('Hiba a napló lezárásakor:', err.message);
-    process.exitCode = 1;
-  }
+      if (!options.silent) {
+        const ips = getNetworkAddresses();
+        console.log('================================================================');
+        console.log(`  Röpdolgozat program szerver elindult a(z) ${actualPort}-es porton!`);
+        console.log('----------------------------------------------------------------');
+        console.log(`  Helyi elérés (Localhost):   http://localhost:${actualPort}`);
+        if (ips.length > 0 && listenHost === '0.0.0.0') {
+          ips.forEach(ip => {
+            console.log(`  Hálózati elérés (LAN IP):   http://${ip}:${actualPort}`);
+          });
+        }
+        console.log('----------------------------------------------------------------');
+        console.log(`  Tanári vezérlőpult:         http://localhost:${actualPort}/admin`);
+        console.log(`  Kivetítő monitor:           http://localhost:${actualPort}/projector`);
+        console.log('================================================================');
+      }
+
+      if (typeof process.send === 'function') {
+        try {
+          process.send({ type: 'listening', port: actualPort, host: listenHost });
+        } catch {}
+      }
+
+      resolve({ port: actualPort, host: listenHost });
+    };
+
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(listenPort, listenHost);
+  });
 }
 
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+// Szabályos leállás folyamata (Graceful Shutdown - DH 01 / 6. fejezet)
+function gracefulShutdown(signal, options = {}) {
+  if (shutdownPromise) return shutdownPromise;
+  isShuttingDown = true;
 
-module.exports = { app, server, gracefulShutdown };
+  const activeOpsTimeoutMs = options.activeOpsTimeoutMs !== undefined
+    ? options.activeOpsTimeoutMs
+    : parseInt(process.env.SHUTDOWN_ACTIVE_OPS_TIMEOUT_MS || '5000', 10);
+  const flushTimeoutMs = options.flushTimeoutMs !== undefined
+    ? options.flushTimeoutMs
+    : parseInt(process.env.SHUTDOWN_FLUSH_TIMEOUT_MS || '2000', 10);
+
+  shutdownPromise = (async () => {
+    console.log(`\nSzerver leállási folyamat megkezdve (${signal})...`);
+
+    let deadlineReached = false;
+    let activeOpsTimer = null;
+
+    // 1. Együttes feltétel: Socket.IO + HTTP szerver bezárása ÉS minden aktív művelet befejezése
+    const ioClosePromise = new Promise((resolve) => {
+      if (!server.listening) {
+        try {
+          io.close(() => resolve());
+        } catch {
+          resolve();
+        }
+        return;
+      }
+      try {
+        io.close(() => resolve());
+        if (typeof server.closeIdleConnections === 'function') {
+          server.closeIdleConnections();
+        }
+      } catch {
+        resolve();
+      }
+    });
+
+    const activeDonePromise = new Promise((resolve) => {
+      if (activeRequestsCount <= 0 && activeOperationsCount <= 0) {
+        resolve();
+        return;
+      }
+      const onDone = () => {
+        activeWaiters.delete(onDone);
+        resolve();
+      };
+      activeWaiters.add(onDone);
+    });
+
+    const normalClosePromise = Promise.all([ioClosePromise, activeDonePromise]);
+
+    const deadlinePromise = new Promise((resolve) => {
+      activeOpsTimer = setTimeout(() => {
+        deadlineReached = true;
+        resolve();
+      }, activeOpsTimeoutMs);
+    });
+
+    await Promise.race([normalClosePromise, deadlinePromise]);
+    if (activeOpsTimer) {
+      clearTimeout(activeOpsTimer);
+      activeOpsTimer = null;
+    }
+    activeWaiters.clear();
+
+    // Ha lejárt a határidő, ténylegesen megszakítjuk a megmaradt kapcsolatokat
+    if (deadlineReached) {
+      try { io.disconnectSockets(true); } catch {}
+      for (const socket of Array.from(activeSockets)) {
+        try { socket.destroy(); } catch {}
+      }
+      if (typeof server.closeAllConnections === 'function') {
+        try { server.closeAllConnections(); } catch {}
+      }
+      // Hagyunk egy eseményciklus-fordulót a megszakított kérések http.closed_early eseményeinek sorba állására
+      await new Promise((r) => setImmediate(r));
+    }
+
+    // 2. Leállási diagnosztikai esemény rögzítése az aktív műveletek lezárása UTÁN
+    diagnosticsService.logEvent({
+      source: 'server',
+      event: 'server.stopping',
+      runId: diagnosticsService.runId,
+      reasonCode: deadlineReached ? 'SHUTDOWN_DEADLINE' : undefined
+    });
+
+    // 3. Napló leürítése és fájlfolyam lezárása legfeljebb 2 másodperces határidővel
+    let flushResult = { ok: true, reason: 'disabled' };
+    try {
+      flushResult = await diagnosticsService.flushAndClose(flushTimeoutMs);
+    } catch (err) {
+      console.error('Hiba a napló lezárásakor:', err.message);
+      flushResult = { ok: false, reason: 'write_error' };
+    }
+
+    // 4. Kilépési kód beállítása (a sikeres ürítés NEM írhatja felül a határidő-túllépés hibakódját!)
+    if (deadlineReached || !flushResult.ok) {
+      if (!flushResult.ok) {
+        console.warn(`Figyelem: A diagnosztikai napló lezárása hibával fejeződött be (${flushResult.reason}).`);
+      }
+      process.exitCode = 1;
+    } else if (!process.exitCode) {
+      process.exitCode = 0;
+    }
+
+    // IPC csatorna lezárása, hogy gyermekfolyamat módban természetesen kiléphessen a folyamat
+    if (typeof process.disconnect === 'function' && process.connected) {
+      try { process.disconnect(); } catch {}
+    }
+
+    return {
+      deadlineReached,
+      flushResult,
+      exitCode: process.exitCode
+    };
+  })();
+
+  return shutdownPromise;
+}
+
+if (require.main === module) {
+  startServer().catch((err) => {
+    console.error('Szerver indítási hiba:', err);
+    process.exitCode = 1;
+  });
+
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('message', (msg) => {
+    if (msg && msg.type === 'shutdown') {
+      gracefulShutdown('IPC_SHUTDOWN', msg.options || {});
+    }
+  });
+}
+
+module.exports = { app, server, io, startServer, gracefulShutdown };
 

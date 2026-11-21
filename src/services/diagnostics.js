@@ -8,11 +8,10 @@ const packageJson = require('../../package.json');
 /**
  * DiagnosticsService - Helyi aszinkron diagnosztikai és eseménynaplózó alrendszer
  * Specifikáció: Source/Beepitesi_terv_01.md, Source/Pontositasi_terv_01.md,
- *               Source/Beepitesi_terv_01_vegrehajtasi_terv_01.md (v1.2)
+ *               Source/Beepitesi_terv_01_vegrehajtasi_terv_01.md (v1.2), Source/dh_01.md
  */
 
-const ALLOWED_SOURCES = new Set(['server', 'student_browser']);
-const ALLOWED_EVENTS = new Set([
+const SERVER_ALLOWED_EVENTS = new Set([
   'server.started',
   'server.stopping',
   'answer.received',
@@ -20,22 +19,87 @@ const ALLOWED_EVENTS = new Set([
   'answer.rejected',
   'answer.failed',
   'http.finished',
-  'http.closed_early',
-  'answer.acknowledged',
-  'answer.response_error',
-  'answer.no_ack',
-  'socket.disconnected',
-  'socket.reconnected',
-  'socket.connect_error'
+  'http.closed_early'
 ]);
 
-const ALLOWED_OUTCOMES = new Set(['saved', 'duplicate', 'ok', 'error', 'no_ack']);
+const CLIENT_EVENT_SPECS = {
+  'answer.acknowledged': {
+    required: ['eventId', 'requestId', 'operationId'],
+    allowedKeys: new Set(['event', 'eventId', 'requestId', 'operationId', 'clientAt', 'outcome', 'httpStatus', 'durationMs']),
+    allowedOutcomes: new Set(['ok']),
+    allowedReasonCodes: null,
+    httpStatusRange: [200, 299]
+  },
+  'answer.response_error': {
+    required: ['eventId', 'requestId', 'operationId'],
+    allowedKeys: new Set(['event', 'eventId', 'requestId', 'operationId', 'clientAt', 'outcome', 'reasonCode', 'httpStatus', 'durationMs']),
+    allowedOutcomes: new Set(['error']),
+    allowedReasonCodes: new Set(['HTTP_ERROR', 'INVALID_JSON', 'INVALID_RESPONSE_SCHEMA']),
+    httpStatusRange: [100, 599]
+  },
+  'answer.no_ack': {
+    required: ['eventId', 'requestId', 'operationId'],
+    allowedKeys: new Set(['event', 'eventId', 'requestId', 'operationId', 'clientAt', 'outcome', 'reasonCode', 'durationMs']),
+    allowedOutcomes: new Set(['no_ack']),
+    allowedReasonCodes: new Set(['NETWORK_ERROR', 'TIMEOUT']),
+    httpStatusRange: null
+  },
+  'socket.disconnected': {
+    required: ['eventId'],
+    allowedKeys: new Set(['event', 'eventId', 'clientAt', 'reasonCode']),
+    allowedOutcomes: null,
+    allowedReasonCodes: new Set([
+      'IO_SERVER_DISCONNECT',
+      'IO_CLIENT_DISCONNECT',
+      'PING_TIMEOUT',
+      'TRANSPORT_CLOSE',
+      'TRANSPORT_ERROR',
+      'PARSE_ERROR',
+      'UNKNOWN_DISCONNECT_REASON'
+    ]),
+    httpStatusRange: null
+  },
+  'socket.reconnected': {
+    required: ['eventId'],
+    allowedKeys: new Set(['event', 'eventId', 'clientAt']),
+    allowedOutcomes: null,
+    allowedReasonCodes: null,
+    httpStatusRange: null
+  },
+  'socket.connect_error': {
+    required: ['eventId'],
+    allowedKeys: new Set(['event', 'eventId', 'clientAt', 'reasonCode']),
+    allowedOutcomes: null,
+    allowedReasonCodes: new Set(['CONNECT_ERROR', 'TRANSPORT_ERROR', 'TIMEOUT', 'UNKNOWN_CONNECT_ERROR']),
+    httpStatusRange: null
+  }
+};
+
+const ALLOWED_SERVER_OUTCOMES = new Set(['saved', 'duplicate', 'ok', 'error', 'no_ack']);
+const ALLOWED_ROUTES = new Set([
+  'student.submit_answer',
+  'student.join',
+  'student.session_data',
+  'admin.start_session',
+  'admin.start_race',
+  'admin.finish_session',
+  'admin.export_results'
+]);
 
 const HEX_32_REGEX = /^[a-f0-9]{32}$/i;
+const UTC_ISO_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const LOG_FILE_REGEX = /^diagnostics-\d{4}-\d{2}-\d{2}(\.\d+)?\.log$/;
 
+function isValidUtcIsoTimestamp(value) {
+  if (typeof value !== 'string' || value.length > 30 || !UTC_ISO_REGEX.test(value)) {
+    return false;
+  }
+  const ms = Date.parse(value);
+  return !Number.isNaN(ms);
+}
+
 /**
- * 1. RingBufferQueue - Korlátozott kapacitású, non-blocking memóriasor
+ * 1. RingBufferQueue - Korlátozott kapacitású, non-blocking memóriasor (függő/in-flight követéssel)
  */
 class RingBufferQueue {
   constructor(maxSize = 2048, maxBytes = 2097152) {
@@ -43,13 +107,16 @@ class RingBufferQueue {
     this.maxBytes = maxBytes;
     this.queue = [];
     this.currentBytes = 0;
+    this.inFlightCount = 0;
+    this.inFlightBytes = 0;
     this.droppedEventsCount = 0;
+    this.rejectedBatchEventsCount = 0;
   }
 
   canAccept(entriesCount, bytesCount) {
     return (
-      this.queue.length + entriesCount <= this.maxSize &&
-      this.currentBytes + bytesCount <= this.maxBytes
+      this.queue.length + this.inFlightCount + entriesCount <= this.maxSize &&
+      this.currentBytes + this.inFlightBytes + bytesCount <= this.maxBytes
     );
   }
 
@@ -60,7 +127,7 @@ class RingBufferQueue {
     }
 
     if (!this.canAccept(entriesWithBytes.length, totalBytes)) {
-      this.droppedEventsCount += entriesWithBytes.length;
+      this.rejectedBatchEventsCount += entriesWithBytes.length;
       return false;
     }
 
@@ -81,22 +148,47 @@ class RingBufferQueue {
     return true;
   }
 
-  dequeueChunk(limit = 100) {
-    if (this.queue.length === 0) return [];
-    const count = Math.min(limit, this.queue.length);
-    const chunk = this.queue.splice(0, count);
-    for (const item of chunk) {
-      this.currentBytes = Math.max(0, this.currentBytes - item.bytes);
-    }
-    return chunk;
+  peek() {
+    return this.queue.length > 0 ? this.queue[0] : null;
+  }
+
+  shiftToInFlight() {
+    if (this.queue.length === 0) return null;
+    const item = this.queue.shift();
+    this.currentBytes = Math.max(0, this.currentBytes - item.bytes);
+    this.inFlightCount += 1;
+    this.inFlightBytes += item.bytes;
+    return item;
+  }
+
+  completeInFlight(item) {
+    if (!item) return;
+    this.inFlightCount = Math.max(0, this.inFlightCount - 1);
+    this.inFlightBytes = Math.max(0, this.inFlightBytes - item.bytes);
+  }
+
+  returnInFlightToFront(item) {
+    if (!item) return;
+    this.inFlightCount = Math.max(0, this.inFlightCount - 1);
+    this.inFlightBytes = Math.max(0, this.inFlightBytes - item.bytes);
+    this.queue.unshift(item);
+    this.currentBytes += item.bytes;
   }
 
   size() {
     return this.queue.length;
   }
 
+  totalPendingCount() {
+    return this.queue.length + this.inFlightCount;
+  }
+
   bytes() {
     return this.currentBytes;
+  }
+
+  totalPendingBytes() {
+    return this.currentBytes + this.inFlightBytes;
   }
 }
 
@@ -107,7 +199,7 @@ class DeduplicationCache {
   constructor(maxEntries = 1024, ttlMs = 600000) {
     this.maxEntries = maxEntries;
     this.ttlMs = ttlMs;
-    this.map = new Map(); // eventId -> timestamp
+    this.map = new Map();
   }
 
   has(eventId) {
@@ -148,7 +240,7 @@ class SlidingWindowRateLimiter {
     this.participantLimit = participantLimit;
     this.globalLimit = globalLimit;
     this.windowMs = windowMs;
-    this.participantCounts = new Map(); // tokenHash -> [timestamps]
+    this.participantCounts = new Map();
     this.globalTimestamps = [];
   }
 
@@ -156,7 +248,6 @@ class SlidingWindowRateLimiter {
     const now = Date.now();
     const windowStart = now - this.windowMs;
 
-    // Globális korlát takarítása és ellenőrzése
     while (this.globalTimestamps.length > 0 && this.globalTimestamps[0] < windowStart) {
       this.globalTimestamps.shift();
     }
@@ -164,7 +255,6 @@ class SlidingWindowRateLimiter {
       return false;
     }
 
-    // Résztvevő korlát takarítása és ellenőrzése
     if (participantKey) {
       let pTimes = this.participantCounts.get(participantKey) || [];
       pTimes = pTimes.filter(t => t >= windowStart);
@@ -178,7 +268,6 @@ class SlidingWindowRateLimiter {
 
     this.globalTimestamps.push(now);
 
-    // Periodikus tisztítás túl sok kulcs esetén
     if (this.participantCounts.size > 500) {
       for (const [k, v] of this.participantCounts.entries()) {
         const fresh = v.filter(t => t >= windowStart);
@@ -192,131 +281,205 @@ class SlidingWindowRateLimiter {
 }
 
 /**
- * 4. DiagnosticsFileWriter - Aszinkron Stream Író, Rotáció és Útvonal-ellenőrzés
+ * Útvonal fizikai feloldása (symlink és Windows junction feloldással, nem létező célnál legközelebbi szülővel)
+ */
+function resolvePhysicalPath(targetPath) {
+  const normalized = path.normalize(path.resolve(targetPath));
+  if (fs.existsSync(normalized)) {
+    return fs.realpathSync(normalized);
+  }
+  let curr = normalized;
+  const missingParts = [];
+  while (!fs.existsSync(curr)) {
+    const parent = path.dirname(curr);
+    if (parent === curr) break;
+    missingParts.unshift(path.basename(curr));
+    curr = parent;
+  }
+  if (fs.existsSync(curr)) {
+    const resolvedParent = fs.realpathSync(curr);
+    return path.join(resolvedParent, ...missingParts);
+  }
+  return normalized;
+}
+
+/**
+ * Szegmensalapú útvonal-tartalmazás ellenőrzése (Windows kis/nagybetű érzéketlenséggel)
+ */
+function normalizeForCompare(p) {
+  const norm = path.normalize(p);
+  return process.platform === 'win32' ? norm.toLowerCase() : norm;
+}
+
+function isEqualOrSubPath(childPath, parentPath) {
+  const normChild = normalizeForCompare(childPath);
+  const normParent = normalizeForCompare(parentPath);
+  if (normChild === normParent) return true;
+  const rel = path.relative(normParent, normChild);
+  if (!rel) return true;
+  if (path.isAbsolute(rel)) return false;
+  const firstSegment = rel.split(path.sep)[0];
+  return firstSegment !== '..';
+}
+
+function pathsOverlap(pathA, pathB) {
+  return isEqualOrSubPath(pathA, pathB) || isEqualOrSubPath(pathB, pathA);
+}
+
+/**
+ * 4. DiagnosticsFileWriter - Egyetlen sorosított, drain-vezérelt aszinkron Stream Író és Útvonal-validátor
  */
 class DiagnosticsFileWriter {
   constructor(options = {}) {
-    this.dir = options.dir || config.diagnosticsDir;
+    this.rawDir = options.dir || config.diagnosticsDir;
+    this.dir = this.rawDir;
+    this.customConfig = options.config || config;
     this.maxFileSizeBytes = options.maxFileSizeBytes || config.diagnosticsMaxFileSizeBytes || 5242880;
     this.maxTotalSizeBytes = options.maxTotalSizeBytes || config.diagnosticsMaxTotalSizeBytes || 26214400;
     this.retentionDays = options.retentionDays || config.diagnosticsRetentionDays || 7;
+    this.recoveryIntervalMs = options.recoveryIntervalMs !== undefined ? options.recoveryIntervalMs : 15000;
+    this.streamFactory = options.streamFactory || ((filePath) => fs.createWriteStream(filePath, { flags: 'a', encoding: 'utf8' }));
 
     this.isConfigurationValid = false;
+    this.configurationErrorReason = null;
     this.isDegraded = false;
+    this.lastErrorCode = null;
+    this.nextRecoveryAttemptAt = 0;
     this.lastWarnTime = 0;
+
     this.activeStream = null;
     this.activeFilePath = null;
     this.activeFileDateStr = null;
     this.activeFileBytes = 0;
-    this.isWriting = false;
-    this.isDraining = false;
-    this.rotationCheckTimer = null;
+    this.forceNewFileOnNextOpen = false;
+    this.streamFailed = false;
   }
 
   /**
-   * 6. fejezet szerinti fizikai útvonal-ellenőrzés
+   * 4. tétel (DH 01) szerinti teljes fizikai útvonal-ellenőrzés
    */
-  validateDirectory(targetDir = this.dir, customConfig = config) {
+  validateDirectory(targetDir = this.rawDir, customConfig = this.customConfig) {
     try {
-      const normalizedTarget = path.normalize(path.resolve(targetDir));
+      const resolvedTarget = resolvePhysicalPath(targetDir);
 
-      // Létező könyvtár feloldása fs.realpathSync-kel, vagy a legközelebbi létező szülő feloldása
-      let resolvedTarget;
-      if (fs.existsSync(normalizedTarget)) {
-        resolvedTarget = fs.realpathSync(normalizedTarget);
-      } else {
-        let curr = normalizedTarget;
-        const missingParts = [];
-        while (!fs.existsSync(curr)) {
-          const parent = path.dirname(curr);
-          if (parent === curr) break;
-          missingParts.unshift(path.basename(curr));
-          curr = parent;
-        }
-        if (fs.existsSync(curr)) {
-          const resolvedParent = fs.realpathSync(curr);
-          resolvedTarget = path.join(resolvedParent, ...missingParts);
-        } else {
-          resolvedTarget = normalizedTarget;
+      // Ha a cél már létezik, kötelezően könyvtárnak kell lennie (nem lehet rendes fájl!)
+      if (fs.existsSync(resolvedTarget)) {
+        const st = fs.statSync(resolvedTarget);
+        if (!st.isDirectory()) {
+          this.isConfigurationValid = false;
+          this.configurationErrorReason = 'A diagnosztikai cél már létezik, de nem könyvtár!';
+          return { valid: false, reason: this.configurationErrorReason };
         }
       }
 
-      const isSubOrEqual = (child, parent) => {
-        const rel = path.relative(parent.toLowerCase(), child.toLowerCase());
-        return !rel.startsWith('..') && !path.isAbsolute(rel);
-      };
+      const publicResolved = resolvePhysicalPath(customConfig.publicDir);
+      const uploadsResolved = resolvePhysicalPath(customConfig.uploadsDir);
+      const dbDirResolved = resolvePhysicalPath(path.dirname(path.resolve(customConfig.dbPath)));
+      const restoreSnapshotsResolved = path.join(dbDirResolved, '_restore_snapshots');
 
-      const isSamePath = (p1, p2) => p1.toLowerCase() === p2.toLowerCase();
-
-      // Tilalmak ellenőrzése
-      const publicResolved = fs.existsSync(customConfig.publicDir)
-        ? fs.realpathSync(customConfig.publicDir)
-        : path.resolve(customConfig.publicDir);
-
-      const uploadsResolved = fs.existsSync(customConfig.uploadsDir)
-        ? fs.realpathSync(customConfig.uploadsDir)
-        : path.resolve(customConfig.uploadsDir);
-
-      const dbDir = path.dirname(path.resolve(customConfig.dbPath));
-      const dbDirResolved = fs.existsSync(dbDir)
-        ? fs.realpathSync(dbDir)
-        : dbDir;
-
-      // 1. Webgyökér tiltás (egyezés vagy alkönyvtár vagy szülő)
-      if (isSamePath(resolvedTarget, publicResolved) || isSubOrEqual(resolvedTarget, publicResolved) || isSubOrEqual(publicResolved, resolvedTarget)) {
-        return { valid: false, reason: 'A diagnosztikai könyvtár nem egyezhet meg és nem fedheti át a statikus webgyökeret (publicDir)!' };
+      // 1. Webgyökér (publicDir): mindkét irányú átfedés tiltott
+      if (pathsOverlap(resolvedTarget, publicResolved)) {
+        this.isConfigurationValid = false;
+        this.configurationErrorReason = 'A diagnosztikai könyvtár nem egyezhet meg és nem fedheti át a statikus webgyökeret (publicDir)!';
+        return { valid: false, reason: this.configurationErrorReason };
       }
 
-      // 2. Képtár tiltás (egyezés vagy alkönyvtár vagy szülő)
-      if (isSamePath(resolvedTarget, uploadsResolved) || isSubOrEqual(resolvedTarget, uploadsResolved) || isSubOrEqual(uploadsResolved, resolvedTarget)) {
-        return { valid: false, reason: 'A diagnosztikai könyvtár nem egyezhet meg és nem fedheti át a feltöltési könyvtárat (uploadsDir)!' };
+      // 2. Képtár (uploadsDir): mindkét irányú átfedés tiltott
+      if (pathsOverlap(resolvedTarget, uploadsResolved)) {
+        this.isConfigurationValid = false;
+        this.configurationErrorReason = 'A diagnosztikai könyvtár nem egyezhet meg és nem fedheti át a feltöltési könyvtárat (uploadsDir)!';
+        return { valid: false, reason: this.configurationErrorReason };
       }
 
-      // 3. Adatbázis szülőkönyvtár tilalma (maga az adatbázis szülője vagy annak őse nem lehet a cél, de annak alkönyvtára igen!)
-      if (isSamePath(resolvedTarget, dbDirResolved) || isSubOrEqual(dbDirResolved, resolvedTarget)) {
-        return { valid: false, reason: 'A diagnosztikai könyvtár nem lehet maga az adatbázis szülőkönyvtára vagy annak őse!' };
+      // 3. Adatbázis melletti _restore_snapshots fa: mindkét irányú átfedés tiltott (saját neve és minden alkönyvtára)
+      if (pathsOverlap(resolvedTarget, restoreSnapshotsResolved)) {
+        this.isConfigurationValid = false;
+        this.configurationErrorReason = 'A diagnosztikai könyvtár nem fedheti át az adatbázis melletti _restore_snapshots könyvtárat!';
+        return { valid: false, reason: this.configurationErrorReason };
       }
 
-      // 4. _restore_snapshots és temp_restore tiltások
-      const targetBase = path.basename(resolvedTarget).toLowerCase();
-      if (targetBase.startsWith('temp_restore_') || targetBase === '_restore_snapshots') {
-        return { valid: false, reason: 'A diagnosztikai könyvtár nem mutathat visszaállítási munkakönyvtárra!' };
+      // 4. Adatbázis szülőkönyvtára vagy annak őse tiltott (de a data/diagnostics önálló alkönyvtár engedélyezett)
+      if (isEqualOrSubPath(dbDirResolved, resolvedTarget)) {
+        this.isConfigurationValid = false;
+        this.configurationErrorReason = 'A diagnosztikai könyvtár nem lehet maga az adatbázis szülőkönyvtára vagy annak őse!';
+        return { valid: false, reason: this.configurationErrorReason };
+      }
+
+      // 5. Adatbázis melletti temp_restore_* munkakönyvtárak és azok összes leszármazottja tiltott
+      if (isEqualOrSubPath(resolvedTarget, dbDirResolved)) {
+        const relFromDb = path.relative(normalizeForCompare(dbDirResolved), normalizeForCompare(resolvedTarget));
+        const segments = relFromDb.split(path.sep).filter(Boolean);
+        if (segments.length > 0 && segments[0].startsWith('temp_restore_')) {
+          this.isConfigurationValid = false;
+          this.configurationErrorReason = 'A diagnosztikai könyvtár nem mutathat temp_restore_* visszaállítási könyvtárra vagy annak alkönyvtárára!';
+          return { valid: false, reason: this.configurationErrorReason };
+        }
+      }
+
+      // További biztonsági ellenőrzés: ha bárhol az útvonalban _restore_snapshots vagy temp_restore_ szegmens szerepel
+      const allSegments = normalizeForCompare(resolvedTarget).split(path.sep).filter(Boolean);
+      for (const seg of allSegments) {
+        if (seg === '_restore_snapshots' || seg.startsWith('temp_restore_')) {
+          this.isConfigurationValid = false;
+          this.configurationErrorReason = 'A diagnosztikai könyvtár útvonala tiltott visszaállítási mappát tartalmaz!';
+          return { valid: false, reason: this.configurationErrorReason };
+        }
       }
 
       this.dir = resolvedTarget;
       this.isConfigurationValid = true;
+      this.configurationErrorReason = null;
       return { valid: true, resolvedPath: resolvedTarget };
     } catch (err) {
       this.isConfigurationValid = false;
+      this.configurationErrorReason = err.message;
       return { valid: false, reason: err.message };
     }
   }
 
   ensureDirectory() {
-    if (!this.isConfigurationValid) {
-      const check = this.validateDirectory();
-      if (!check.valid) {
-        this.logWarnOnce('Diagnosztikai konfigurációs hiba: ' + check.reason);
-        return false;
-      }
+    const check = this.validateDirectory();
+    if (!check.valid) {
+      this.isDegraded = true;
+      this.lastErrorCode = 'CONFIG_ERROR';
+      this.logWarnOnce('Diagnosztikai konfigurációs hiba: ' + check.reason);
+      return false;
     }
 
     try {
       if (!fs.existsSync(this.dir)) {
         fs.mkdirSync(this.dir, { recursive: true });
-        // Létrehozás után újra feloldjuk és ellenőrizzük
         const checkAfter = this.validateDirectory();
         if (!checkAfter.valid) {
+          this.isDegraded = true;
+          this.lastErrorCode = 'CONFIG_ERROR';
           this.logWarnOnce('Diagnosztikai konfigurációs hiba létrehozás után: ' + checkAfter.reason);
           return false;
         }
       }
       return true;
     } catch (err) {
-      this.isDegraded = true;
-      this.logWarnOnce('Nem sikerült létrehozni a diagnosztikai könyvtárat: ' + err.message);
+      this.markDegraded(err.code || 'MKDIR_ERROR', 'Nem sikerült létrehozni a diagnosztikai könyvtárat: ' + err.message);
       return false;
     }
+  }
+
+  markDegraded(code, msg) {
+    this.isDegraded = true;
+    this.lastErrorCode = code || 'WRITE_ERROR';
+    this.nextRecoveryAttemptAt = Date.now() + this.recoveryIntervalMs;
+    if (msg) this.logWarnOnce(msg);
+  }
+
+  canAttemptWrite() {
+    if (!this.isConfigurationValid) return false;
+    if (!this.isDegraded) return true;
+    return Date.now() >= this.nextRecoveryAttemptAt;
+  }
+
+  isUnusable() {
+    if (!this.isConfigurationValid) return true;
+    return this.isDegraded;
   }
 
   logWarnOnce(msg) {
@@ -335,107 +498,197 @@ class DiagnosticsFileWriter {
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  getActiveFilePath() {
+  pickTargetFilePath(nextLineBytes = 0) {
+    if (!this.ensureDirectory()) return null;
+
     const today = this.getTodayUtcDateStr();
-    if (this.activeFilePath && this.activeFileDateStr === today && this.activeFileBytes < this.maxFileSizeBytes) {
+    const needNewBecauseForce = this.forceNewFileOnNextOpen;
+
+    if (
+      !needNewBecauseForce &&
+      this.activeFilePath &&
+      this.activeFileDateStr === today &&
+      (this.activeFileBytes === 0 || this.activeFileBytes + nextLineBytes <= this.maxFileSizeBytes)
+    ) {
       return this.activeFilePath;
     }
 
-    if (!this.ensureDirectory()) return null;
-
-    // Alapértelmezett napi fájlnév
     const baseName = `diagnostics-${today}.log`;
     let targetPath = path.join(this.dir, baseName);
 
-    // Ha a mai alapkötet már létezik és elérte a méretkorlátot, sorszámozottat keresünk
-    if (fs.existsSync(targetPath)) {
-      const stats = fs.statSync(targetPath);
-      if (stats.size >= this.maxFileSizeBytes) {
-        let index = 1;
-        while (true) {
-          const indexedName = `diagnostics-${today}.${index}.log`;
-          const indexedPath = path.join(this.dir, indexedName);
-          if (!fs.existsSync(indexedPath)) {
-            targetPath = indexedPath;
-            break;
-          }
-          const istats = fs.statSync(indexedPath);
-          if (istats.size < this.maxFileSizeBytes) {
-            targetPath = indexedPath;
-            break;
-          }
-          index++;
-        }
+    const needsIndexed = () => {
+      if (!fs.existsSync(targetPath)) return false;
+      if (needNewBecauseForce) return true;
+      try {
+        const stats = fs.statSync(targetPath);
+        return stats.size > 0 && stats.size + nextLineBytes > this.maxFileSizeBytes;
+      } catch {
+        return true;
       }
-    }
+    };
 
-    this.activeFilePath = targetPath;
-    this.activeFileDateStr = today;
-    try {
-      this.activeFileBytes = fs.existsSync(targetPath) ? fs.statSync(targetPath).size : 0;
-    } catch {
-      this.activeFileBytes = 0;
+    if (needsIndexed()) {
+      let index = 1;
+      while (true) {
+        const indexedName = `diagnostics-${today}.${index}.log`;
+        const indexedPath = path.join(this.dir, indexedName);
+        if (!fs.existsSync(indexedPath)) {
+          targetPath = indexedPath;
+          break;
+        }
+        if (!needNewBecauseForce) {
+          try {
+            const istats = fs.statSync(indexedPath);
+            if (istats.size === 0 || istats.size + nextLineBytes <= this.maxFileSizeBytes) {
+              targetPath = indexedPath;
+              break;
+            }
+          } catch {}
+        }
+        index++;
+      }
     }
 
     return targetPath;
   }
 
-  getStream() {
-    const filePath = this.getActiveFilePath();
-    if (!filePath) return null;
+  async openStreamForLine(nextLineBytes) {
+    const targetPath = this.pickTargetFilePath(nextLineBytes);
+    if (!targetPath) return null;
 
-    if (this.activeStream && this.activeStream.path === filePath) {
+    if (this.activeStream && !this.streamFailed && this.activeFilePath === targetPath && !this.forceNewFileOnNextOpen) {
       return this.activeStream;
     }
 
+    // Ha van korábbi nyitott stream, előbb megvárjuk a szabályos lezárását (forgatás)
     if (this.activeStream) {
-      try {
-        this.activeStream.end();
-      } catch {}
-      this.activeStream = null;
+      await this.closeActiveStream();
+      this.pruneOldLogs();
     }
 
     try {
-      const stream = fs.createWriteStream(filePath, { flags: 'a', encoding: 'utf8' });
+      const stream = this.streamFactory(targetPath);
+      this.streamFailed = false;
+      this.forceNewFileOnNextOpen = false;
+      this.activeFilePath = targetPath;
+      this.activeFileDateStr = this.getTodayUtcDateStr();
+      try {
+        this.activeFileBytes = fs.existsSync(targetPath) ? fs.statSync(targetPath).size : 0;
+      } catch {
+        this.activeFileBytes = 0;
+      }
+
       stream.on('error', (err) => {
-        this.isDegraded = true;
-        this.logWarnOnce('Hiba a diagnosztikai naplófájl írásakor: ' + err.message);
+        this.streamFailed = true;
+        this.forceNewFileOnNextOpen = true;
+        this.markDegraded(err.code || 'WRITE_ERROR', 'Hiba a diagnosztikai naplófájl írásakor: ' + err.message);
+        if (this.activeStream === stream) {
+          this.activeStream = null;
+        }
+        try { stream.destroy(); } catch {}
       });
+
       this.activeStream = stream;
       return stream;
     } catch (err) {
-      this.isDegraded = true;
-      this.logWarnOnce('Nem sikerült megnyitni a diagnosztikai naplófájlt: ' + err.message);
+      this.forceNewFileOnNextOpen = true;
+      this.markDegraded(err.code || 'OPEN_ERROR', 'Nem sikerült megnyitni a diagnosztikai naplófájlt: ' + err.message);
       return null;
     }
   }
 
-  writeLines(linesWithBytes) {
-    if (linesWithBytes.length === 0) return true;
-    const stream = this.getStream();
+  /**
+   * Egyetlen teljes JSONL sor aszinkron, visszaigazolt kiírása (backpressure + hibakezelés)
+   * Visszatérés: { ok: boolean, uncertain: boolean }
+   */
+  async writeSingleLine(line, lineBytesWithLf) {
+    const stream = await this.openStreamForLine(lineBytesWithLf);
     if (!stream) {
-      this.isDegraded = true;
-      return false;
+      return { ok: false, uncertain: false };
     }
 
-    let ok = true;
-    for (const item of linesWithBytes) {
-      const chunk = item.line + '\n';
-      const canWrite = stream.write(chunk);
-      this.activeFileBytes += item.bytes + 1;
-      if (!canWrite) ok = false;
-    }
+    const chunk = line + '\n';
 
-    // Ha elérte a méretkorlátot, a következő írás új fájlt nyit
-    if (this.activeFileBytes >= this.maxFileSizeBytes) {
+    return new Promise((resolve) => {
+      let settled = false;
+      let writeCallbackCalled = false;
+      let writeCallbackErr = null;
+      let needsDrain = false;
+      let drained = false;
+
+      const cleanup = () => {
+        stream.removeListener('drain', onDrain);
+        stream.removeListener('error', onError);
+        stream.removeListener('close', onClose);
+      };
+
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(result);
+      };
+
+      const maybeResolveSuccess = () => {
+        if (writeCallbackCalled && (!needsDrain || drained)) {
+          if (writeCallbackErr || this.streamFailed) {
+            this.forceNewFileOnNextOpen = true;
+            this.markDegraded(
+              (writeCallbackErr && writeCallbackErr.code) || 'WRITE_ERROR',
+              'Diagnosztikai sor írása sikertelen: ' + (writeCallbackErr ? writeCallbackErr.message : 'stream hiba')
+            );
+            finish({ ok: false, uncertain: true });
+          } else {
+            this.activeFileBytes += lineBytesWithLf;
+            this.isDegraded = false;
+            this.lastErrorCode = null;
+            finish({ ok: true, uncertain: false });
+          }
+        }
+      };
+
+      const onDrain = () => {
+        drained = true;
+        maybeResolveSuccess();
+      };
+
+      const onError = (err) => {
+        writeCallbackErr = err;
+        this.streamFailed = true;
+        this.forceNewFileOnNextOpen = true;
+        this.markDegraded(err.code || 'WRITE_ERROR', 'Stream hiba írás közben: ' + err.message);
+        finish({ ok: false, uncertain: true });
+      };
+
+      const onClose = () => {
+        if (!settled && (!writeCallbackCalled || (needsDrain && !drained))) {
+          this.streamFailed = true;
+          this.forceNewFileOnNextOpen = true;
+          this.markDegraded('STREAM_CLOSED', 'A diagnosztikai fájlfolyam váratlanul lezárult írás közben.');
+          finish({ ok: false, uncertain: true });
+        }
+      };
+
+      stream.once('error', onError);
+      stream.once('close', onClose);
+
       try {
-        stream.end();
-      } catch {}
-      this.activeStream = null;
-      this.pruneOldLogs();
-    }
-
-    return ok;
+        const canContinue = stream.write(chunk, 'utf8', (err) => {
+          writeCallbackCalled = true;
+          if (err) writeCallbackErr = err;
+          maybeResolveSuccess();
+        });
+        if (!canContinue) {
+          needsDrain = true;
+          stream.once('drain', onDrain);
+        }
+      } catch (err) {
+        this.streamFailed = true;
+        this.forceNewFileOnNextOpen = true;
+        this.markDegraded(err.code || 'WRITE_THROW', 'Kivétel a diagnosztikai sor írásakor: ' + err.message);
+        finish({ ok: false, uncertain: true });
+      }
+    });
   }
 
   pruneOldLogs() {
@@ -444,7 +697,6 @@ class DiagnosticsFileWriter {
     try {
       const entries = fs.readdirSync(this.dir, { withFileTypes: true });
       const logFiles = [];
-
       const now = Date.now();
       const retentionMs = this.retentionDays * 86400000;
 
@@ -464,22 +716,17 @@ class DiagnosticsFileWriter {
         } catch {}
       }
 
-      // 1. 7 napnál régebbi fájlok törlése
       const remainingFiles = [];
       for (const file of logFiles) {
         if (now - file.mtimeMs > retentionMs && file.fullPath !== this.activeFilePath) {
-          try {
-            fs.unlinkSync(file.fullPath);
-          } catch {}
+          try { fs.unlinkSync(file.fullPath); } catch {}
         } else {
           remainingFiles.push(file);
         }
       }
 
-      // 2. Összméret korlát ellenőrzése (maxTotalSizeBytes, alapértelmezett: 25 MiB)
       let totalSize = remainingFiles.reduce((sum, f) => sum + f.size, 0);
       if (totalSize > this.maxTotalSizeBytes) {
-        // Rendezzük a legrégebbi elöl
         remainingFiles.sort((a, b) => a.mtimeMs - b.mtimeMs);
         for (const file of remainingFiles) {
           if (file.fullPath === this.activeFilePath) continue;
@@ -495,28 +742,69 @@ class DiagnosticsFileWriter {
     }
   }
 
-  async closeActiveStream() {
-    if (!this.activeStream) return;
+  async closeActiveStream(timeoutMs = 1500) {
     const stream = this.activeStream;
     this.activeStream = null;
+    if (!stream) return !this.streamFailed;
 
     return new Promise((resolve) => {
+      let settled = false;
+      const done = (ok) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        stream.removeListener('finish', onFinish);
+        stream.removeListener('error', onError);
+        stream.removeListener('close', onClose);
+        resolve(ok);
+      };
+
+      const onFinish = () => done(!this.streamFailed);
+      const onError = (err) => {
+        this.streamFailed = true;
+        this.markDegraded(err.code || 'CLOSE_ERROR', 'Hiba a naplófolyam lezárásakor: ' + err.message);
+        done(false);
+      };
+      const onClose = () => done(!this.streamFailed && stream.writableFinished);
+
+      const timer = setTimeout(() => {
+        try { stream.destroy(); } catch {}
+        done(false);
+      }, timeoutMs);
+
+      stream.once('finish', onFinish);
+      stream.once('error', onError);
+      stream.once('close', onClose);
+
       try {
-        stream.end(() => resolve());
+        if (stream.destroyed || stream.writableEnded) {
+          done(!this.streamFailed && stream.writableFinished);
+        } else {
+          stream.end();
+        }
       } catch {
-        resolve();
+        try { stream.destroy(); } catch {}
+        done(false);
       }
     });
+  }
+
+  destroyActiveStream() {
+    const stream = this.activeStream;
+    this.activeStream = null;
+    if (stream) {
+      try { stream.destroy(); } catch {}
+    }
   }
 }
 
 /**
- * 5. DiagnosticsService - Központi vezérlő osztály
+ * 5. DiagnosticsService - Központi vezérlő osztály (egyetlen sorosított pumpával)
  */
 class DiagnosticsService {
   constructor(options = {}) {
     this.enabled = options.enabled !== undefined ? options.enabled : config.diagnosticsEnabled;
-    this.appVersion = packageJson.version || '1.33.0';
+    this.appVersion = packageJson.version || '1.34.1';
     this.runId = options.runId || crypto.randomBytes(16).toString('hex');
     this.startedAt = new Date().toISOString();
 
@@ -533,10 +821,14 @@ class DiagnosticsService {
 
     this.writer = new DiagnosticsFileWriter(options);
     this.totalWritten = 0;
-    this.isFlushing = false;
-    this.drainWaiter = null;
+    this.uncertainEventsCount = 0;
+    this.isClosing = false;
+    this.pumpPromise = null;
     this.workerTimer = null;
     this.pruneTimer = null;
+
+    // Könyvtár előellenőrzése kikapcsolt állapotban is (meglévő naplók biztonságos exportjához)
+    this.writer.validateDirectory();
 
     if (this.enabled) {
       this.init();
@@ -546,51 +838,46 @@ class DiagnosticsService {
   init() {
     const dirCheck = this.writer.validateDirectory();
     if (!dirCheck.valid) {
+      this.writer.isDegraded = true;
+      this.writer.lastErrorCode = 'CONFIG_ERROR';
       console.warn(`[DiagnosticsService] Inicializálási figyelmeztetés: ${dirCheck.reason}`);
     } else {
       this.writer.ensureDirectory();
       this.writer.pruneOldLogs();
     }
 
-    // Háttérfolyamat a memóriasor leürítésére
     this.workerTimer = setInterval(() => {
-      this.processQueue();
-    }, 200);
+      this.triggerPump();
+    }, 100);
+    if (typeof this.workerTimer.unref === 'function') this.workerTimer.unref();
 
-    // Periodikus takarítás és deduplikációs tisztítás (5 percenként)
     this.pruneTimer = setInterval(() => {
       this.writer.pruneOldLogs();
       this.dedupCache.cleanExpired();
     }, 300000);
+    if (typeof this.pruneTimer.unref === 'function') this.pruneTimer.unref();
   }
 
   /**
-   * Sémaellenőrzés és OWASP adatminimalizálás (Whitelisting)
+   * Szerveroldali események szűrése és felépítése (Whitelisting)
    */
-  sanitizeEntry(raw) {
+  sanitizeServerEntry(raw) {
     if (!raw || typeof raw !== 'object') return null;
 
-    const source = raw.source === 'student_browser' ? 'student_browser' : 'server';
-    if (!ALLOWED_SOURCES.has(source)) return null;
-
     const event = String(raw.event || '').trim();
-    if (!ALLOWED_EVENTS.has(event)) return null;
+    if (!SERVER_ALLOWED_EVENTS.has(event)) return null;
 
     const sanitized = {
       schemaVersion: 1,
       appVersion: this.appVersion,
       receivedAt: new Date().toISOString(),
       runId: this.runId,
-      source,
+      source: 'server',
       event
     };
 
-    if (source === 'student_browser' && typeof raw.clientAt === 'string') {
-      sanitized.clientAt = raw.clientAt.slice(0, 35);
-    }
-
-    if (typeof raw.route === 'string') {
-      sanitized.route = raw.route.slice(0, 50);
+    if (typeof raw.route === 'string' && ALLOWED_ROUTES.has(raw.route)) {
+      sanitized.route = raw.route;
     }
 
     if (typeof raw.requestId === 'string' && HEX_32_REGEX.test(raw.requestId)) {
@@ -601,16 +888,13 @@ class DiagnosticsService {
       sanitized.operationId = raw.operationId.toLowerCase();
     }
 
-    if (typeof raw.eventId === 'string' && HEX_32_REGEX.test(raw.eventId)) {
-      sanitized.eventId = raw.eventId.toLowerCase();
-    }
-
-    if (typeof raw.outcome === 'string' && ALLOWED_OUTCOMES.has(raw.outcome)) {
+    if (typeof raw.outcome === 'string' && ALLOWED_SERVER_OUTCOMES.has(raw.outcome)) {
       sanitized.outcome = raw.outcome;
     }
 
     if (typeof raw.reasonCode === 'string') {
-      sanitized.reasonCode = raw.reasonCode.replace(/[^A-Z0-9_]/g, '').slice(0, 40);
+      const cleaned = raw.reasonCode.replace(/[^A-Z0-9_]/g, '').slice(0, 40);
+      if (cleaned) sanitized.reasonCode = cleaned;
     }
 
     if (typeof raw.httpStatus === 'number' && Number.isInteger(raw.httpStatus) && raw.httpStatus >= 100 && raw.httpStatus <= 599) {
@@ -625,22 +909,115 @@ class DiagnosticsService {
   }
 
   /**
+   * Kliensoldali események szigorú bemeneti szerződése (DH 01 / 3. fejezet)
+   */
+  sanitizeClientEntry(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+
+    const event = typeof raw.event === 'string' ? raw.event.trim() : '';
+    const spec = CLIENT_EVENT_SPECS[event];
+    if (!spec) return null; // Szerveresemény vagy ismeretlen esemény szigorúan elutasítva
+
+    // Ismeretlen vagy tiltott mezők azonnali elutasítása (400)
+    for (const key of Object.keys(raw)) {
+      if (!spec.allowedKeys.has(key)) {
+        return null;
+      }
+    }
+
+    // Kötelező mezők ellenőrzése
+    for (const reqKey of spec.required) {
+      if (typeof raw[reqKey] !== 'string' || !HEX_32_REGEX.test(raw[reqKey])) {
+        return null;
+      }
+    }
+
+    const sanitized = {
+      schemaVersion: 1,
+      appVersion: this.appVersion,
+      receivedAt: new Date().toISOString(),
+      runId: this.runId,
+      source: 'student_browser',
+      event,
+      eventId: raw.eventId.toLowerCase()
+    };
+
+    if (raw.requestId !== undefined) {
+      if (typeof raw.requestId !== 'string' || !HEX_32_REGEX.test(raw.requestId)) return null;
+      sanitized.requestId = raw.requestId.toLowerCase();
+    }
+
+    if (raw.operationId !== undefined) {
+      if (typeof raw.operationId !== 'string' || !HEX_32_REGEX.test(raw.operationId)) return null;
+      sanitized.operationId = raw.operationId.toLowerCase();
+    }
+
+    if (raw.clientAt !== undefined) {
+      if (!isValidUtcIsoTimestamp(raw.clientAt)) return null;
+      sanitized.clientAt = raw.clientAt;
+    }
+
+    if (raw.outcome !== undefined) {
+      if (!spec.allowedOutcomes || typeof raw.outcome !== 'string' || !spec.allowedOutcomes.has(raw.outcome)) {
+        return null;
+      }
+      sanitized.outcome = raw.outcome;
+    }
+
+    if (raw.reasonCode !== undefined) {
+      if (!spec.allowedReasonCodes || typeof raw.reasonCode !== 'string' || !spec.allowedReasonCodes.has(raw.reasonCode)) {
+        return null;
+      }
+      sanitized.reasonCode = raw.reasonCode;
+    }
+
+    if (raw.httpStatus !== undefined) {
+      if (
+        !spec.httpStatusRange ||
+        typeof raw.httpStatus !== 'number' ||
+        !Number.isInteger(raw.httpStatus) ||
+        raw.httpStatus < spec.httpStatusRange[0] ||
+        raw.httpStatus > spec.httpStatusRange[1]
+      ) {
+        return null;
+      }
+      sanitized.httpStatus = raw.httpStatus;
+    }
+
+    if (raw.durationMs !== undefined) {
+      if (typeof raw.durationMs !== 'number' || !Number.isFinite(raw.durationMs) || raw.durationMs < 0) {
+        return null;
+      }
+      sanitized.durationMs = Math.round(raw.durationMs);
+    }
+
+    return sanitized;
+  }
+
+  /**
    * Szerveroldali esemény sorba állítása
    */
   logEvent(entry) {
     if (!this.enabled) return false;
-    const sanitized = this.sanitizeEntry(entry);
+    if (this.isClosing && (!entry || entry.event !== 'server.stopping')) {
+      return false;
+    }
+
+    const sanitized = this.sanitizeServerEntry(entry);
     if (!sanitized) return false;
 
     const json = JSON.stringify(sanitized);
-    const bytes = Buffer.byteLength(json, 'utf8');
+    const bytesWithLf = Buffer.byteLength(json, 'utf8') + 1;
 
-    const accepted = this.queue.enqueueSingle(json, bytes);
+    const accepted = this.queue.enqueueSingle(json, bytesWithLf);
+    if (accepted) {
+      this.triggerPump();
+    }
     return accepted;
   }
 
   /**
-   * Kliensoldali eseménycsomag atomi fogadása (Pontosítási terv 1. és 2. pont)
+   * Kliensoldali eseménycsomag atomi fogadása (DH 01 / 2. és 3. fejezet)
    */
   handleClientBatch(events, sessionToken) {
     if (!this.enabled) {
@@ -659,7 +1036,6 @@ class DiagnosticsService {
       return { status: 400, code: 'TOO_MANY_EVENTS' };
     }
 
-    // Sebességkorlátozás ellenőrzése
     let participantHash = null;
     if (sessionToken) {
       participantHash = crypto.createHash('sha256').update(String(sessionToken)).digest('hex').slice(0, 16);
@@ -668,11 +1044,11 @@ class DiagnosticsService {
       return { status: 429, code: 'RATE_LIMIT_EXCEEDED' };
     }
 
-    // 1. Sémaellenőrzés és tisztítás
+    // 1. Szigorú kliensoldali sémaellenőrzés
     const validatedEntries = [];
     for (const raw of events) {
-      const sanitized = this.sanitizeEntry({ ...raw, source: 'student_browser' });
-      if (!sanitized || !sanitized.eventId) {
+      const sanitized = this.sanitizeClientEntry(raw);
+      if (!sanitized) {
         return { status: 400, code: 'INVALID_EVENT_SCHEMA' };
       }
       validatedEntries.push(sanitized);
@@ -684,54 +1060,82 @@ class DiagnosticsService {
 
     for (const entry of validatedEntries) {
       if (this.dedupCache.has(entry.eventId) || seenInBatch.has(entry.eventId)) {
-        continue; // Már ismert vagy ismételt a csomagban
+        continue;
       }
       seenInBatch.add(entry.eventId);
       const json = JSON.stringify(entry);
-      const bytes = Buffer.byteLength(json, 'utf8');
-      newItemsWithBytes.push({ entry: json, bytes, eventId: entry.eventId });
+      const bytesWithLf = Buffer.byteLength(json, 'utf8') + 1;
+      newItemsWithBytes.push({ entry: json, bytes: bytesWithLf, eventId: entry.eventId });
     }
 
-    // Ha az összes esemény már ismert volt, azonnal 204
     if (newItemsWithBytes.length === 0) {
       return { status: 204 };
     }
 
-    // 3. Atomi döntés a teljes új sorozatról
+    // 3. Lezárás alatt álló vagy ismerten használhatatlan írónál 503 (nem veszünk át új sort!)
+    if (this.isClosing || this.writer.isUnusable()) {
+      this.queue.rejectedBatchEventsCount += newItemsWithBytes.length;
+      return { status: 503, code: 'WRITER_UNAVAILABLE' };
+    }
+
+    // 4. Atomi döntés a teljes új sorozatról (függő tételekkel együtt!)
     let totalBytes = 0;
     for (const item of newItemsWithBytes) {
       totalBytes += item.bytes;
     }
 
     if (!this.queue.canAccept(newItemsWithBytes.length, totalBytes)) {
-      // Egyetlen sort és egyetlen eventId-t sem veszünk át!
-      this.queue.droppedEventsCount += newItemsWithBytes.length;
+      this.queue.rejectedBatchEventsCount += newItemsWithBytes.length;
       return { status: 503, code: 'BUFFER_FULL_RETRY_LATER' };
     }
 
-    // Befér: egyszerre bekerül mind a memóriasorba és a deduplikációs gyorsítótárba
     this.queue.enqueueBatch(newItemsWithBytes.map(i => ({ entry: i.entry, bytes: i.bytes })));
     for (const item of newItemsWithBytes) {
       this.dedupCache.add(item.eventId);
     }
 
+    this.triggerPump();
     return { status: 204 };
   }
 
-  processQueue() {
-    if (this.isFlushing || this.queue.size() === 0) return;
-    const chunk = this.queue.dequeueChunk(50);
-    if (chunk.length === 0) return;
+  /**
+   * Egyetlen sorosított háttérürítő (drain-vezérelt, párhuzamos futás kizárva)
+   */
+  triggerPump() {
+    if (this.pumpPromise) return this.pumpPromise;
+    if (this.queue.size() === 0) return null;
+    if (!this.writer.canAttemptWrite()) return null;
 
-    const lines = chunk.map(c => ({ line: c.entry, bytes: c.bytes }));
-    const ok = this.writer.writeLines(lines);
-    this.totalWritten += lines.length;
+    this.pumpPromise = this._runPumpLoop().finally(() => {
+      this.pumpPromise = null;
+    });
+    return this.pumpPromise;
+  }
 
-    if (!ok && this.writer.activeStream) {
-      // Backpressure: megvárjuk a draint
-      this.writer.activeStream.once('drain', () => {
-        // Folytatódhat a következő körben
-      });
+  async _runPumpLoop() {
+    while (this.queue.size() > 0) {
+      if (!this.writer.canAttemptWrite()) {
+        break;
+      }
+
+      const item = this.queue.shiftToInFlight();
+      if (!item) break;
+
+      const writeRes = await this.writer.writeSingleLine(item.entry, item.bytes);
+
+      if (writeRes.ok) {
+        this.queue.completeInFlight(item);
+        this.totalWritten += 1;
+      } else if (writeRes.uncertain) {
+        // Írás közben történt hiba: bizonytalan kimenetel, külön számláljuk, nem írjuk újra ugyanabba a fájlba
+        this.queue.completeInFlight(item);
+        this.uncertainEventsCount += 1;
+        break;
+      } else {
+        // Nyitás előtti hiba (el sem kezdődött): visszatesszük a sor elejére a későbbi helyreállításhoz
+        this.queue.returnInFlightToFront(item);
+        break;
+      }
     }
   }
 
@@ -739,6 +1143,10 @@ class DiagnosticsService {
    * Állapotlekérdezés tanári felülethez
    */
   getStatus() {
+    if (!this.writer.isConfigurationValid) {
+      this.writer.validateDirectory();
+    }
+
     let diskSizeBytes = 0;
     let exportAvailable = false;
 
@@ -747,21 +1155,38 @@ class DiagnosticsService {
         const files = fs.readdirSync(this.writer.dir);
         for (const f of files) {
           if (LOG_FILE_REGEX.test(f)) {
-            const stats = fs.statSync(path.join(this.writer.dir, f));
-            diskSizeBytes += stats.size;
-            exportAvailable = true;
+            const fullPath = path.join(this.writer.dir, f);
+            const stats = fs.statSync(fullPath);
+            if (stats.isFile()) {
+              diskSizeBytes += stats.size;
+              if (stats.size > 0) exportAvailable = true;
+            }
           }
         }
       } catch {}
     }
 
+    let statusCode = 'OK';
+    if (!this.enabled) {
+      statusCode = 'DISABLED';
+    } else if (!this.writer.isConfigurationValid) {
+      statusCode = 'CONFIG_ERROR';
+    } else if (this.writer.isDegraded) {
+      statusCode = this.writer.lastErrorCode || 'WRITE_ERROR';
+    } else if (this.queue.droppedEventsCount > 0 || this.uncertainEventsCount > 0) {
+      statusCode = 'DEGRADED';
+    }
+
     return {
       enabled: this.enabled,
-      isDegraded: this.writer.isDegraded || !this.writer.isConfigurationValid,
+      isDegraded: this.writer.isDegraded || !this.writer.isConfigurationValid || this.queue.droppedEventsCount > 0 || this.uncertainEventsCount > 0,
       configurationError: !this.writer.isConfigurationValid,
+      statusCode,
       runId: this.runId,
       startedAt: this.startedAt,
       droppedEventsCount: this.queue.droppedEventsCount,
+      rejectedBatchEventsCount: this.queue.rejectedBatchEventsCount,
+      uncertainEventsCount: this.uncertainEventsCount,
       totalWritten: this.totalWritten,
       diskSizeBytes,
       exportAvailable
@@ -769,26 +1194,34 @@ class DiagnosticsService {
   }
 
   /**
-   * Biztonságos exportfolyam létrehozása az utolsó 24 óra logfájljaiból
+   * Biztonságos, rekord-időbélyeg alapú, méretkorlátos és megszakítható exportfolyam (DH 01 / 3. fejezet)
    */
-  createExportStream(hours = 24) {
-    if (!this.writer.isConfigurationValid || !fs.existsSync(this.writer.dir)) {
+  createExportStream(options = 24) {
+    const opts = typeof options === 'number' ? { hours: options } : (options || {});
+    const hours = opts.hours !== undefined ? opts.hours : 24;
+    const exportNowMs = opts.nowMs !== undefined ? opts.nowMs : Date.now();
+    const maxExportBytes = opts.maxExportBytes !== undefined ? opts.maxExportBytes : 25 * 1024 * 1024;
+    const cutoffMs = exportNowMs - (hours * 3600000);
+
+    // Kikapcsolt gyűjtésnél is kötelező a könyvtárvalidáció!
+    const dirCheck = this.writer.validateDirectory();
+    if (!dirCheck.valid || !fs.existsSync(this.writer.dir)) {
       const emptyStream = new Readable({ read() { this.push(null); } });
+      emptyStream.truncated = false;
       return emptyStream;
     }
 
-    const cutoff = Date.now() - (hours * 3600000);
     const validFiles = [];
-
     try {
-      const entries = fs.readdirSync(this.writer.dir);
-      for (const f of entries) {
-        if (!LOG_FILE_REGEX.test(f)) continue;
-        const full = path.join(this.writer.dir, f);
+      const entries = fs.readdirSync(this.writer.dir, { withFileTypes: true });
+      for (const ent of entries) {
+        if (!ent.isFile() || !LOG_FILE_REGEX.test(ent.name)) continue;
+        const full = path.join(this.writer.dir, ent.name);
         try {
           const stats = fs.statSync(full);
-          if (stats.mtimeMs >= cutoff || stats.size > 0) {
-            validFiles.push({ full, mtimeMs: stats.mtimeMs });
+          if (stats.size > 0) {
+            // Az aktív vagy meglevő fájl olvasása az export indulásakor rögzített fájlvégig tart
+            validFiles.push({ full, mtimeMs: stats.mtimeMs, endByte: stats.size - 1 });
           }
         } catch {}
       }
@@ -799,56 +1232,137 @@ class DiagnosticsService {
     let fileIndex = 0;
     let currentReadStream = null;
     let remainder = '';
+    let bytesPushed = 0;
+    let pendingLines = [];
+    let isReadingFile = false;
+    let destroyed = false;
 
     const stream = new Readable({
       read() {
-        if (currentReadStream) return;
-
-        if (fileIndex >= validFiles.length) {
-          if (remainder.trim()) {
-            this.push(remainder.trim() + '\n');
-            remainder = '';
-          }
-          this.push(null);
-          return;
+        drainPendingLines();
+      },
+      destroy(err, cb) {
+        destroyed = true;
+        if (currentReadStream) {
+          try { currentReadStream.destroy(); } catch {}
+          currentReadStream = null;
         }
-
-        const fileInfo = validFiles[fileIndex++];
-        currentReadStream = fs.createReadStream(fileInfo.full, { encoding: 'utf8' });
-
-        currentReadStream.on('data', (chunk) => {
-          const text = remainder + chunk;
-          const lines = text.split('\n');
-          remainder = lines.pop(); // utolsó csonka sor megőrzése
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed) {
-              this.push(trimmed + '\n');
-            }
-          }
-        });
-
-        currentReadStream.on('end', () => {
-          currentReadStream = null;
-          this._read();
-        });
-
-        currentReadStream.on('error', (err) => {
-          console.warn('[Diagnostics Export] Hiba a fájl olvasásakor:', err.message);
-          currentReadStream = null;
-          this._read();
-        });
+        pendingLines = [];
+        cb(err);
       }
     });
+
+    stream.truncated = false;
+
+    const drainPendingLines = () => {
+      if (destroyed) return;
+
+      while (pendingLines.length > 0) {
+        const lineWithLf = pendingLines.shift();
+        const lineBytes = Buffer.byteLength(lineWithLf, 'utf8');
+        if (bytesPushed + lineBytes > maxExportBytes) {
+          stream.truncated = true;
+          pendingLines = [];
+          if (currentReadStream) {
+            try { currentReadStream.destroy(); } catch {}
+            currentReadStream = null;
+          }
+          stream.push(null);
+          return;
+        }
+        bytesPushed += lineBytes;
+        const ok = stream.push(lineWithLf);
+        if (!ok) {
+          if (currentReadStream) currentReadStream.pause();
+          return;
+        }
+      }
+
+      if (currentReadStream) {
+        currentReadStream.resume();
+        return;
+      }
+
+      if (!isReadingFile) {
+        openNextFile();
+      }
+    };
+
+    const openNextFile = () => {
+      if (destroyed || stream.truncated) return;
+
+      if (fileIndex >= validFiles.length) {
+        stream.push(null);
+        return;
+      }
+
+      const fileInfo = validFiles[fileIndex++];
+      isReadingFile = true;
+      remainder = ''; // Minden fájl üres sorpufferrel indul
+
+      const rs = fs.createReadStream(fileInfo.full, {
+        encoding: 'utf8',
+        start: 0,
+        end: fileInfo.endByte
+      });
+      currentReadStream = rs;
+
+      rs.on('data', (chunk) => {
+        if (destroyed || stream.truncated) return;
+        const text = remainder + chunk;
+        const lines = text.split('\n');
+        // Az utolsó elem még nem kapott lezáró '\n'-t -> marad a remainder-ben (fájl végén eldobódik!)
+        remainder = lines.pop();
+
+        for (const rawLine of lines) {
+          const trimmed = rawLine.trim();
+          if (!trimmed) continue;
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+            if (!isValidUtcIsoTimestamp(parsed.receivedAt)) continue;
+            const recMs = Date.parse(parsed.receivedAt);
+            if (recMs >= cutoffMs && recMs <= exportNowMs) {
+              pendingLines.push(trimmed + '\n');
+            }
+          } catch {
+            // Érvénytelen vagy csonka JSON sor kihagyása
+          }
+        }
+
+        if (pendingLines.length > 0) {
+          rs.pause();
+          drainPendingLines();
+        }
+      });
+
+      rs.on('end', () => {
+        // Fájl végén a lezáratlan (csonka) remainder szigorúan eldobódik!
+        remainder = '';
+        currentReadStream = null;
+        isReadingFile = false;
+        drainPendingLines();
+      });
+
+      rs.on('error', (err) => {
+        console.warn('[Diagnostics Export] Hiba a fájl olvasásakor:', err.message);
+        remainder = '';
+        currentReadStream = null;
+        isReadingFile = false;
+        drainPendingLines();
+      });
+    };
 
     return stream;
   }
 
   /**
-   * Szabályos leállás és sorürítés határidővel (v1.2: flushAndClose)
+   * Szabályos leállás és sorürítés határidővel (egyetlen írót használva, DH 01 / 2. fejezet)
+   * Visszatérés: { ok: boolean, reason: string }
    */
   async flushAndClose(timeoutMs = 2000) {
-    // 1. Időzítők leállítása
+    this.isClosing = true;
+
     if (this.workerTimer) {
       clearInterval(this.workerTimer);
       this.workerTimer = null;
@@ -858,51 +1372,48 @@ class DiagnosticsService {
       this.pruneTimer = null;
     }
 
-    if (!this.enabled) return true;
+    if (!this.enabled) {
+      return { ok: true, reason: 'disabled' };
+    }
 
-    return new Promise((resolve) => {
-      let isSettled = false;
-      const timer = setTimeout(() => {
-        if (!isSettled) {
-          isSettled = true;
-          resolve(false); // Határidő túllépése
-        }
+    let timer = null;
+    const timeoutPromise = new Promise((resolve) => {
+      timer = setTimeout(() => {
+        this.writer.destroyActiveStream();
+        resolve({ ok: false, reason: 'timeout' });
       }, timeoutMs);
+    });
 
-      // Kiszolgáljuk a még memóriában lévő sorokat
-      try {
-        while (this.queue.size() > 0) {
-          const chunk = this.queue.dequeueChunk(100);
-          if (chunk.length === 0) break;
-          const lines = chunk.map(c => ({ line: c.entry, bytes: c.bytes }));
-          this.writer.writeLines(lines);
-          this.totalWritten += lines.length;
-        }
-      } catch (err) {
-        clearTimeout(timer);
-        isSettled = true;
-        resolve(false);
-        return;
+    const flushWork = async () => {
+      // Ha még van elem a sorban, indítjuk/megvárjuk a közös pumpát
+      if (this.queue.size() > 0 || this.pumpPromise) {
+        const p = this.triggerPump() || this.pumpPromise;
+        if (p) await p;
       }
 
-      this.writer.closeActiveStream().then(() => {
-        if (!isSettled) {
-          clearTimeout(timer);
-          isSettled = true;
-          resolve(true);
-        }
-      }).catch(() => {
-        if (!isSettled) {
-          clearTimeout(timer);
-          isSettled = true;
-          resolve(false);
-        }
-      });
-    });
+      const streamClosedOk = await this.writer.closeActiveStream(Math.max(200, timeoutMs));
+
+      if (!streamClosedOk || this.writer.isDegraded || !this.writer.isConfigurationValid) {
+        return { ok: false, reason: 'write_error' };
+      }
+      if (this.queue.totalPendingCount() > 0 || this.uncertainEventsCount > 0) {
+        return { ok: false, reason: 'unaccounted_events' };
+      }
+      return { ok: true, reason: 'ok' };
+    };
+
+    try {
+      const result = await Promise.race([flushWork(), timeoutPromise]);
+      clearTimeout(timer);
+      return result;
+    } catch {
+      clearTimeout(timer);
+      this.writer.destroyActiveStream();
+      return { ok: false, reason: 'write_error' };
+    }
   }
 }
 
-// Alapértelmezett singleton példány a rendszer futásához
 const defaultDiagnosticsService = new DiagnosticsService();
 
 module.exports = defaultDiagnosticsService;
@@ -911,3 +1422,5 @@ module.exports.RingBufferQueue = RingBufferQueue;
 module.exports.DeduplicationCache = DeduplicationCache;
 module.exports.SlidingWindowRateLimiter = SlidingWindowRateLimiter;
 module.exports.DiagnosticsFileWriter = DiagnosticsFileWriter;
+module.exports.resolvePhysicalPath = resolvePhysicalPath;
+module.exports.isEqualOrSubPath = isEqualOrSubPath;

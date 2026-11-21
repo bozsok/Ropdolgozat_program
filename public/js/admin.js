@@ -4030,8 +4030,11 @@
       const badge = document.getElementById('diagnostics-status-badge');
       const runIdEl = document.getElementById('diag-run-id');
       const startedAtEl = document.getElementById('diag-started-at');
+      const statusCodeEl = document.getElementById('diag-status-code');
       const totalEventsEl = document.getElementById('diag-total-events');
       const droppedEventsEl = document.getElementById('diag-dropped-events');
+      const uncertainEventsEl = document.getElementById('diag-uncertain-events');
+      const rejectedEventsEl = document.getElementById('diag-rejected-events');
       const diskSizeEl = document.getElementById('diag-disk-size');
       const btnDownload = document.getElementById('btn-download-diagnostics');
 
@@ -4039,8 +4042,11 @@
       if (startedAtEl) {
         startedAtEl.textContent = s.startedAt ? new Date(s.startedAt).toLocaleTimeString('hu-HU') : '-';
       }
+      if (statusCodeEl) statusCodeEl.textContent = s.statusCode || '-';
       if (totalEventsEl) totalEventsEl.textContent = String(s.totalWritten || 0);
       if (droppedEventsEl) droppedEventsEl.textContent = String(s.droppedEventsCount || 0);
+      if (uncertainEventsEl) uncertainEventsEl.textContent = String(s.uncertainEventsCount || 0);
+      if (rejectedEventsEl) rejectedEventsEl.textContent = String(s.rejectedBatchEventsCount || 0);
       if (diskSizeEl) {
         const kb = Math.round((s.diskSizeBytes || 0) / 1024);
         diskSizeEl.textContent = `${kb} KB`;
@@ -4051,8 +4057,12 @@
           badge.textContent = 'Kikapcsolva';
           badge.style.backgroundColor = 'var(--surface-variant, #e7e0ec)';
           badge.style.color = 'var(--text-muted, #79747e)';
-        } else if (s.isDegraded || s.configurationError) {
-          badge.textContent = s.configurationError ? 'Konfigurációs hiba' : 'Korlátozott / Túlterhelt';
+        } else if (s.configurationError) {
+          badge.textContent = 'Konfigurációs hiba';
+          badge.style.backgroundColor = 'var(--danger-bg, #fef2f2)';
+          badge.style.color = 'var(--danger, #b91c1c)';
+        } else if (s.isDegraded) {
+          badge.textContent = `Korlátozott (${s.statusCode || 'HIBA'})`;
           badge.style.backgroundColor = 'var(--danger-bg, #fef2f2)';
           badge.style.color = 'var(--danger, #b91c1c)';
         } else {
