@@ -1,9 +1,9 @@
 const path = require('path');
 const fs = require('fs');
 
-// Report 17 / 4. fejezet: Izolált szintetikus tesztkörnyezet, az éles ropdolgozat.db teljes védelme
-const testDbPath = path.join(__dirname, '..', 'data', 'test_isolated_report17.db');
-const testUploadsDir = path.join(__dirname, '..', 'data', 'test_uploads_report17');
+// Report 17-18: Izolált szintetikus tesztkörnyezet, az éles ropdolgozat.db teljes védelme
+const testDbPath = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'test_isolated_report17.db');
+const testUploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'data', 'test_uploads_report17');
 
 process.env.DB_PATH = testDbPath;
 process.env.UPLOADS_DIR = testUploadsDir;
@@ -21,6 +21,7 @@ const sessionRepo = require('../src/db/sessionRepo');
 const Database = require('better-sqlite3');
 const config = require('../config');
 const db = require('../src/db/init');
+const backup = require('../src/services/backup');
 
 console.log('=== REPORT 14-17 JAVÍTÁSOK RENDSZERTESZTJE (IZOLÁLT KÖRNYEZET) ===\n');
 
@@ -846,6 +847,161 @@ try {
 assert.strictEqual(startDeletedBlocked, true, 'Sikerült elindítani egy soft-deleted tesztet!');
 console.log('✓ A logikailag törölt sablon újbóli elindítását a rendszer szigorúan megakadályozza');
 
+// 24. TESZT: Restore után az SQLite pontozási trigger azonnal frissül, és sablon pontcsökkentés mellett is ment (Report 18 / 1. pont)
+console.log('\n--- 24. TESZT: Restore után a pontozási trigger frissül és sabloncsökkentés mellett is ment (Report 18 / 1. pont) ---');
+const restoreQuiz = quizRepo.createQuiz({
+  subject_id: 1,
+  title: 'Restore Trigger Teszt Kvíz',
+  subject_grade: '8',
+  default_time_limit_min: 10,
+  questions: [{
+    question_order: 1,
+    question_type: 'ABCD',
+    question_text: '4 pontos feladat',
+    options: ['A', 'B', 'C', 'D'],
+    correct_answer: 'A',
+    explanation: 'Helyes válasz',
+    points: 4.0
+  }]
+});
+
+// Érvényes rendszermentés készítése
+const backupZipPath = path.join(path.dirname(testDbPath), 'test_backup_r18.zip');
+const bStream = await backup.createSystemBackupStream();
+await new Promise((resolve, reject) => {
+  const ws = fs.createWriteStream(backupZipPath);
+  bStream.pipe(ws);
+  ws.on('finish', resolve);
+  ws.on('error', reject);
+  bStream.finalize();
+});
+
+// Szimuláljuk a régi elavult triggert az adatbázisban a restore előtt
+db.exec('DROP TRIGGER IF EXISTS trg_validate_answer_points_limit;');
+db.exec(`
+  CREATE TRIGGER trg_validate_answer_points_limit
+  BEFORE INSERT ON answers
+  BEGIN
+      SELECT CASE
+          WHEN NEW.points_earned > (SELECT points FROM questions WHERE id = NEW.question_id)
+          THEN RAISE(ABORT, 'Elavult trigger pontplafon hiba!')
+      END;
+  END;
+`);
+
+// Restore futtatása: le kell futnia az automatikus triggermegújításnak!
+const r18RestoreResult = await backup.restoreSystemBackup(backupZipPath);
+assert.strictEqual(r18RestoreResult.success, true, 'Restore sikertelen!');
+if (fs.existsSync(backupZipPath)) { try { fs.unlinkSync(backupZipPath); } catch {} }
+
+// Új dolgozat indítása 4 pontos kérdéssel
+const triggerSession = sessionRepo.startSession({
+  subject_id: 1,
+  grade_level: '85',
+  quiz_id: restoreQuiz.id,
+  class_name: '6.i',
+  mode: 'STUDENT_PACED'
+});
+
+// A tanár a feladattárban 1.0 pontra csökkenti a kérdést
+db.prepare('UPDATE questions SET points = 1.0 WHERE quiz_id = ?').run(restoreQuiz.id);
+
+// A diák belép és beküldi a 4 pontos választ
+const { participant: triggerPart } = sessionRepo.joinSession({ session_id: triggerSession.id, student_name: 'Teszt Diák 85', pc_number: 1 });
+const triggerAnsRes = sessionRepo.submitAnswer({ participant_id: triggerPart.id, question_id: restoreQuiz.questions[0].id, submitted_answer: 'A' });
+assert.strictEqual(triggerAnsRes.answer.eval_status, 'CORRECT', 'Nem lett helyes az értékelés!');
+assert.strictEqual(triggerAnsRes.answer.points_earned, 4.0, 'Nem a 4.0 pont került jóváírásra!');
+console.log('✓ Visszaállítás után a frissített trigger snapshot alapján 4.0 ponttal mentette a választ a sablon 1.0 pontja mellett');
+
+// 25. TESZT: Restore rollback példány megőrzése és felülírás-védelme (Report 18 / 2. pont)
+console.log('\n--- 25. TESZT: Restore rollback másolatok megőrzése és felülírás-védelme (Report 18 / 2. pont) ---');
+const snapshotsBaseDir = path.join(path.dirname(config.dbPath), '_restore_snapshots');
+const preservedOpDir = path.join(snapshotsBaseDir, 'restore_op_preserved_test');
+fs.mkdirSync(preservedOpDir, { recursive: true });
+const preservedDbFile = path.join(preservedOpDir, 'ropdolgozat_backup.db');
+fs.writeFileSync(preservedDbFile, 'EREDETI_VEDETT_ADATBAZIS_TARTALOM');
+fs.writeFileSync(path.join(preservedOpDir, 'recovery_meta.json'), JSON.stringify({ test: 'preserved' }));
+
+// Készítünk egy új mentést és visszatöltjük
+const bStream2 = await backup.createSystemBackupStream();
+const backupZipPath2 = path.join(path.dirname(testDbPath), 'test_backup_r18_2.zip');
+await new Promise((resolve, reject) => {
+  const ws = fs.createWriteStream(backupZipPath2);
+  bStream2.pipe(ws);
+  ws.on('finish', resolve);
+  ws.on('error', reject);
+  bStream2.finalize();
+});
+
+const r18RestoreResult2 = await backup.restoreSystemBackup(backupZipPath2);
+assert.strictEqual(r18RestoreResult2.success, true, 'Második restore sikertelen!');
+if (fs.existsSync(backupZipPath2)) { try { fs.unlinkSync(backupZipPath2); } catch {} }
+
+// Ellenőrizzük, hogy az előző hibából származó mappa és fájl ÉRINTETLENÜL MEGMARADT
+assert.ok(fs.existsSync(preservedOpDir), 'A korábban megőrzött helyreállítási mappa eltűnt!');
+assert.strictEqual(fs.readFileSync(preservedDbFile, 'utf8'), 'EREDETI_VEDETT_ADATBAZIS_TARTALOM', 'A megőrzött adatbázis-másolat tartalma megváltozott!');
+console.log('✓ Az újabb restore nem írta felül és nem törölte az előző hibából megőrzött helyreállítási másolatokat');
+fs.rmSync(preservedOpDir, { recursive: true, force: true });
+
+// 26. TESZT: Pillanatkép nélküli régi lezárt dolgozat diákoldali megjelenítése törölt sablon esetén (Report 18 / 3. pont)
+console.log('\n--- 26. TESZT: Pillanatkép nélküli régi lezárt dolgozat diákeredménye törölt sablon esetén (Report 18 / 3. pont) ---');
+const legacyQuiz = quizRepo.createQuiz({
+  subject_id: 1,
+  title: 'Régi v1.26 Kvíz Sablon',
+  subject_grade: '8',
+  default_time_limit_min: 10,
+  questions: [{
+    question_order: 1,
+    question_type: 'ABCD',
+    question_text: 'Történeti kérdés',
+    options: ['A', 'B', 'C', 'D'],
+    correct_answer: 'A',
+    explanation: 'Magyarázat',
+    points: 2.0
+  }]
+});
+
+const legacySession = sessionRepo.startSession({
+  subject_id: 1,
+  grade_level: '84',
+  quiz_id: legacyQuiz.id,
+  class_name: '6.j',
+  mode: 'STUDENT_PACED'
+});
+
+// Szimuláljuk a régi snapshot nélküli állapotot
+db.prepare('UPDATE sessions SET quiz_snapshot_json = NULL WHERE id = ?').run(legacySession.id);
+
+const { participant: legacyPart } = sessionRepo.joinSession({ session_id: legacySession.id, student_name: 'Régi Diák 84', pc_number: 1 });
+sessionRepo.submitAnswer({ participant_id: legacyPart.id, question_id: legacyQuiz.questions[0].id, submitted_answer: 'A' });
+sessionRepo.finishSession(legacySession.id);
+
+// Most a tanár a feladattárból törli a sablont (soft-delete: is_deleted = 1)
+quizRepo.deleteQuiz(legacyQuiz.id);
+
+// A szerkesztői getQuizById kiszűri (null)
+const editorView = quizRepo.getQuizById(legacyQuiz.id, false, false);
+assert.strictEqual(editorView, null, 'A törölt kvíz mégis megjelent a szerkesztői nézetben!');
+
+// A történeti / diák lekérdezés viszont (includeDeleted = true) hibátlanul visszahozza
+const studentHistoricalView = quizRepo.getQuizById(legacyQuiz.id, true, true);
+assert.ok(studentHistoricalView !== null, 'A történeti diák lekérés null-t adott!');
+assert.strictEqual(studentHistoricalView.questions.length, 1, 'A kérdések nem töltődtek be!');
+assert.strictEqual(studentHistoricalView.questions[0].correct_answer, undefined, 'A diák nézetből nem takaródott ki a helyes válasz!');
+
+// A tanári mátrix is nyitható
+const legacyMatrix = sessionRepo.getLiveMatrixData(legacySession.id);
+assert.ok(legacyMatrix !== null, 'A tanári mátrix nem nyílt meg!');
+assert.strictEqual(legacyMatrix.participants[0].total_points, 2.0, 'A diák pontszáma sérült!');
+console.log('✓ Pillanatkép nélküli régi dolgozatnál a sablon törlése után a diák és tanári eredmény hibátlanul megnyílik');
+
+sessionRepo.deleteSession(triggerSession.id);
+sessionRepo.deleteSession(legacySession.id);
+db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(restoreQuiz.id);
+db.prepare('DELETE FROM quizzes WHERE id = ?').run(restoreQuiz.id);
+db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(legacyQuiz.id);
+db.prepare('DELETE FROM quizzes WHERE id = ?').run(legacyQuiz.id);
+
 // Takarítás a tesztadatok után
 sessionRepo.deleteSession(multiPointSession.id);
 quizRepo.deleteQuiz(multiPointQuiz.id);
@@ -881,7 +1037,7 @@ if (fs.existsSync(testDbPath + '-wal')) { try { fs.unlinkSync(testDbPath + '-wal
 if (fs.existsSync(testDbPath + '-shm')) { try { fs.unlinkSync(testDbPath + '-shm'); } catch {} }
 if (fs.existsSync(testUploadsDir)) { try { fs.rmSync(testUploadsDir, { recursive: true, force: true }); } catch {} }
 
-console.log('\n🎉 MINDEN REPORT 14-17 TESZT SIKERESEN LEFUTOTT! 🎉\n');
+console.log('\n🎉 MINDEN REPORT 14-18 TESZT SIKERESEN LEFUTOTT! 🎉\n');
 })().catch(err => {
   console.error('Kritikus teszthiba:', err);
   process.exit(1);

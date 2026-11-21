@@ -1,6 +1,11 @@
 const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
+
+// Izolált tesztkörnyezet támogatása (Report 18 / 4. pont)
+process.env.DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'ropdolgozat_test.db');
+process.env.UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'data', 'uploads_test');
+
 const quizRepo = require('../src/db/quizRepo');
 
 console.log('=== TESZTEK EGYESÍTÉSE (MERGE) RENDSZERTESZT ===\n');

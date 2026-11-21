@@ -998,7 +998,17 @@ router.get('/student/session-data', (req, res) => {
     }
 
     if (!quiz) {
-      quiz = quizRepo.getQuizById(participant.quiz_id, true);
+      // Történeti dolgozat esetén a sablon akkor is feloldható a diáknak, ha már törölve van a feladattárból (Report 18 / 3. pont)
+      quiz = quizRepo.getQuizById(participant.quiz_id, true, true);
+    }
+
+    if (!quiz) {
+      quiz = {
+        id: participant.quiz_id,
+        title: participant.quiz_title || 'Dolgozat',
+        total_points: Number(participant.max_points) || 0,
+        questions: []
+      };
     }
 
     // Kérdések sorrendezése a résztvevő egyedi question_order_json-ja szerint

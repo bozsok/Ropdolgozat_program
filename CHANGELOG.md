@@ -4,6 +4,35 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.29.0] – 2026-11-21
+
+### Report 18 megállapítások: Restore utáni azonnali triggermegújítás, műveletenként egyedi rollback-másolatok, törölt sablon melletti történeti diákeredmény-megnyitás és 100%-ban elszigetelt központi tesztfuttató
+
+Kiemelt tantermi adatintegritási, megbízhatósági és fejlesztői tesztelési kiadás a független szakértői felülvizsgálat (Report 18) megállapításainak maradéktalan orvoslására. A rendszer-visszaállítás (`restoreSystemBackup`) a kicsomagolt adatbázison a közös `migrateDatabase` függvénnyel lefutatja a sémamigrációt és az SQLite triggerek eldobását és újraépítését a fájlcsere előtt, így a korábbi verziójú (v1.26-os) mentésekből visszatöltött adatbázison is azonnal a v1.28+ snapshotos triggerek válnak aktívvá, megelőzve az elavult pontplafon miatti válaszmegtagadásokat. A visszagörgetési biztonsági mentések műveletenként teljesen egyedi, időbélyeges mappába (`_restore_snapshots/restore_op_<id>`) kerülnek: egy új restore kizárólag a saját ideiglenes könyvtárát takarítja el, megóvva az esetleges korábbi hibákból fennmaradt adatbázis- és képmásolatokat. A szerkesztői feladattárból törölt sablonok esetén a pillanatkép nélküli korábbi dolgozatok történeti kérdésadatai és eredményei a diákfelületen is hibátlanul elérhetők maradnak (`includeDeleted = true`), elhárítva a korábbi HTTP 500 belső szerverhibát. A teljes tesztcsomag (`npm test`) egy új központi futtatón (`scratch/run_all_tests.js`) keresztül valósul meg, amely az operációs rendszer ideiglenes könyvtárában (`os.tmpdir()`) teljesen elszigetelt környezetet biztosít a teszteknek. A tesztlefutás előtt és után a projekt éles adatbázisának ellenőrző összege garantáltan változatlan marad (`Checksum match: True`), tiszta projektmásolat esetén pedig nem hoz létre felesleges adatbázis-állományokat.
+
+#### Hozzáadva és megújítva (Added and Redesigned)
+* **Közös sémamigráció és triggermegújítás a Restore folyamatban (Report 18 / 1. pont):**
+  - **Fájlok:** [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js), [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js)
+  - Az önálló `migrateDatabase(targetDb)` függvény tetszőleges SQLite adatbázis-kapcsolaton elvégzi az összes strukturális migrációt, eldobja a korábbi triggereket, és a `DATABASE_SCHEMA.sql` alapján telepíti a legfrissebb snapshotos triggereket.
+  - A `restoreSystemBackup` a kicsomagolt adatbázison automatikusan meghívja ezt a migrációt még a csere előtt, és sémateszttel igazolja a szükséges triggerek meglétét.
+
+* **Műveletenként egyedi helyreállítási másolatok és rollback-védelem (Report 18 / 2. pont):**
+  - **Fájlok:** [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js)
+  - A rendszer-visszaállítás a csere előtt műveletenként egyedi `_restore_snapshots/restore_op_<id>` könyvtárba menti az adatbázist és a képeket.
+  - Sikeres művelet esetén kizárólag a saját mappa törlődik; egy korábbi hibából megőrzött mentést a következő restore nem ír felül és nem töröl. Kettős hiba esetén a könyvtárba `recovery_meta.json` metaadatfájl kerül a pontos hiba részleteivel.
+
+* **Törölt sablon melletti történeti diákeredmény-megjelenítés (Report 18 / 3. pont):**
+  - **Fájlok:** [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - A `quizRepo.getQuizById` kiegészült az `includeDeleted = false` paraméterrel: a feladattár és a szerkesztő kiszűri a törölt teszteket, míg a lezárt dolgozatok diákoldali megjelenítője feloldja a történeti kérdéseket.
+  - A `GET /api/student/session-data` defenzív tartalékot kapott, amely megelőzi a null kvíz miatti HTTP 500 belső szerverhibát.
+
+* **100%-ban elszigetelt központi tesztfuttató és 3 új integrációs teszt (Report 18 / 4. pont):**
+  - **Fájlok:** [`scratch/run_all_tests.js`](file:///d:/dev/Röpdolgozat%20program/scratch/run_all_tests.js), [`scratch/test_merge_quizzes.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_merge_quizzes.js), [`scratch/test_report14_fixes.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_report14_fixes.js), [`package.json`](file:///d:/dev/Röpdolgozat%20program/package.json)
+  - Létrejött a központi tesztfuttató, amely `os.tmpdir()` alatti átmeneti munkakönyvtárban indítja a teszteket a `DB_PATH` és `UPLOADS_DIR` átadásával, majd a végén kitakarít.
+  - 3 új automatizált teszt (24., 25., 26.) ellenőrzi a restore utáni azonnali triggermegújítást sabloncsökkentés mellett, a korábbi rollback-mentések megőrzését újabb restore esetén, valamint a törölt sablonhoz tartozó pillanatkép nélküli diákeredmény hibátlan megnyílását.
+
+---
+
 ## [1.28.0] – 2026-11-21
 
 ### Report 17 megállapítások: Többpontos kérdések arányos felülbírálása, sablonból törölt kérdések idegenkulcs-védelme, törölt tesztek indítási blokkolása, korábbi mentések Restore sémamigrációja, megbízható rollback-mentésmegőrzés és Socket.IO szobavédelem

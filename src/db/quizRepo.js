@@ -72,8 +72,10 @@ function getQuizzes(subjectId = null, gradeLevel = null, folderId = undefined) {
  * Egyetlen teszt részletes adatainak lekérése a kérdéseivel együtt
  * @param {number} quizId - Teszt azonosítója
  * @param {boolean} isStudentView - Ha igaz, a correct_answer és explanation mezők SZIGORÚAN törlésre kerülnek!
+ * @param {boolean} includeDeleted - Ha igaz, a logikailag törölt tesztet is visszaadja (lezárt dolgozatok történeti megjelenítéséhez)
  */
-function getQuizById(quizId, isStudentView = false) {
+function getQuizById(quizId, isStudentView = false, includeDeleted = false) {
+  const whereDeleted = includeDeleted ? '' : 'AND COALESCE(q.is_deleted, 0) = 0';
   const quizStmt = db.prepare(`
     SELECT 
       q.id,
@@ -90,7 +92,7 @@ function getQuizById(quizId, isStudentView = false) {
     FROM quizzes q
     JOIN subjects s ON s.id = q.subject_id
     LEFT JOIN quiz_folders f ON f.id = q.folder_id
-    WHERE q.id = ? AND COALESCE(q.is_deleted, 0) = 0
+    WHERE q.id = ? ${whereDeleted}
   `);
 
   const quiz = quizStmt.get(quizId);
