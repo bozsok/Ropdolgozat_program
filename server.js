@@ -158,10 +158,13 @@ app.post(
   }
 );
 
-// Diagnosztikai JSON body túlméret hiba (413 Payload Too Large) célzott elkapása
+// Diagnosztikai JSON body túlméret (413) és szintaktikai hiba (400) célzott elkapása
 app.use('/api/student/diagnostics/events', (err, req, res, next) => {
   if (err.status === 413 || err.type === 'entity.too.large') {
     return res.status(413).json({ code: 'CLIENT_PAYLOAD_TOO_LARGE' });
+  }
+  if (err.status === 400 || err.type === 'entity.parse.failed') {
+    return res.status(400).json({ code: 'INVALID_JSON' });
   }
   next(err);
 });

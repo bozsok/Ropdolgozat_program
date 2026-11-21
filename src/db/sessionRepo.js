@@ -794,7 +794,7 @@ function submitAnswer({
       WHERE p.id = ?
     `).get(participant_id);
 
-    if (!participant) throw new Error('A résztvevő nem található!');
+    if (!participant) throw makeRejectError('A résztvevő nem található!', 'PARTICIPANT_UNKNOWN');
 
     // 2. Idempotens védelem: ha már mentve van ez a válasz, hiba nélkül visszaadjuk a meglévőt!
     const existingAnswer = db.prepare(`
@@ -832,7 +832,7 @@ function submitAnswer({
 
     // 3. Dolgozat és határidő vizsgálat
     if (participant.session_status !== 'ACTIVE' || participant.is_finished === 1) {
-      throw new Error('A dolgozat már befejeződött, új válasz nem küldhető be!');
+      throw makeRejectError('A dolgozat már befejeződött, új válasz nem küldhető be!', 'SESSION_INACTIVE');
     }
 
     // 4. Kérdés adatainak lekérése a rögzített pillanatképből (Report 16 / 2. fejezet)
@@ -870,7 +870,7 @@ function submitAnswer({
     }
 
     if (!question) {
-      throw new Error('A kérdés nem található a dolgozatban!');
+      throw makeRejectError('A kérdés nem található a dolgozatban!', 'QUESTION_NOT_FOUND');
     }
 
     let parsedOptions = [];

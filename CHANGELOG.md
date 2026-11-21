@@ -4,6 +4,27 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.34.5] – 2026-11-22
+
+### Diagnosztikai záró csiszolás: Egységes tranzakciós elutasításkódok, hibás JSON célzott kezelése és `student.session_data` HTTP-naplózás
+
+Apró, célzott hibabesorolási és peremeset-javítások a diagnosztikai alrendszer lezárásához, SQLite-sémamódosítás és HTTP-válaszváltozás nélkül.
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Tranzakción belüli üzleti elutasítások egységesítése (`src/db/sessionRepo.js`, `src/routes/api.js`):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - A `submitAnswer()` tranzakción belüli résztvevő- (`PARTICIPANT_UNKNOWN`), lezárás- (`SESSION_INACTIVE`) és kérdésellenőrzés (`QUESTION_NOT_FOUND`) is strukturált `err.code` kódot kapott, így a dolgozathoz nem tartozó kérdés is pontosan `answer.rejected`-ként naplózódik adatbázishiba helyett.
+
+* **Szintaktikailag hibás JSON célzott kezelése a diagnosztikai végponton (`server.js`):**
+  - **Fájl:** [`server.js`](file:///d:/dev/Röpdolgozat%20program/server.js)
+  - A `POST /api/student/diagnostics/events` hibakezelője a `413` mellett a `400` (`entity.parse.failed`) hibát is elkapja, és nyers hibaüzenet helyett egységes `{ code: 'INVALID_JSON' }` választ ad.
+
+* **Diák munkamenet-visszatöltés HTTP-időtartam naplózása (`src/routes/api.js`):**
+  - **Fájl:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js)
+  - A `GET /api/student/session-data` végpont megkapta a `req.routeLogged = 'student.session_data'` jelölést, így az oldalfrissítés utáni visszatöltések futásideje is megjelenik a `http.finished` / `http.closed_early` eseményekben.
+
+---
+
 ## [1.34.4] – 2026-11-22
 
 ### Diagnosztikai finomhangolás: Megszakítható export-előellenőrzés, üzleti hibakódok, teljes útvonallefedettség, `connect_error` ritkítás és aszinkron állapotlekérés

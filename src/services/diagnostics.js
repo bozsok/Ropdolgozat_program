@@ -820,7 +820,7 @@ class DiagnosticsFileWriter {
 class DiagnosticsService {
   constructor(options = {}) {
     this.enabled = options.enabled !== undefined ? options.enabled : config.diagnosticsEnabled;
-    this.appVersion = packageJson.version || '1.34.4';
+    this.appVersion = packageJson.version || '1.34.5';
     this.runId = options.runId || crypto.randomBytes(16).toString('hex');
     this.startedAt = new Date().toISOString();
 

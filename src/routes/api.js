@@ -961,6 +961,7 @@ router.post('/student/join', (req, res) => {
 
 // Diák felület adatainak lekérése (SZIGORÚAN correct_answer és explanation NÉLKÜL!)
 router.get('/student/session-data', (req, res) => {
+  req.routeLogged = 'student.session_data';
   try {
     const token = req.headers['x-session-token'] || req.query.token;
     if (!token) {
@@ -1210,7 +1211,7 @@ router.post('/student/submit-answer', (req, res) => {
         time_spent_sec
       });
     } catch (persErr) {
-      const businessRejectCodes = new Set(['SESSION_INACTIVE', 'DEADLINE_EXCEEDED', 'RACE_NOT_STARTED', 'PARTICIPANT_UNKNOWN']);
+      const businessRejectCodes = new Set(['SESSION_INACTIVE', 'DEADLINE_EXCEEDED', 'RACE_NOT_STARTED', 'PARTICIPANT_UNKNOWN', 'QUESTION_NOT_FOUND']);
       if (persErr && typeof persErr.code === 'string' && businessRejectCodes.has(persErr.code)) {
         diagnosticsService.logEvent({
           source: 'server',
