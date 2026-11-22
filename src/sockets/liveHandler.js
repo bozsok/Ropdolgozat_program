@@ -69,19 +69,9 @@ function initLiveHandler(io) {
       socket.leave(`session_${sessionId}_student`);
     });
 
-    // Tanári Teacher Paced léptetés (együtt haladás a feladatokon, védett szerveroldali ellenőrzéssel)
-    socket.on('teacher:next_question', ({ sessionId, questionIndex }) => {
-      if (!sessionId || questionIndex === undefined) return;
-      const adminToken = getAdminTokenFromSocket(socket);
-      if (!auth.isValidToken(adminToken)) {
-        socket.emit('error', { message: 'A léptetéshez tanári jogosultság szükséges!' });
-        return;
-      }
-      sessionRepo.updateCurrentQuestionIndex(sessionId, questionIndex);
-      io.to(`session_${sessionId}_student`).emit('session:question_changed', { questionIndex });
-      io.to(`session_${sessionId}_teacher`).emit('session:question_changed', { questionIndex });
-      io.to(`session_${sessionId}_projector`).emit('session:question_changed', { questionIndex });
-    });
+    // Megjegyzés: A Tanári léptetés (TEACHER_PACED) írási útja kizárólag a védett
+    // POST /api/admin/sessions/:id/question-index REST végpont (a kimenő session:question_changed
+    // értesítést a sikeres tranzakció után az API réteg sugározza).
 
     // Tanári diák kizárás / feloldás esemény (védett tanári munkamenet vizsgálattal)
     socket.on('teacher:kick_participant', ({ sessionId, participantId }) => {

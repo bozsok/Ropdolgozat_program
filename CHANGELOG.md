@@ -4,6 +4,85 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.35.2] – 2026-11-22
+
+### Teacher Paced böngészős visszaellenőrzés javításai: Célzott élő pontfrissítés, idempotens válaszmegjelenítés, késői hibaágak védelme és indítóablak-alapérték
+
+A valós Chrome-próbák során feltárt négy kliens- és API-oldali hiba célzott javítása, SQLite-sémamódosítás nélkül.
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Célzott élő pontfrissítés és hiteles résztvevő-azonosítás (`src/routes/api.js`, `public/js/student.js`):**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `POST /api/admin/answers/:id/override` a `participant:score_updated` jelzést célzottan a diák saját `participant_${participant_id}` szobájába küldi.
+  - A diákoldali `currentParticipant` állapotváltozó deklarálva és minden belépési, visszaállítási, összegzési és kilépési ágon karbantartva lett, így megszűnt a `ReferenceError`, és a `participant:score_updated` / `participant:kicked` kezelők szigorú `sessionId` + `participantId` egyeztetéssel, más módok visszajelzési beállításainak tiszteletben tartásával működnek.
+
+* **Idempotens újraküldésnél a szerveren mentett saját válasz megjelenítése (`src/routes/api.js`, `public/js/student.js`, `scratch/test_teacher_paced.js`):**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`scratch/test_teacher_paced.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_teacher_paced.js)
+  - A `POST /api/student/submit-answer` mindig visszaadja a ténylegesen mentett saját választ (`submittedAnswer`), kikapcsolt visszajelzés esetén is (az értékelési mezők szűrése változatlan). A diák felülete ebből állítja vissza a kijelölt csempét (`selected`, `aria-checked`) vagy a beírós mezőt, és ismétlésnél nem duplázza a pontot.
+
+* **Késői beküldési válasz és hibaágak hatókörének védelme (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Bevezetésre került a monoton növekvő `questionViewSeq` nézetazonosító; a `submitAnswer()` minden aszinkron `await` után (hálózati hiba, hibás JSON, HTTP-elutasítás, séma-hiba és sikeres ág esetén is) ellenőrzi a kontextust, mielőtt gombot oldana fel, modalt nyitna, DOM-ot módosítana vagy törölné a `currentOperationId`-t.
+
+* **Indítóablak visszajelzési alapértékének és késleltetett betöltésének javítása (`public/js/admin.js`):**
+  - **Fájl:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Az indítóablak a mentett `classroom_settings.hide_immediate_feedback` alapján állítja be az alapértéket; teszt- és módváltáskor a tanár kézi választása megmarad; késve megérkező beállításoknál az érintetlen jelölőnégyzet automatikusan frissül; érintetlen jelölőnél a kliens kihagyja a `show_feedback_on_end` mezőt, így mindig a szerver mentett alapértéke érvényesül.
+
+---
+
+## [1.35.1] – 2026-11-22
+
+### Kétlépcsős Teacher Paced lezárás: Összegzés kiosztása nyitva maradó részpontadással és élő diák pontfrissítéssel
+
+A Tanári léptetés (Teacher Paced) módban kettévált a kérdéskör befejezése és a dolgozat végleges lezárása, így elírások esetén a tanulói összegzés megjelenése után is adható részpont a mátrixban, nulla SQLite-sémamódosítással.
+
+#### Hozzáadva és módosítva (Added and Changed)
+* **Kétlépcsős Teacher Paced lezárás (`src/db/sessionRepo.js`, `src/routes/api.js`, `public/admin.html`, `public/js/admin.js`, `public/js/student.js`):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Új `POST /api/admin/sessions/:id/complete-questions` végpont és `sessionRepo.completeTeacherPacedQuestions()` tranzakciós metódus: lezárja a kérdéskört (`current_question_index = totalQuestions`), minden résztvevőt készre (`is_finished = 1`) állít, a munkamenetet azonban `ACTIVE` állapotban hagyja, így a tanár továbbra is felülbírálhat válaszokat és adhat részpontot.
+  - A léptetősáv *„Befejezés”* gombja külön megerősítő ablakot (`#modal-confirm-tp-complete`) nyit meg; megerősítés után a léptetősáv látható marad inaktív gombokkal, a diákok képernyőjén pedig azonnal megjelenik a személyes összegzés.
+  - A végleges lezárást továbbra is a felső *„Dolgozat befejezése”* gomb végzi (`status = 'FINISHED'`), amely eltünteti a léptetősávot és végleg lezárja a pontozást.
+  - Tanári kézi felülbíráláskor (`POST /api/admin/answers/:id/override`) a szerver `participant:score_updated` eseményt küld, így a már összegzést néző tanuló képernyőjén élőben frissül a javított pontszám és érdemjegy.
+
+* **Elfogadási teszt bővítése (`scratch/test_teacher_paced.js`):**
+  - **Fájl:** [`scratch/test_teacher_paced.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_teacher_paced.js)
+  - Új **TP-08** teszteset a kétlépcsős lezárás, a köztes részpontadás és a végleges lezárás utáni módosítástiltás ellenőrzésére.
+
+---
+
+## [1.35.0] – 2026-11-22
+
+### Tanári léptetés (Teacher Paced) dolgozatmód és halványkék, színtévesztő-barát diák válaszadási felület
+
+Beépült a teljes körű **Teacher Paced (Tanári léptetés)** dolgozatmód nulla SQLite-sémamódosítással, valamint megújult a diák válaszadási vizuális nyelv a nyugodt, egyértelmű kiválasztás és a színtévesztő-barát kiértékelés érdekében.
+
+#### Hozzáadva (Added)
+* **Teacher Paced (Tanári léptetés) szerveroldali motor és REST-vezérlés (`src/db/sessionRepo.js`, `src/routes/api.js`, `src/sockets/liveHandler.js`, `src/services/diagnostics.js`):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`src/sockets/liveHandler.js`](file:///d:/dev/Röpdolgozat%20program/src/sockets/liveHandler.js), [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js)
+  - A `startSession()` támogatja a `TEACHER_PACED` módot, szerveroldalon kényszeríti a kérdések eredeti sorrendjét (`shuffle_questions = 0`) és a korlátlan egyéni időt (`time_limit_min = 0`), induláskor az 1. kérdés (`current_question_index = 0`) nyitott.
+  - Új `POST /api/admin/sessions/:id/question-index` végpont (`admin.teacher_step` diagnosztikai útvonallal) és `sessionRepo.setTeacherQuestionIndex()` tranzakciós, határellenőrzött léptető metódus optimista `fromIndex` (`409 Conflict`) ütközésvédelemmel több tanári géphez; a régi, validálatlan `teacher:next_question` Socket.IO írási ág kivezetve.
+  - A `submitAnswer()` idempotens újraküldés-védelme megelőzi az aktív kérdés korlátozását (`QUESTION_NOT_ACTIVE`), a válaszadás nem zárja le automatikusan a diákot, a `POST /api/student/finish` pedig aktív `TEACHER_PACED` munkamenetben elutasított (`TEACHER_PACED_FINISH_FORBIDDEN`).
+  - Stabil, **determinisztikus opciókeverés** (`shuffle_options = 1` esetén oldalfrissítéskor és visszalépéskor is változatlan `A/B/C/D` sorrend), aktív állapotban kizárólag az aktuális kérdés kiadása, kikapcsolt visszajelzésnél (`show_feedback_on_end = 0`) szivárgásmentes szűrés `session-data`-ban, `submit-answer`-ben és `join` recovery-ben, majd tanári lezárás után teljes értékelőlap és megoldások megjelenítése.
+  - A `POST /api/student/submit-answer` bekapcsolt visszajelzésnél azonnal visszaadja a frissen számolt `results` objektumot, így a diák százalékos eredménye és érdemjegye már az *Ellenőrzés* gomb megnyomásakor frissül.
+
+* **Tanári léptetősáv és archívum-módjelvény (`public/admin.html`, `public/js/admin.js`, `public/css/style.css`):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A dolgozatindító ablakban aktiválva a *Tanári léptetés (Teacher Paced – közös haladás)* mód és az *Azonnali visszajelzés és magyarázat megjelenítése* kapcsoló, automatikus kérdéskeverés- és időkorlát-tiltással.
+  - Új tanári vezérlősáv az élő mátrix fölött (*Előző*, gyorsugró legördülő, *Következő* – amely az utolsó kérdésen megerősítő ablakkal nyíló piros *Befejezés* gombbá alakul –, kérdéselőnézet, *„X / Y diák válaszolt”* számláló és aktív kérdésoszlop kiemelése).
+  - A *Korábbi dolgozatok* (`report-card`) kártyáin színes, ikonos módjelvény (*Tanári léptetés*, *Diák-tempó*, *Űrhajós csapatverseny*) mutatja a lezajlott dolgozat típusát.
+
+* **Diák Teacher Paced felület és megújult válaszadási UX (`public/student.html`, `public/js/student.js`, `public/css/style.css`):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Verziózott, sorosított `syncTeacherPacedState()` szinkronizáció (`session:question_changed` és újracsatlakozás esetén), késői HTTP-válasz védelem, elrejtett felső *Kilépés* gomb, magyarázat megjelenítése bekapcsolt visszajelzésnél, valamint ugrásmentes, egysoros várakozó jelvény a láblécben.
+  - Kiválasztási színváltás a narancsról **halványkékre** (`#eff6ff` háttér, `#3b82f6` keret, kék betűjel-korong) `ABCD`, `Igaz / Hamis` és beírós (`SHORT`, fókuszra kékülő) kérdéseknél, billentyűzetes kezelhetőséggel (`role="radiogroup"` / `role="radio"` / `:focus-visible`).
+  - Válaszadás közben eltűnt a felesleges jobb oldali rádiókör; kiértékeléskor mindhárom kérdéstípusnál (`ABCD`, `Igaz / Hamis`, `SHORT`) tiszta, háttérkorong nélküli zöld `✓` vagy piros `✕` ikon segíti a színtévesztő tanulókat.
+
+* **Automatizált elfogadási tesztcsomag (`scratch/test_teacher_paced.js`, `scratch/run_all_tests.js`):**
+  - **Fájlok:** [`scratch/test_teacher_paced.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_teacher_paced.js), [`scratch/run_all_tests.js`](file:///d:/dev/Röpdolgozat%20program/scratch/run_all_tests.js)
+  - 7 átfogó elfogadási teszt (**TP-01 – TP-07**) bekötve a teljes `npm test` regressziós csomagba.
+
+---
+
 ## [1.34.5] – 2026-11-22
 
 ### Diagnosztikai záró csiszolás: Egységes tranzakciós elutasításkódok, hibás JSON célzott kezelése és `student.session_data` HTTP-naplózás

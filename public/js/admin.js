@@ -102,7 +102,17 @@
   const startTimeLimit = document.getElementById('start-time-limit');
   const startShuffleQuestions = document.getElementById('start-shuffle-questions');
   const startShuffleOptions = document.getElementById('start-shuffle-options');
+  const startShowFeedback = document.getElementById('start-show-feedback');
   const formStartSession = document.getElementById('form-start-session');
+
+  // Teacher Paced (Tanári léptetés) vezérlősáv elemei
+  const teacherPacedControls = document.getElementById('teacher-paced-controls');
+  const btnTpPrev = document.getElementById('btn-tp-prev');
+  const btnTpNext = document.getElementById('btn-tp-next');
+  const tpQuestionSelect = document.getElementById('tp-question-select');
+  const tpQuestionPreview = document.getElementById('tp-question-preview');
+  const tpAnsweredCounter = document.getElementById('tp-answered-counter');
+  let tpStepInFlight = false;
 
   // Tesztszerkesztő elemek
   const quizzesListContainer = document.getElementById('quizzes-list-container');
@@ -345,6 +355,12 @@
     socket.on('race:started', () => {
       if (btnAdminStartRace) btnAdminStartRace.style.display = 'none';
     });
+
+    socket.on('session:question_changed', (data) => {
+      if (currentSessionId && (!data || !data.sessionId || String(data.sessionId) === String(currentSessionId))) {
+        switchSession(currentSessionId);
+      }
+    });
   }
 
   /**
@@ -510,6 +526,9 @@
     if (btnFinishSession) {
       btnFinishSession.style.display = 'inline-block';
     }
+    if (teacherPacedControls) {
+      teacherPacedControls.style.display = 'none';
+    }
   }
 
   /**
@@ -660,18 +679,203 @@
   let isMatrixAnonymous = true;
 
   /**
+   * Tanári léptetés (Teacher Paced) vezérlősáv kirajzolása és szinkronizálása
+   */
+  function renderTeacherPacedBar(data) {
+    if (!teacherPacedControls) return;
+    const { questions = [], participants = [], answers = [], session } = data || {};
+    const isActiveTp = Boolean(session && session.mode === 'TEACHER_PACED' && session.status === 'ACTIVE' && questions.length > 0);
+
+    if (!isActiveTp) {
+      teacherPacedControls.style.display = 'none';
+      return;
+    }
+
+    teacherPacedControls.style.display = 'flex';
+    const total = questions.length;
+    const rawIdx = Number(session.current_question_index) || 0;
+    const isReviewPhase = rawIdx >= total;
+    const currentIdx = Math.max(0, Math.min(total - 1, rawIdx));
+    const activeQ = questions[currentIdx];
+
+    if (tpQuestionSelect) {
+      tpQuestionSelect.innerHTML = questions.map((q, idx) => {
+        const plain = String(q.question_text || '').replace(/<[^>]*>/g, '').trim();
+        const shortTxt = plain.length > 36 ? `${plain.slice(0, 36)}…` : plain;
+        return `<option value="${idx}" ${idx === currentIdx ? 'selected' : ''}>${idx + 1} / ${total}. kérdés${shortTxt ? ' – ' + escapeHtml(shortTxt) : ''}</option>`;
+      }).join('');
+      tpQuestionSelect.value = String(currentIdx);
+      tpQuestionSelect.disabled = tpStepInFlight || isReviewPhase;
+    }
+
+    if (btnTpPrev) {
+      btnTpPrev.disabled = tpStepInFlight || isReviewPhase || currentIdx <= 0;
+    }
+    if (btnTpNext) {
+      const isLastQuestion = currentIdx >= total - 1;
+      btnTpNext.disabled = tpStepInFlight || isReviewPhase;
+      if (isReviewPhase) {
+        btnTpNext.classList.remove('btn-primary');
+        btnTpNext.classList.add('btn-danger');
+        btnTpNext.title = 'A kérdések lezárva – a válaszok még javíthatók a mátrixban';
+        btnTpNext.innerHTML = '<span>Befejezve</span><span class="material-symbols-outlined">check_circle</span>';
+      } else if (isLastQuestion) {
+        btnTpNext.classList.remove('btn-primary');
+        btnTpNext.classList.add('btn-danger');
+        btnTpNext.title = 'Kérdések befejezése és összegzés megjelenítése a diákoknak';
+        btnTpNext.innerHTML = '<span>Befejezés</span><span class="material-symbols-outlined">flag</span>';
+      } else {
+        btnTpNext.classList.remove('btn-danger');
+        btnTpNext.classList.add('btn-primary');
+        btnTpNext.title = 'Következő kérdés';
+        btnTpNext.innerHTML = '<span>Következő</span><span class="material-symbols-outlined">arrow_forward</span>';
+      }
+    }
+
+    if (tpQuestionPreview) {
+      if (isReviewPhase) {
+        tpQuestionPreview.textContent = 'Kérdések lezárva – a tanulók látják az összegzést. A mátrixban még javíthatsz és adhatsz részpontot!';
+      } else if (activeQ) {
+        const plainText = String(activeQ.question_text || '').replace(/<[^>]*>/g, '').trim();
+        tpQuestionPreview.textContent = `${currentIdx + 1}. kérdés: ${plainText || '–'}`;
+      }
+    }
+
+    if (tpAnsweredCounter && activeQ) {
+      if (isReviewPhase) {
+        tpAnsweredCounter.textContent = `${participants.length} tanuló · Javítás nyitva`;
+      } else {
+        const answeredIds = new Set(
+          answers.filter(a => Number(a.question_id) === Number(activeQ.id)).map(a => a.participant_id)
+        );
+        tpAnsweredCounter.textContent = `${answeredIds.size} / ${participants.length} diák válaszolt`;
+      }
+    }
+  }
+
+  async function stepTeacherQuestion(targetIndex, expectedFromIndex = null) {
+    if (!currentSessionId || tpStepInFlight) return;
+    tpStepInFlight = true;
+    if (btnTpPrev) btnTpPrev.disabled = true;
+    if (btnTpNext) btnTpNext.disabled = true;
+    if (tpQuestionSelect) tpQuestionSelect.disabled = true;
+
+    try {
+      const body = { questionIndex: targetIndex };
+      if (expectedFromIndex !== null && expectedFromIndex !== undefined) {
+        body.fromIndex = expectedFromIndex;
+      }
+
+      const res = await fetch(`/api/admin/sessions/${currentSessionId}/question-index`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const result = await res.json();
+
+      if (res.status === 409 && result && result.conflict) {
+        showToast(result.error || 'Egy másik tanári gépen közben léptették a kérdést.', 'warning');
+        await switchSession(currentSessionId);
+        return;
+      }
+
+      if (!res.ok || !result.success) {
+        showToast((result && result.error) || 'Nem sikerült léptetni a kérdést!', 'danger');
+        if (lastMatrixData) renderTeacherPacedBar(lastMatrixData);
+        return;
+      }
+
+      if (lastMatrixData && lastMatrixData.session) {
+        lastMatrixData.session.current_question_index = result.currentIndex;
+        renderMatrix(lastMatrixData);
+      }
+    } catch (err) {
+      console.error('Hiba a tanári léptetés során:', err);
+      showToast('Hálózati hiba a kérdés léptetésekor!', 'danger');
+    } finally {
+      tpStepInFlight = false;
+      if (lastMatrixData) renderTeacherPacedBar(lastMatrixData);
+    }
+  }
+
+  if (btnTpPrev) {
+    btnTpPrev.addEventListener('click', () => {
+      if (!lastMatrixData || !lastMatrixData.session) return;
+      const curr = Number(lastMatrixData.session.current_question_index) || 0;
+      if (curr > 0) stepTeacherQuestion(curr - 1, curr);
+    });
+  }
+
+  if (btnTpNext) {
+    btnTpNext.addEventListener('click', () => {
+      if (!lastMatrixData || !lastMatrixData.session) return;
+      const curr = Number(lastMatrixData.session.current_question_index) || 0;
+      const total = Array.isArray(lastMatrixData.questions) ? lastMatrixData.questions.length : 0;
+      if (curr >= total) return;
+      if (curr + 1 < total) {
+        stepTeacherQuestion(curr + 1, curr);
+      } else if (currentSessionId) {
+        openModal('modal-confirm-tp-complete');
+      }
+    });
+  }
+
+  const btnSubmitTpComplete = document.getElementById('btn-submit-tp-complete');
+  if (btnSubmitTpComplete) {
+    btnSubmitTpComplete.addEventListener('click', async () => {
+      if (!currentSessionId || tpStepInFlight) return;
+      tpStepInFlight = true;
+      btnSubmitTpComplete.disabled = true;
+      try {
+        const res = await fetch(`/api/admin/sessions/${currentSessionId}/complete-questions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await res.json();
+        closeModal('modal-confirm-tp-complete');
+        if (res.ok && result.success) {
+          showToast('Összegzés megjelenítve a tanulóknak! A mátrixban még javíthatsz a végleges lezárás előtt.', 'success');
+          await switchSession(currentSessionId);
+        } else {
+          showToast((result && result.error) || 'Nem sikerült befejezni a kérdéseket!', 'danger');
+        }
+      } catch (err) {
+        console.error('Hiba a kérdések befejezésekor:', err);
+        showToast('Hálózati hiba a kérdések befejezésekor!', 'danger');
+      } finally {
+        tpStepInFlight = false;
+        btnSubmitTpComplete.disabled = false;
+      }
+    });
+  }
+
+  if (tpQuestionSelect) {
+    tpQuestionSelect.addEventListener('change', () => {
+      const target = parseInt(tpQuestionSelect.value, 10);
+      if (!Number.isNaN(target)) {
+        stepTeacherQuestion(target, null);
+      }
+    });
+  }
+
+  /**
    * Élő Mátrix Táblázat Kirajzolása
    */
   function renderMatrix(data) {
     lastMatrixData = data;
     const { questions, participants, answers, session } = data;
 
-    // KPI összegző kártyák azonnali kiszámítása és frissítése
+    // KPI összegző kártyák és Teacher Paced léptetősáv frissítése
     renderKpiCards(data);
+    renderTeacherPacedBar(data);
+
+    const isActiveTp = Boolean(session && session.mode === 'TEACHER_PACED' && session.status === 'ACTIVE');
+    const rawTpIdx = isActiveTp ? (Number(session.current_question_index) || 0) : -1;
+    const activeTpIdx = (isActiveTp && rawTpIdx < questions.length) ? Math.max(0, rawTpIdx) : -1;
 
     // Fejléc sor összeállítása (Calm Learner Mátrix)
     const qColsHtml = questions.map((q, idx) => `
-      <th class="matrix-q-col col-question" data-q-idx="${idx}" title="${escapeHtml(q.question_text || `${idx + 1}. kérdés`)}">${idx + 1}</th>
+      <th class="matrix-q-col col-question ${idx === activeTpIdx ? 'tp-active-col' : ''}" data-q-idx="${idx}" title="${escapeHtml(q.question_text || `${idx + 1}. kérdés`)}">${idx + 1}</th>
     `).join('');
 
     matrixHeadRow.innerHTML = `
@@ -1369,6 +1573,24 @@
   /**
    * Új Dolgozat Indítása (Modal)
    */
+  let startShowFeedbackDirty = false;
+
+  if (startShowFeedback) {
+    startShowFeedback.addEventListener('change', () => {
+      startShowFeedbackDirty = true;
+    });
+  }
+
+  function initStartModalFeedbackDefault() {
+    startShowFeedbackDirty = false;
+    if (!startShowFeedback) return;
+    if (currentClassroomSettings && currentClassroomSettings.hide_immediate_feedback !== undefined) {
+      startShowFeedback.checked = !Boolean(currentClassroomSettings.hide_immediate_feedback);
+    } else {
+      startShowFeedback.checked = true;
+    }
+  }
+
   function syncStartQuizTimeLimit() {
     if (!startQuizId || !startTimeLimit) return;
     const selOpt = startQuizId.options[startQuizId.selectedIndex];
@@ -1381,16 +1603,36 @@
     if (currentClassroomSettings && currentClassroomSettings.shuffle_options !== undefined) {
       if (startShuffleOptions) startShuffleOptions.checked = Boolean(currentClassroomSettings.shuffle_options);
     }
+    syncStartModeConstraints();
+  }
+
+  function syncStartModeConstraints() {
+    if (!startMode) return;
+    const isTp = startMode.value === 'TEACHER_PACED';
+    if (startShuffleQuestions) {
+      if (isTp) startShuffleQuestions.checked = false;
+      startShuffleQuestions.disabled = isTp;
+    }
+    if (startTimeLimit) {
+      if (isTp) startTimeLimit.value = '0';
+      startTimeLimit.disabled = isTp;
+    }
+  }
+
+  if (startMode) {
+    startMode.addEventListener('change', syncStartModeConstraints);
   }
 
   btnOpenStartModal.addEventListener('click', async () => {
     await updateStartSessionQuizOptions(true);
     syncStartQuizTimeLimit();
+    initStartModalFeedbackDefault();
     openModal('modal-start-session');
   });
   btnOpenStartModalAlt.addEventListener('click', async () => {
     await updateStartSessionQuizOptions(true);
     syncStartQuizTimeLimit();
+    initStartModalFeedbackDefault();
     openModal('modal-start-session');
   });
 
@@ -1423,6 +1665,9 @@
       shuffle_questions: startShuffleQuestions.checked ? 1 : 0,
       shuffle_options: startShuffleOptions.checked ? 1 : 0
     };
+    if (startShowFeedback && startShowFeedbackDirty) {
+      payload.show_feedback_on_end = startShowFeedback.checked ? 1 : 0;
+    }
 
     try {
       const res = await fetch('/api/admin/sessions/start', {
@@ -3817,6 +4062,14 @@
         ? `<span class="badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; background-color: rgba(34, 197, 94, 0.12); color: #15803d; font-weight: 700; font-size: 0.78rem;"><span class="material-symbols-outlined" style="font-size: 14px; color: #16a34a;">radio_button_checked</span><span>Folyamatban</span></span>`
         : `<span class="badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; background-color: rgba(100, 116, 139, 0.12); color: #475569; font-weight: 700; font-size: 0.78rem;"><span class="material-symbols-outlined" style="font-size: 14px; color: #64748b;">lock</span><span>Lezárva</span></span>`;
 
+      const modeStyleMap = {
+        'TEACHER_PACED': { icon: 'co_present', bg: '#eff6ff', color: '#1d4ed8' },
+        'SPACE_RACE': { icon: 'rocket_launch', bg: '#f3e8ff', color: '#7e22ce' },
+        'STUDENT_PACED': { icon: 'person', bg: '#fff7ed', color: '#c2410c' }
+      };
+      const modeCfg = modeStyleMap[s.mode] || modeStyleMap['STUDENT_PACED'];
+      const modeBadge = `<span class="badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; background-color: ${modeCfg.bg}; color: ${modeCfg.color}; font-weight: 700; font-size: 0.78rem;"><span class="material-symbols-outlined" style="font-size: 14px; color: ${modeCfg.color};">${modeCfg.icon}</span><span>${escapeHtml(formatSessionMode(s.mode))}</span></span>`;
+
       const classPill = s.class_name
         ? `<span class="report-card-pill">${escapeHtml(s.class_name)} osztály</span>`
         : `<span class="report-card-pill" style="color: var(--text-muted);">${s.grade_level ? `${escapeHtml(s.grade_level)}. évfolyam` : 'Minden osztály'}</span>`;
@@ -3838,6 +4091,7 @@
             <div class="report-card-title-row">
               <h3 class="report-card-title">${escapeHtml(s.quiz_title)}</h3>
               ${statusBadge}
+              ${modeBadge}
             </div>
             <div class="report-card-meta-row">
               ${classPill}
@@ -4007,6 +4261,9 @@
         if (shuf) shuf.checked = Boolean(classroom_settings.shuffle_questions);
         if (shufOpt) shufOpt.checked = Boolean(classroom_settings.shuffle_options);
         if (hide) hide.checked = Boolean(classroom_settings.hide_immediate_feedback);
+        if (startShowFeedback && !startShowFeedbackDirty && classroom_settings.hide_immediate_feedback !== undefined) {
+          startShowFeedback.checked = !Boolean(classroom_settings.hide_immediate_feedback);
+        }
 
         isMatrixAnonymous = Boolean(classroom_settings.anonym_mode_default);
         if (lastMatrixData) renderMatrix(lastMatrixData);

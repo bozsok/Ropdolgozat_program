@@ -395,7 +395,7 @@ router.post('/admin/quiz-folders', requireAdminAuth, (req, res) => {
     const created = quizRepo.createFolder({ name, parent_id });
     res.json({ success: true, folder: created });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -405,7 +405,7 @@ router.put('/admin/quiz-folders/:id', requireAdminAuth, (req, res) => {
     const updated = quizRepo.renameFolder(req.params.id, req.body.name);
     res.json({ success: true, folder: updated });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -415,7 +415,7 @@ router.delete('/admin/quiz-folders/:id', requireAdminAuth, (req, res) => {
     quizRepo.deleteFolder(req.params.id);
     res.json({ success: true, message: 'Mappa sikeresen törölve, a tesztek felkerültek a szülő mappába.' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -434,7 +434,7 @@ router.post('/admin/quizzes', requireAdminAuth, (req, res) => {
     const created = quizRepo.createQuiz(req.body);
     res.json({ success: true, quiz: created });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -443,7 +443,7 @@ router.put('/admin/quizzes/:id', requireAdminAuth, (req, res) => {
     const updated = quizRepo.updateQuiz(req.params.id, req.body);
     res.json({ success: true, quiz: updated });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -452,7 +452,7 @@ router.post('/admin/quizzes/:id/duplicate', requireAdminAuth, (req, res) => {
     const duplicated = quizRepo.duplicateQuiz(req.params.id, req.body.title || null);
     res.json({ success: true, quiz: duplicated });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -472,7 +472,7 @@ router.post('/admin/quizzes/merge', requireAdminAuth, (req, res) => {
     });
     res.json({ success: true, quiz: merged });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -481,7 +481,7 @@ router.delete('/admin/quizzes/:id', requireAdminAuth, (req, res) => {
     quizRepo.deleteQuiz(req.params.id);
     res.json({ success: true, message: 'Teszt sikeresen törölve!' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -492,7 +492,7 @@ router.put('/admin/quizzes/:id/move', requireAdminAuth, (req, res) => {
     const updated = quizRepo.moveQuiz(req.params.id, folderId);
     res.json({ success: true, quiz: updated });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -630,7 +630,7 @@ router.post('/admin/sessions/start', requireAdminAuth, (req, res) => {
     }
     res.json({ success: true, session });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -663,7 +663,7 @@ router.post('/admin/sessions/:id/finish', requireAdminAuth, (req, res) => {
     }
     res.json({ success: true, session: finished });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -677,7 +677,7 @@ router.delete('/admin/sessions/:id', requireAdminAuth, (req, res) => {
     }
     res.json({ success: true, message: 'Dolgozat sikeresen törölve az archívumból!' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -695,7 +695,81 @@ router.post('/admin/sessions/:id/start-race', requireAdminAuth, (req, res) => {
     }
     res.json({ success: true, session });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+  }
+});
+
+// Tanári léptetés (Teacher Paced): aktív kérdés sorszámának beállítása (Admin)
+router.post('/admin/sessions/:id/question-index', requireAdminAuth, (req, res) => {
+  req.routeLogged = 'admin.teacher_step';
+  try {
+    const rawTarget = req.body ? req.body.questionIndex : undefined;
+    const rawFrom = req.body ? req.body.fromIndex : undefined;
+    const expectedFromIndex = (rawFrom !== undefined && rawFrom !== null && rawFrom !== '') ? rawFrom : null;
+
+    const result = sessionRepo.setTeacherQuestionIndex(req.params.id, rawTarget, expectedFromIndex);
+    if (result.conflict) {
+      return res.status(409).json({
+        success: false,
+        conflict: true,
+        error: 'Egy másik tanári gépen közben léptették a kérdést.',
+        currentIndex: result.currentIndex,
+        totalQuestions: result.totalQuestions
+      });
+    }
+
+    if (result.changed) {
+      const io = req.app.get('io');
+      if (io) {
+        const payload = {
+          sessionId: Number(req.params.id),
+          questionIndex: result.currentIndex
+        };
+        io.to(`session_${req.params.id}_student`).emit('session:question_changed', payload);
+        io.to(`session_${req.params.id}_teacher`).emit('session:question_changed', payload);
+        io.to(`session_${req.params.id}_projector`).emit('session:question_changed', payload);
+        broadcastMatrixUpdate(io, req.params.id);
+      }
+    }
+
+    res.json({
+      success: true,
+      changed: result.changed,
+      currentIndex: result.currentIndex,
+      totalQuestions: result.totalQuestions
+    });
+  } catch (err) {
+    const status = err && err.code === 'SESSION_NOT_FOUND' ? 404 : 400;
+    res.status(status).json({ error: err.message, code: err && err.code ? err.code : undefined });
+  }
+});
+
+// Tanári léptetés (Teacher Paced): kérdések befejezése, összegzés kiosztása a diákoknak (a munkamenet ACTIVE marad javításhoz!)
+router.post('/admin/sessions/:id/complete-questions', requireAdminAuth, (req, res) => {
+  req.routeLogged = 'admin.teacher_step';
+  try {
+    const result = sessionRepo.completeTeacherPacedQuestions(req.params.id);
+    const io = req.app.get('io');
+    if (io) {
+      const payload = {
+        sessionId: Number(req.params.id),
+        questionIndex: result.currentIndex,
+        reviewPhase: true
+      };
+      io.to(`session_${req.params.id}_student`).emit('session:question_changed', payload);
+      io.to(`session_${req.params.id}_teacher`).emit('session:question_changed', payload);
+      io.to(`session_${req.params.id}_projector`).emit('session:question_changed', payload);
+      broadcastMatrixUpdate(io, req.params.id);
+    }
+    res.json({
+      success: true,
+      currentIndex: result.currentIndex,
+      totalQuestions: result.totalQuestions,
+      reviewPhase: true
+    });
+  } catch (err) {
+    const status = err && err.code === 'SESSION_NOT_FOUND' ? 404 : 400;
+    res.status(status).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -731,15 +805,19 @@ router.post('/admin/answers/:id/override', requireAdminAuth, (req, res) => {
       custom_points
     });
 
-    // Frissült mátrix adatok kiküldése Socket.io-n (tanári szobának teljes, kivetítőnek anonimizált)
+    // Frissült mátrix adatok kiküldése Socket.io-n (tanári szobának teljes, kivetítőnek anonimizált, célzott diáknak élő pontfrissítés)
     const io = req.app.get('io');
     if (io) {
       broadcastMatrixUpdate(io, updatedAnswer.session_id);
+      io.to(`participant_${updatedAnswer.participant_id}`).emit('participant:score_updated', {
+        sessionId: updatedAnswer.session_id,
+        participantId: updatedAnswer.participant_id
+      });
     }
 
     res.json({ success: true, answer: updatedAnswer });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -792,7 +870,7 @@ router.post('/admin/participants/:id/authorize-seat-change', requireAdminAuth, (
     const targetMsg = result.targetPcNumber ? ` a(z) ${result.targetPcNumber}. gépre` : '';
     res.json({ success: true, message: `Gépváltás engedélyezve ${result.studentName} számára${targetMsg}! Az új gépről bejelentkezhet.`, result });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -849,7 +927,7 @@ router.post('/admin/participants/:id/reset', requireAdminAuth, (req, res) => {
 
     res.json({ success: true, message: 'A diák téves rekordja és válaszai sikeresen törölve!' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -902,7 +980,7 @@ router.post('/admin/participants/:id/unlock', requireAdminAuth, (req, res) => {
 
     res.json({ success: true, message: 'A diák sikeresen feloldva!' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -946,16 +1024,32 @@ router.post('/student/join', (req, res) => {
       }
     }
 
+    const joinedSession = sessionRepo.getSessionById(session_id);
+    const maskJoinAnswers = Boolean(
+      joinedSession &&
+      joinedSession.mode === 'TEACHER_PACED' &&
+      joinedSession.status === 'ACTIVE' &&
+      joinedSession.show_feedback_on_end === 0
+    );
+    const safeJoinAnswers = maskJoinAnswers
+      ? (Array.isArray(joinResult.answers)
+        ? joinResult.answers.map(a => ({
+          question_id: a.question_id,
+          submitted_answer: a.submitted_answer
+        }))
+        : [])
+      : joinResult.answers;
+
     res.json({
       success: true,
       diagnosticsEnabled: config.diagnosticsEnabled,
       isRecovery: joinResult.isRecovery,
       token: joinResult.participant.session_token,
       participant: joinResult.participant,
-      answers: joinResult.answers
+      answers: safeJoinAnswers
     });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -1032,20 +1126,51 @@ router.get('/student/session-data', (req, res) => {
       orderedQuestions = questionOrder.map(id => qMap.get(id)).filter(Boolean);
     }
 
-    // ABCD válaszok opcionális keverése (shuffle_options)
+    // ABCD válaszok opcionális determinisztikus keverése (shuffle_options) – oldalfrissítéskor és visszalépéskor is stabil sorrend
     if (participant.shuffle_options === 1) {
+      const hashSeed = (str) => {
+        let h = 2166136261 >>> 0;
+        for (let i = 0; i < str.length; i++) {
+          h ^= str.charCodeAt(i);
+          h = Math.imul(h, 16777619) >>> 0;
+        }
+        return (h >>> 0) || 1;
+      };
+      const shuffleDeterministic = (arr, seedStr) => {
+        const shuffled = [...arr];
+        let state = hashSeed(seedStr);
+        const nextRand = () => {
+          state = (state + 0x6D2B79F5) >>> 0;
+          let t = Math.imul(state ^ (state >>> 15), 1 | state);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(nextRand() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+      };
+
       orderedQuestions = orderedQuestions.map(q => {
         if (q.question_type === 'ABCD' && Array.isArray(q.options)) {
-          const shuffled = [...q.options];
-          for (let i = shuffled.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-          }
-          return { ...q, options: shuffled };
+          return {
+            ...q,
+            options: shuffleDeterministic(q.options, `${participant.session_id}:${participant.id}:${q.id}`)
+          };
         }
         return q;
       });
     }
+
+    const isTeacherPaced = participant.mode === 'TEACHER_PACED';
+    const rawTpIdx = Number(participant.current_question_index) || 0;
+    const isTpReviewPhase = isTeacherPaced && participant.session_status === 'ACTIVE' && orderedQuestions.length > 0 && rawTpIdx >= orderedQuestions.length;
+    const isActiveTeacherPaced = isTeacherPaced && participant.session_status === 'ACTIVE' && !isTpReviewPhase;
+    const activeIdx = orderedQuestions.length > 0
+      ? Math.max(0, Math.min(orderedQuestions.length - 1, rawTpIdx))
+      : 0;
+    const hideActiveTpFeedback = isActiveTeacherPaced && participant.show_feedback_on_end === 0;
 
     // Tanuló pontszámának és jegyének kalkulációja
     const pointsRow = db.prepare('SELECT COALESCE(SUM(points_earned), 0.0) AS total_points FROM answers WHERE participant_id = ?').get(participant.id);
@@ -1058,25 +1183,69 @@ router.get('/student/session-data', (req, res) => {
     const grade = grader.calculateGrade(percentage, thresholds);
     const gradeText = grader.getGradeText(grade);
 
-    // Tanuló leadott válaszai az értékeléshez és áttekintéshez (dolgozat befejezése után a helyes válaszokkal együtt)
-    const showSolutions = (participant.is_finished === 1 || participant.session_status === 'FINISHED') && participant.show_feedback_on_end !== 0;
+    // Megoldókulcs térkép előkészítése (csak jogosult ágakban használjuk)
+    const buildCorrectMap = () => {
+      if (fullSnapshotQuestions.length > 0) {
+        return new Map(fullSnapshotQuestions.map(q => [q.id, q]));
+      }
+      return new Map(
+        db.prepare('SELECT id, correct_answer, explanation FROM questions WHERE quiz_id = ?').all(participant.quiz_id).map(r => [r.id, r])
+      );
+    };
+
+    // Tanuló leadott válaszai az értékeléshez és áttekintéshez
+    // Teacher Paced lezárása vagy a kérdéskör befejezése (review_phase) után mindkét visszajelzés-állásban megjelenhet a személyes értékelőlap és a megoldások
+    const showSolutions = (isTeacherPaced && (participant.session_status === 'FINISHED' || isTpReviewPhase))
+      || ((participant.is_finished === 1 || participant.session_status === 'FINISHED') && participant.show_feedback_on_end !== 0);
 
     let answers = [];
-    if (showSolutions) {
+    let currentQuestion = null;
+    let currentAnswer = null;
+    let exposedQuestions = [];
+
+    if (isActiveTeacherPaced) {
+      currentQuestion = orderedQuestions[activeIdx] || null;
+      if (currentQuestion) {
+        const rawCurrentAnswer = db.prepare(`
+          SELECT question_id, submitted_answer, is_correct, points_earned, eval_status
+          FROM answers
+          WHERE participant_id = ? AND question_id = ?
+        `).get(participant.id, currentQuestion.id);
+
+        if (rawCurrentAnswer) {
+          if (hideActiveTpFeedback) {
+            currentAnswer = {
+              question_id: rawCurrentAnswer.question_id,
+              submitted_answer: rawCurrentAnswer.submitted_answer
+            };
+          } else {
+            const correctMap = buildCorrectMap();
+            const sol = correctMap.get(currentQuestion.id);
+            currentAnswer = {
+              ...rawCurrentAnswer,
+              correct_answer: sol ? sol.correct_answer : null,
+              explanation: sol ? sol.explanation : null
+            };
+            if (sol) {
+              currentQuestion = {
+                ...currentQuestion,
+                correct_answer: sol.correct_answer,
+                explanation: sol.explanation
+              };
+            }
+          }
+          answers = [currentAnswer];
+        }
+        exposedQuestions = [currentQuestion];
+      }
+    } else if (showSolutions) {
       const rawAnswers = db.prepare(`
         SELECT question_id, submitted_answer, is_correct, points_earned, eval_status
         FROM answers
         WHERE participant_id = ?
       `).all(participant.id);
 
-      let correctMap = new Map();
-      if (fullSnapshotQuestions.length > 0) {
-        correctMap = new Map(fullSnapshotQuestions.map(q => [q.id, q]));
-      } else {
-        correctMap = new Map(
-          db.prepare('SELECT id, correct_answer, explanation FROM questions WHERE quiz_id = ?').all(participant.quiz_id).map(r => [r.id, r])
-        );
-      }
+      const correctMap = buildCorrectMap();
 
       answers = rawAnswers.map(a => {
         const sol = correctMap.get(a.question_id);
@@ -1091,16 +1260,19 @@ router.get('/student/session-data', (req, res) => {
         const sol = correctMap.get(q.id);
         return sol ? { ...q, correct_answer: sol.correct_answer, explanation: sol.explanation } : q;
       });
+      const isRaceStarted = participant.mode === 'SPACE_RACE' ? (participant.current_question_index >= 1) : true;
+      exposedQuestions = isRaceStarted ? orderedQuestions : [];
     } else {
       answers = db.prepare(`
         SELECT question_id, submitted_answer, is_correct, points_earned, eval_status
         FROM answers
         WHERE participant_id = ?
       `).all(participant.id);
+      const isRaceStarted = participant.mode === 'SPACE_RACE' ? (participant.current_question_index >= 1) : true;
+      exposedQuestions = isRaceStarted ? orderedQuestions : [];
     }
 
     const isRaceStarted = participant.mode === 'SPACE_RACE' ? (participant.current_question_index >= 1) : true;
-    const exposedQuestions = isRaceStarted ? orderedQuestions : [];
 
     res.json({
       diagnosticsEnabled: config.diagnosticsEnabled,
@@ -1111,7 +1283,10 @@ router.get('/student/session-data', (req, res) => {
         class_name: participant.session_class_name,
         quiz_title: participant.quiz_title,
         mode: participant.mode,
-        grade_thresholds_json: participant.grade_thresholds_json
+        grade_thresholds_json: participant.grade_thresholds_json,
+        current_question_index: isTpReviewPhase ? orderedQuestions.length : activeIdx,
+        total_questions: orderedQuestions.length,
+        review_phase: isTpReviewPhase
       },
       participant: {
         id: participant.id,
@@ -1135,7 +1310,11 @@ router.get('/student/session-data', (req, res) => {
         questions: exposedQuestions,
         total_points: quiz.total_points
       },
-      results: {
+      currentQuestionIndex: activeIdx,
+      totalQuestions: orderedQuestions.length,
+      currentQuestion: isActiveTeacherPaced ? currentQuestion : null,
+      currentAnswer: isActiveTeacherPaced ? currentAnswer : null,
+      results: hideActiveTpFeedback ? null : {
         total_points: totalPoints,
         max_points: totalMax,
         percentage,
@@ -1211,7 +1390,7 @@ router.post('/student/submit-answer', (req, res) => {
         time_spent_sec
       });
     } catch (persErr) {
-      const businessRejectCodes = new Set(['SESSION_INACTIVE', 'DEADLINE_EXCEEDED', 'RACE_NOT_STARTED', 'PARTICIPANT_UNKNOWN', 'QUESTION_NOT_FOUND']);
+      const businessRejectCodes = new Set(['SESSION_INACTIVE', 'DEADLINE_EXCEEDED', 'RACE_NOT_STARTED', 'PARTICIPANT_UNKNOWN', 'QUESTION_NOT_FOUND', 'QUESTION_NOT_ACTIVE']);
       if (persErr && typeof persErr.code === 'string' && businessRejectCodes.has(persErr.code)) {
         diagnosticsService.logEvent({
           source: 'server',
@@ -1254,16 +1433,44 @@ router.post('/student/submit-answer', (req, res) => {
       const session = sessionRepo.getSessionById(participant.session_id);
       const hideFeedback = session ? (session.show_feedback_on_end === 0) : false;
 
+      let liveResults = null;
+      if (!hideFeedback) {
+        const pointsRow = db.prepare('SELECT COALESCE(SUM(points_earned), 0.0) AS total_points FROM answers WHERE participant_id = ?').get(participant.id);
+        const totalPoints = pointsRow ? Number(pointsRow.total_points.toFixed(2)) : 0;
+        let totalMax = (participant.max_points !== null && participant.max_points !== undefined && Number(participant.max_points) > 0)
+          ? Number(participant.max_points)
+          : 0;
+        if (totalMax <= 0 && session && session.quiz_snapshot_json) {
+          try {
+            const snap = JSON.parse(session.quiz_snapshot_json);
+            if (snap && Number(snap.total_points) > 0) totalMax = Number(snap.total_points);
+          } catch {}
+        }
+        const percentage = totalMax > 0 ? Math.round((totalPoints / totalMax) * 100) : 0;
+        const thresholds = JSON.parse((session && session.grade_thresholds_json) || participant.grade_thresholds_json || '{"2":30,"3":55,"4":75,"5":90}');
+        const grade = grader.calculateGrade(percentage, thresholds);
+        const gradeText = grader.getGradeText(grade);
+        liveResults = {
+          total_points: totalPoints,
+          max_points: totalMax,
+          percentage,
+          grade,
+          grade_text: gradeText
+        };
+      }
+
       res.json({
         success: true,
         alreadySubmitted: submission.alreadySubmitted,
+        submittedAnswer: submission.answer ? submission.answer.submitted_answer : null,
         eval_status: hideFeedback ? null : submission.answer.eval_status,
         is_correct: hideFeedback ? null : submission.answer.is_correct,
         points_earned: hideFeedback ? null : submission.answer.points_earned,
         isFinished: submission.isFinished,
         correctAnswer: hideFeedback ? null : submission.correctAnswer,
         explanation: hideFeedback ? null : submission.explanation,
-        hideFeedback: hideFeedback
+        hideFeedback: hideFeedback,
+        results: liveResults
       });
     } catch (afterErr) {
       diagnosticsService.logEvent({
@@ -1277,7 +1484,7 @@ router.post('/student/submit-answer', (req, res) => {
       throw afterErr;
     }
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -1332,6 +1539,9 @@ router.post('/student/finish', (req, res) => {
 
     res.json({ success: true, participant: finished });
   } catch (err) {
+    if (err && err.code === 'TEACHER_PACED_FINISH_FORBIDDEN') {
+      return res.status(400).json({ error: err.message, code: err.code });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -1476,7 +1686,7 @@ router.post('/admin/settings', requireAdminAuth, (req, res) => {
     const settings = settingsRepo.saveSettings(req.body);
     res.json({ success: true, settings });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 

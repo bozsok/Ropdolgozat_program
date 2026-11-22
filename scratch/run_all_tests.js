@@ -26,7 +26,8 @@ const testFiles = [
   'scratch/test_socrative_import.js',
   'scratch/test_merge_quizzes.js',
   'scratch/test_report14_fixes.js',
-  'scratch/test_diagnostics.js'
+  'scratch/test_diagnostics.js',
+  'scratch/test_teacher_paced.js'
 ];
 
 let allPassed = true;

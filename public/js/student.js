@@ -376,6 +376,7 @@
     if (typeof result.alreadySubmitted !== 'boolean') return false;
     if (typeof result.isFinished !== 'boolean') return false;
     if (typeof result.hideFeedback !== 'boolean') return false;
+    if (result.submittedAnswer !== undefined && result.submittedAnswer !== null && typeof result.submittedAnswer !== 'string') return false;
     if (!result.hideFeedback) {
       if (result.eval_status !== null && typeof result.eval_status !== 'string') return false;
       if (result.is_correct !== null && typeof result.is_correct !== 'number') return false;
@@ -497,6 +498,7 @@
   const optionsContainer = document.getElementById('options-container');
   const shortAnswerContainer = document.getElementById('short-answer-container');
   const shortAnswerInput = document.getElementById('short-answer-input');
+  const shortAnswerEvalIcon = document.getElementById('short-answer-eval-icon');
   const actionButtonsBox = document.getElementById('action-buttons-box');
   const btnSubmitAnswer = document.getElementById('btn-submit-answer');
 
@@ -508,6 +510,21 @@
   const feedbackPoints = document.getElementById('feedback-points');
   const feedbackBody = document.getElementById('feedback-body');
   const btnNextQuestion = document.getElementById('btn-next-question');
+  const teacherPacedWaitPill = document.getElementById('teacher-paced-wait-pill');
+  const teacherPacedWaitPillText = document.getElementById('teacher-paced-wait-pill-text');
+  const teacherPacedWaitBanner = document.getElementById('teacher-paced-wait-banner');
+  const teacherPacedWaitText = document.getElementById('teacher-paced-wait-text');
+
+  // Teacher Paced (Tanári léptetés) és aktív résztvevő állapotváltozók
+  let currentParticipant = null;
+  let questionViewSeq = 0;
+  let isTeacherPacedMode = false;
+  let teacherPacedShowFeedback = true;
+  let teacherPacedQuestionIndex = 0;
+  let teacherPacedTotalQuestions = 0;
+  let teacherPacedCurrentAnswer = null;
+  let teacherPacedSyncSeq = 0;
+  let lastServerResults = null;
 
   const summaryContainer = document.getElementById('summary-container');
   const finalScore = document.getElementById('final-score');
@@ -622,6 +639,8 @@
       const isTargeted = data && (data.participantId || data.studentId);
 
       if (!isTargeted || matchesParticipant || matchesStudent) {
+        currentParticipant = null;
+        questionViewSeq++;
         sessionStorage.removeItem('ropdolgozat_token');
         clearDiagnosticsBuffer();
         showCalmAlert('A tanár feloldotta a munkamenetedet vagy engedélyezte a gépváltást. Az oldal újratöltődik.', 'Munkamenet feloldva', 'info', () => {
@@ -636,6 +655,23 @@
         showToast('🚀 A verseny elindult! Sok sikert!', 'success');
         // Kérdések és elindított időzítő azonnali lekérése a szerverről
         await startQuizInterface(null);
+      }
+    });
+
+    // Tanári léptetés (Teacher Paced): kérdésváltás szinkronizálása
+    socket.on('session:question_changed', async (data) => {
+      if (activeSession && sessionToken && (!data || !data.sessionId || String(data.sessionId) === String(activeSession.id))) {
+        await syncTeacherPacedState();
+      }
+    });
+
+    // Tanári kézi pontjavítás / részpontadás: összegző képernyő élő frissítése
+    socket.on('participant:score_updated', async (data) => {
+      if (!activeSession || !sessionToken || !currentParticipant || !data) return;
+      if (String(data.sessionId) !== String(activeSession.id)) return;
+      if (String(data.participantId) !== String(currentParticipant.id)) return;
+      if (summaryContainer && summaryContainer.style.display !== 'none') {
+        await syncTeacherPacedState();
       }
     });
 
@@ -690,6 +726,9 @@
       }
       if (activeSession && sessionToken) {
         socket.emit('join:session', { sessionId: activeSession.id, role: 'student', token: sessionToken });
+        if (isTeacherPacedMode) {
+          syncTeacherPacedState();
+        }
       }
     });
   }
@@ -1036,6 +1075,36 @@
    * Élő mérőszámok (Eredmény % és Érdemjegy) frissítése a felső kártyán
    */
   function updateLiveMetrics() {
+    if (isTeacherPacedMode && !teacherPacedShowFeedback) {
+      if (quizMetricScoreVal) quizMetricScoreVal.textContent = '–';
+      if (quizMetricGradeVal) quizMetricGradeVal.textContent = '–';
+      if (quizMetricScoreChip) {
+        quizMetricScoreChip.classList.remove('grade-1', 'grade-2', 'grade-3', 'grade-4', 'grade-5');
+      }
+      return;
+    }
+
+    if (isTeacherPacedMode && lastServerResults) {
+      const answeredCountTp = answeredQuestionIds.size + (teacherPacedCurrentAnswer ? 1 : 0);
+      if (answeredCountTp === 0 && (!lastServerResults.total_points || lastServerResults.total_points === 0)) {
+        if (quizMetricScoreVal) quizMetricScoreVal.textContent = '–';
+        if (quizMetricGradeVal) quizMetricGradeVal.textContent = '–';
+        if (quizMetricScoreChip) {
+          quizMetricScoreChip.classList.remove('grade-1', 'grade-2', 'grade-3', 'grade-4', 'grade-5');
+        }
+        return;
+      }
+      const pctTp = Math.min(100, Math.round(Number(lastServerResults.percentage) || 0));
+      const gradeTp = lastServerResults.grade || calculateKRÉTAGrade(pctTp, sessionThresholds);
+      if (quizMetricScoreVal) quizMetricScoreVal.textContent = `${pctTp}%`;
+      if (quizMetricGradeVal) quizMetricGradeVal.textContent = `${gradeTp}`;
+      if (quizMetricScoreChip) {
+        quizMetricScoreChip.classList.remove('grade-1', 'grade-2', 'grade-3', 'grade-4', 'grade-5');
+        quizMetricScoreChip.classList.add(`grade-${gradeTp}`);
+      }
+      return;
+    }
+
     const answeredCount = answeredQuestionIds.size;
     if (answeredCount === 0) {
       if (quizMetricScoreVal) quizMetricScoreVal.textContent = '–';
@@ -1361,6 +1430,7 @@
       }
 
       sessionToken = data.token;
+      currentParticipant = data.participant || null;
       sessionStorage.setItem('ropdolgozat_token', sessionToken);
 
       // Diagnosztikai állapot és hatókör beállítása
@@ -1395,6 +1465,8 @@
         headers: { 'x-session-token': token }
       });
       if (!res.ok) {
+        currentParticipant = null;
+        questionViewSeq++;
         sessionStorage.removeItem('ropdolgozat_token');
         clearDiagnosticsBuffer();
         return false;
@@ -1402,6 +1474,7 @@
 
       const data = await res.json();
       sessionToken = token;
+      currentParticipant = data.participant || null;
       const restoredScope = data.participant ? `${data.participant.session_id}_${data.participant.id}` : null;
       applyDiagnosticsScope(restoredScope, data.diagnosticsEnabled);
       activeSession = {
@@ -1414,14 +1487,16 @@
         socket.emit('join:session', { sessionId: activeSession.id, role: 'student', token: sessionToken });
       }
 
-      if (data.participant.is_finished === 1) {
+      if (data.participant.is_finished === 1 || data.participant.session_status === 'FINISHED' || (data.session && data.session.review_phase)) {
+        const isTpFinished = data.participant.session_mode === 'TEACHER_PACED'
+          && (data.participant.session_status === 'FINISHED' || Boolean(data.session && data.session.review_phase));
         showSummary({
           totalPoints: data.results ? data.results.total_points : 0,
           maxPoints: (data.results && data.results.max_points) || (data.quiz && data.quiz.total_points),
           percentage: data.results ? data.results.percentage : 0,
           grade: data.results ? data.results.grade : null,
           gradeText: data.results ? data.results.grade_text : '',
-          showFeedback: data.participant.show_feedback_on_end === 1,
+          showFeedback: isTpFinished ? true : (data.participant.show_feedback_on_end === 1),
           participant: data.participant,
           session: data.session,
           quiz: data.quiz,
@@ -1433,10 +1508,87 @@
       await startQuizInterface(data);
       return true;
     } catch {
+      currentParticipant = null;
+      questionViewSeq++;
       sessionStorage.removeItem('ropdolgozat_token');
       clearDiagnosticsBuffer();
       return false;
     }
+  }
+
+  /**
+   * Teacher Paced (Tanári léptetés) és élő összegzés sorosított, verziózott állapot-szinkronizálás
+   */
+  async function syncTeacherPacedState() {
+    if (!sessionToken) return;
+    const reqSessionId = activeSession ? activeSession.id : null;
+    const reqParticipantId = currentParticipant ? currentParticipant.id : null;
+    const mySeq = ++teacherPacedSyncSeq;
+    try {
+      const res = await fetch('/api/student/session-data', {
+        headers: { 'x-session-token': sessionToken }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (mySeq !== teacherPacedSyncSeq) return;
+      if (reqSessionId && data.participant && String(data.participant.session_id) !== String(reqSessionId)) return;
+      if (reqParticipantId && data.participant && String(data.participant.id) !== String(reqParticipantId)) return;
+
+      if (data.participant) {
+        currentParticipant = data.participant;
+      }
+
+      const isSummaryReady = data.participant && (
+        data.participant.session_status === 'FINISHED'
+        || data.participant.is_finished === 1
+        || (data.session && data.session.review_phase)
+      );
+      if (isSummaryReady) {
+        const isTpSummary = data.participant.session_mode === 'TEACHER_PACED'
+          && (data.participant.session_status === 'FINISHED' || Boolean(data.session && data.session.review_phase));
+        showSummary({
+          totalPoints: data.results ? data.results.total_points : 0,
+          maxPoints: (data.results && data.results.max_points) || (data.quiz && data.quiz.total_points),
+          percentage: data.results ? data.results.percentage : 0,
+          grade: data.results ? data.results.grade : null,
+          gradeText: data.results ? data.results.grade_text : '',
+          showFeedback: isTpSummary ? true : (data.participant.show_feedback_on_end === 1),
+          participant: data.participant,
+          session: data.session,
+          quiz: data.quiz,
+          answers: data.answers || []
+        });
+        return;
+      }
+
+      await startQuizInterface(data);
+    } catch (err) {
+      console.error('Hiba a Teacher Paced szinkronizálásakor:', err);
+    }
+  }
+
+  function showTeacherPacedWaitPill() {
+    if (teacherPacedWaitBanner) teacherPacedWaitBanner.style.display = 'none';
+    if (!teacherPacedWaitPill) return;
+    const isLastTp = teacherPacedTotalQuestions > 0 && (teacherPacedQuestionIndex + 1 >= teacherPacedTotalQuestions);
+    if (teacherPacedWaitPillText) {
+      teacherPacedWaitPillText.textContent = isLastTp
+        ? 'Várd meg a dolgozat lezárását!'
+        : 'Várd meg a tanár léptetését!';
+    }
+    teacherPacedWaitPill.style.display = 'inline-flex';
+  }
+
+  function showTeacherPacedWaitBanner() {
+    if (teacherPacedWaitPill) teacherPacedWaitPill.style.display = 'none';
+    if (!teacherPacedWaitBanner) return;
+    const isLastTp = teacherPacedTotalQuestions > 0 && (teacherPacedQuestionIndex + 1 >= teacherPacedTotalQuestions);
+    if (teacherPacedWaitText) {
+      teacherPacedWaitText.textContent = isLastTp
+        ? 'Válasz beküldve. Várd meg, amíg a tanár lezárja a dolgozatot!'
+        : 'Válasz beküldve. Várd meg, amíg a tanár a következő kérdésre lép!';
+    }
+    teacherPacedWaitBanner.style.display = 'flex';
   }
 
   /**
@@ -1451,9 +1603,38 @@
       data = await res.json();
     }
 
+    if (data && data.participant) {
+      currentParticipant = data.participant;
+    }
     currentQuiz = data.quiz;
     currentQuestions = data.quiz.questions;
     if (!quizStartTime) quizStartTime = Date.now();
+
+    isTeacherPacedMode = (data.session && data.session.mode === 'TEACHER_PACED')
+      || (data.participant && data.participant.session_mode === 'TEACHER_PACED')
+      || (activeSession && activeSession.mode === 'TEACHER_PACED');
+    teacherPacedShowFeedback = data.participant ? (data.participant.show_feedback_on_end !== 0) : true;
+    lastServerResults = data.results || null;
+
+    if (isTeacherPacedMode) {
+      teacherPacedQuestionIndex = Number(
+        data.currentQuestionIndex !== undefined
+          ? data.currentQuestionIndex
+          : (data.session && data.session.current_question_index !== undefined ? data.session.current_question_index : 0)
+      ) || 0;
+      teacherPacedTotalQuestions = Number(
+        data.totalQuestions !== undefined
+          ? data.totalQuestions
+          : (data.session && data.session.total_questions !== undefined ? data.session.total_questions : currentQuestions.length)
+      ) || currentQuestions.length;
+      teacherPacedCurrentAnswer = data.currentAnswer || null;
+    } else {
+      teacherPacedCurrentAnswer = null;
+    }
+
+    if (btnQuizExit) {
+      btnQuizExit.style.display = isTeacherPacedMode ? 'none' : 'inline-flex';
+    }
 
     // Korábban leadott válaszok betöltése a memóriába (Recovery esetén)
     if (Array.isArray(data.answers)) {
@@ -1547,7 +1728,12 @@
       setupTimer(data.participant.deadline_at);
     }
 
-    // Megkeressük az első megválaszolatlan kérdést
+    // Megkeressük az első megválaszolatlan kérdést (Teacher Paced módban mindig az aktuális 0. elem)
+    if (isTeacherPacedMode) {
+      renderQuestion(0);
+      return;
+    }
+
     let nextIndex = 0;
     for (let i = 0; i < currentQuestions.length; i++) {
       if (!answeredQuestionIds.has(currentQuestions[i].id)) {
@@ -1563,10 +1749,12 @@
    * Kérdés megjelenítése a képernyőn (Calm Learner stílusban)
    */
   function renderQuestion(index) {
+    questionViewSeq++;
     currentOperationId = null;
     currentOperationQuestionId = null;
 
     if (index >= currentQuestions.length) {
+      if (isTeacherPacedMode) return;
       finishQuiz();
       return;
     }
@@ -1575,9 +1763,12 @@
     const q = currentQuestions[index];
     questionStartTime = Date.now();
 
+    const displayIndex = isTeacherPacedMode ? teacherPacedQuestionIndex : index;
+    const displayTotal = isTeacherPacedMode ? (teacherPacedTotalQuestions || currentQuestions.length) : currentQuestions.length;
+
     // 1. Kérdésszám és sorszámok
-    questionProgress.textContent = `${index + 1} / ${currentQuestions.length}. kérdés`;
-    if (quizQnumText) quizQnumText.textContent = String(index + 1);
+    questionProgress.textContent = `${displayIndex + 1} / ${displayTotal}. kérdés`;
+    if (quizQnumText) quizQnumText.textContent = String(displayIndex + 1);
 
     const typeBadgeMap = {
       'ABCD': 'Feleletválasztó',
@@ -1600,15 +1791,24 @@
       }
     }
 
-    // 2. Haladási sáv és 3 részes szöveges állapot (a már befejezett válaszok szerint)
-    const answeredCount = answeredQuestionIds.size;
-    const progressPct = Math.round((answeredCount / currentQuestions.length) * 100);
-    if (quizProgressBarFill) quizProgressBarFill.style.width = `${progressPct}%`;
+    // 2. Haladási sáv és 3 részes szöveges állapot
+    if (isTeacherPacedMode) {
+      const tpPct = displayTotal > 0 ? Math.round(((displayIndex + 1) / displayTotal) * 100) : 0;
+      if (quizProgressBarFill) quizProgressBarFill.style.width = `${tpPct}%`;
+      if (progressTextDone) progressTextDone.textContent = 'Tanári léptetés';
+      if (progressTextCurrent) progressTextCurrent.textContent = (displayIndex + 1 === displayTotal) ? `${displayIndex + 1}. Utolsó kérdés!` : `${displayIndex + 1}. kérdés aktív`;
+      const tpRemaining = Math.max(0, displayTotal - (displayIndex + 1));
+      if (progressTextRemaining) progressTextRemaining.textContent = tpRemaining === 0 ? 'Utolsó feladat' : `Még ${tpRemaining} kérdés következik`;
+    } else {
+      const answeredCount = answeredQuestionIds.size;
+      const progressPct = Math.round((answeredCount / currentQuestions.length) * 100);
+      if (quizProgressBarFill) quizProgressBarFill.style.width = `${progressPct}%`;
 
-    const remainingCount = currentQuestions.length - answeredCount;
-    if (progressTextDone) progressTextDone.textContent = answeredCount === 0 ? 'Kezdés' : `${answeredCount}. befejezve`;
-    if (progressTextCurrent) progressTextCurrent.textContent = (index + 1 === currentQuestions.length) ? `${index + 1}. Utolsó kérdés!` : `${index + 1}. folyamatban`;
-    if (progressTextRemaining) progressTextRemaining.textContent = remainingCount === 0 ? 'Már nincs több hátra' : `${remainingCount} kérdés van hátra`;
+      const remainingCount = currentQuestions.length - answeredCount;
+      if (progressTextDone) progressTextDone.textContent = answeredCount === 0 ? 'Kezdés' : `${answeredCount}. befejezve`;
+      if (progressTextCurrent) progressTextCurrent.textContent = (index + 1 === currentQuestions.length) ? `${index + 1}. Utolsó kérdés!` : `${index + 1}. folyamatban`;
+      if (progressTextRemaining) progressTextRemaining.textContent = remainingCount === 0 ? 'Már nincs több hátra' : `${remainingCount} kérdés van hátra`;
+    }
 
     // 3. Kérdésszöveg és opcionális ábra
     questionText.innerHTML = formatCode(q.question_text);
@@ -1629,19 +1829,65 @@
 
     // 4. Reset korábbi állapotokból
     feedbackCard.style.display = 'none';
+    if (teacherPacedWaitPill) teacherPacedWaitPill.style.display = 'none';
+    if (teacherPacedWaitBanner) teacherPacedWaitBanner.style.display = 'none';
     btnSubmitAnswer.disabled = true;
     btnSubmitAnswer.style.display = 'inline-flex';
     actionButtonsBox.style.display = 'flex';
 
     optionsContainer.innerHTML = '';
+    optionsContainer.removeAttribute('role');
     shortAnswerContainer.style.display = 'none';
     shortAnswerInput.value = '';
     shortAnswerInput.disabled = false;
     shortAnswerInput.classList.remove('input-correct', 'input-wrong');
+    if (shortAnswerEvalIcon) {
+      shortAnswerEvalIcon.classList.remove('eval-correct', 'eval-wrong');
+    }
+
+    // Segédfüggvény rádió-csempék billentyűzetes és egér alapú kiválasztásához
+    const bindRadioTile = (tile, selector) => {
+      tile.setAttribute('tabindex', '0');
+      tile.setAttribute('role', 'radio');
+      tile.setAttribute('aria-checked', 'false');
+
+      const selectTile = () => {
+        if (tile.style.pointerEvents === 'none') return;
+        document.querySelectorAll(selector).forEach(b => {
+          b.classList.remove('selected');
+          b.setAttribute('aria-checked', 'false');
+        });
+        tile.classList.add('selected');
+        tile.setAttribute('aria-checked', 'true');
+        btnSubmitAnswer.disabled = false;
+      };
+
+      tile.addEventListener('click', selectTile);
+      tile.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectTile();
+          return;
+        }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+          e.preventDefault();
+          const allTiles = Array.from(document.querySelectorAll(selector));
+          const currIdx = allTiles.indexOf(tile);
+          if (currIdx === -1 || allTiles.length === 0) return;
+          const step = (e.key === 'ArrowDown' || e.key === 'ArrowRight') ? 1 : -1;
+          const nextTile = allTiles[(currIdx + step + allTiles.length) % allTiles.length];
+          if (nextTile) {
+            nextTile.focus();
+            nextTile.click();
+          }
+        }
+      });
+    };
 
     // 5. Kérdéstípus szerinti megjelenítés
     if (q.question_type === 'ABCD') {
       optionsContainer.className = 'quiz-options-group';
+      optionsContainer.setAttribute('role', 'radiogroup');
       const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
       const opts = (Array.isArray(q.options) && q.options.length > 0) ? q.options : ['A', 'B', 'C', 'D'];
       opts.forEach((optText, optIdx) => {
@@ -1660,17 +1906,13 @@
           </div>
         `;
 
-        tile.addEventListener('click', () => {
-          document.querySelectorAll('.quiz-option-tile').forEach(b => b.classList.remove('selected'));
-          tile.classList.add('selected');
-          btnSubmitAnswer.disabled = false;
-        });
-
+        bindRadioTile(tile, '.quiz-option-tile');
         optionsContainer.appendChild(tile);
       });
 
     } else if (q.question_type === 'TF') {
       optionsContainer.className = 'quiz-tf-grid';
+      optionsContainer.setAttribute('role', 'radiogroup');
       const tfData = [
         { value: 'Igaz', title: 'IGAZ' },
         { value: 'Hamis', title: 'HAMIS' }
@@ -1682,14 +1924,12 @@
         tile.dataset.value = item.value;
         tile.innerHTML = `
           <span class="quiz-tf-name">${item.title}</span>
+          <span class="quiz-tf-eval-badge" aria-hidden="true">
+            <span class="material-symbols-outlined">check</span>
+          </span>
         `;
 
-        tile.addEventListener('click', () => {
-          document.querySelectorAll('.quiz-tf-tile').forEach(b => b.classList.remove('selected'));
-          tile.classList.add('selected');
-          btnSubmitAnswer.disabled = false;
-        });
-
+        bindRadioTile(tile, '.quiz-tf-tile');
         optionsContainer.appendChild(tile);
       });
 
@@ -1697,7 +1937,6 @@
       optionsContainer.className = 'quiz-options-group';
       shortAnswerContainer.style.display = 'block';
       shortAnswerInput.disabled = false;
-      setTimeout(() => shortAnswerInput.focus(), 50);
 
       shortAnswerInput.oninput = () => {
         btnSubmitAnswer.disabled = shortAnswerInput.value.trim().length === 0;
@@ -1708,6 +1947,43 @@
         }
       };
     }
+
+    // 6. Teacher Paced: ha erre a kérdésre a diák már korábban válaszolt (oldalfrissítés / tanári visszalépés)
+    if (isTeacherPacedMode && teacherPacedCurrentAnswer && Number(teacherPacedCurrentAnswer.question_id) === Number(q.id)) {
+      const savedVal = String(teacherPacedCurrentAnswer.submitted_answer || '');
+      if (q.question_type === 'ABCD') {
+        document.querySelectorAll('.quiz-option-tile').forEach(tile => {
+          if (tile.dataset.value === savedVal) {
+            tile.classList.add('selected');
+            tile.setAttribute('aria-checked', 'true');
+          }
+          tile.style.pointerEvents = 'none';
+        });
+      } else if (q.question_type === 'TF') {
+        document.querySelectorAll('.quiz-tf-tile').forEach(tile => {
+          if (tile.dataset.value === savedVal) {
+            tile.classList.add('selected');
+            tile.setAttribute('aria-checked', 'true');
+          }
+          tile.style.pointerEvents = 'none';
+        });
+      } else if (q.question_type === 'SHORT') {
+        shortAnswerInput.value = savedVal;
+        shortAnswerInput.disabled = true;
+      }
+
+      actionButtonsBox.style.display = 'none';
+      if (teacherPacedShowFeedback && teacherPacedCurrentAnswer.is_correct !== undefined && teacherPacedCurrentAnswer.is_correct !== null) {
+        showFeedback({
+          is_correct: teacherPacedCurrentAnswer.is_correct,
+          correctAnswer: teacherPacedCurrentAnswer.correct_answer !== undefined ? teacherPacedCurrentAnswer.correct_answer : q.correct_answer,
+          explanation: teacherPacedCurrentAnswer.explanation !== undefined ? teacherPacedCurrentAnswer.explanation : q.explanation,
+          isFinished: false
+        });
+      } else {
+        showTeacherPacedWaitBanner();
+      }
+    }
   }
 
   // Válasz beküldése
@@ -1715,6 +1991,19 @@
 
   async function submitAnswer() {
     const q = currentQuestions[currentQuestionIndex];
+    if (!q) return;
+    const submittedSessionId = activeSession ? activeSession.id : null;
+    const submittedParticipantId = currentParticipant ? currentParticipant.id : null;
+    const submittedQuestionId = q.id;
+    const submittedViewSeq = questionViewSeq;
+    const isStillCurrentView = () => (
+      submittedViewSeq === questionViewSeq
+      && activeSession
+      && String(activeSession.id) === String(submittedSessionId)
+      && (!submittedParticipantId || (currentParticipant && String(currentParticipant.id) === String(submittedParticipantId)))
+      && currentQuestions[currentQuestionIndex]
+      && Number(currentQuestions[currentQuestionIndex].id) === Number(submittedQuestionId)
+    );
     let submittedValue = '';
 
     if (q.question_type === 'ABCD') {
@@ -1780,6 +2069,7 @@
         reasonCode: 'NETWORK_ERROR',
         durationMs
       });
+      if (!isStillCurrentView()) return;
       showCalmAlert(
         `Hálózati megszakadás a válasz beküldésekor!${shortReqLabel}\nA válasz mentésének eredménye bizonytalan a kapcsolat megszakadása miatt. Kérlek, próbáld újra!`,
         'Hálózati hiba',
@@ -1802,6 +2092,7 @@
         httpStatus: res.status,
         durationMs
       });
+      if (!isStillCurrentView()) return;
       showCalmAlert(
         `A kiszolgáló válasza feldolgozhatatlan volt!${shortReqLabel}\nA válasz mentésének eredménye bizonytalan. Kérlek, próbáld újra!`,
         'Hiba a mentéskor',
@@ -1817,10 +2108,16 @@
         requestId: thisRequestId,
         operationId: thisOperationId,
         outcome: 'error',
-        reasonCode: 'HTTP_ERROR',
+        reasonCode: (result && result.code) ? result.code : 'HTTP_ERROR',
         httpStatus: res.status,
         durationMs
       });
+      if (!isStillCurrentView()) return;
+      if (result && result.code === 'QUESTION_NOT_ACTIVE') {
+        showToast('A tanár közben másik kérdésre lépett.', 'warning');
+        await syncTeacherPacedState();
+        return;
+      }
       const errMsg = (result && typeof result.error === 'string') ? result.error : 'Hiba a válasz mentésekor!';
       showCalmAlert(`${errMsg}${shortReqLabel}`, 'Hiba a mentéskor', 'error');
       btnSubmitAnswer.disabled = false;
@@ -1837,6 +2134,7 @@
         httpStatus: res.status,
         durationMs
       });
+      if (!isStillCurrentView()) return;
       showCalmAlert(
         `A kiszolgáló válasza nem felelt meg az elvárt formátumnak!${shortReqLabel}\nA válasz mentésének eredménye bizonytalan. Kérlek, próbáld újra!`,
         'Hiba a mentéskor',
@@ -1855,32 +2153,85 @@
       outcome: 'ok',
       durationMs
     });
+    setTimeout(() => flushDiagnosticsQueue(), 100);
+
+    // A szerver által ténylegesen mentett válasz használata (idempotens ismétlésnél az eredeti mentett érték!)
+    const hasServerSubmittedAnswer = typeof result.submittedAnswer === 'string';
+    const persistedValue = hasServerSubmittedAnswer ? result.submittedAnswer : submittedValue;
+    const isSameSession = activeSession && String(activeSession.id) === String(submittedSessionId);
+
+    if (isSameSession) {
+      answeredQuestionIds.add(q.id);
+      const savedAnswerObj = {
+        question_id: q.id,
+        submitted_answer: persistedValue,
+        is_correct: result.is_correct,
+        points_earned: Number(result.points_earned) || 0,
+        eval_status: result.eval_status || (result.is_correct === 1 ? 'CORRECT' : 'WRONG'),
+        correct_answer: result.correctAnswer,
+        explanation: result.explanation
+      };
+      studentSubmittedAnswers.set(q.id, savedAnswerObj);
+      if (isTeacherPacedMode && result.results && !result.hideFeedback) {
+        lastServerResults = result.results;
+      }
+      if (!result.alreadySubmitted && result.is_correct === 1) {
+        earnedPoints += Number(result.points_earned) || 1;
+      }
+    }
+
+    // 3. Késői HTTP-válasz hatókör-védelme: ha közben a tanár továbbléptetett vagy új nézet aktív, ne módosítsuk az új nézet DOM-ját és műveletazonosítóját
+    if (!isStillCurrentView()) {
+      return;
+    }
 
     currentOperationId = null;
     currentOperationQuestionId = null;
-    setTimeout(() => flushDiagnosticsQueue(), 100);
 
-    // 3. Felületi feldolgozás (itt fellépő kivétel már nem válthat ki answer.no_ack eseményt)
-    answeredQuestionIds.add(q.id);
-    studentSubmittedAnswers.set(q.id, {
-      question_id: q.id,
-      submitted_answer: submittedValue,
-      is_correct: result.is_correct,
-      points_earned: Number(result.points_earned) || 0,
-      eval_status: result.eval_status || (result.is_correct === 1 ? 'CORRECT' : 'WRONG'),
-      correct_answer: result.correctAnswer,
-      explanation: result.explanation
-    });
-    if (result.is_correct === 1) {
-      earnedPoints += Number(result.points_earned) || 1;
+    // Hiányos ismétlési visszaigazolásnál Teacher Paced módban visszaolvassuk a szerver állapotát
+    if (isTeacherPacedMode && result.alreadySubmitted && !hasServerSubmittedAnswer) {
+      await syncTeacherPacedState();
+      return;
     }
-    updateLiveMetrics();
 
-    document.querySelectorAll('.quiz-option-tile, .quiz-tf-tile').forEach(b => {
-      b.style.pointerEvents = 'none';
-    });
-    shortAnswerInput.disabled = true;
+    if (isTeacherPacedMode) {
+      const savedEntry = studentSubmittedAnswers.get(q.id);
+      teacherPacedCurrentAnswer = result.hideFeedback
+        ? { question_id: q.id, submitted_answer: persistedValue }
+        : savedEntry;
+    }
+
+    // Ha a szerver által mentett válasz eltér a helyben kijelölttől (idempotens ismétlés), szinkronizáljuk a kijelölést / szövegmezőt
+    if (q.question_type === 'ABCD') {
+      document.querySelectorAll('.quiz-option-tile').forEach(tile => {
+        const isPersisted = tile.dataset.value === persistedValue;
+        tile.classList.toggle('selected', isPersisted);
+        tile.setAttribute('aria-checked', isPersisted ? 'true' : 'false');
+        tile.style.pointerEvents = 'none';
+      });
+    } else if (q.question_type === 'TF') {
+      document.querySelectorAll('.quiz-tf-tile').forEach(tile => {
+        const isPersisted = tile.dataset.value === persistedValue;
+        tile.classList.toggle('selected', isPersisted);
+        tile.setAttribute('aria-checked', isPersisted ? 'true' : 'false');
+        tile.style.pointerEvents = 'none';
+      });
+    } else if (q.question_type === 'SHORT') {
+      shortAnswerInput.value = persistedValue;
+      shortAnswerInput.disabled = true;
+    }
+
+    updateLiveMetrics();
     actionButtonsBox.style.display = 'none';
+
+    if (isTeacherPacedMode) {
+      if (result.hideFeedback) {
+        showTeacherPacedWaitBanner();
+      } else {
+        showFeedback(result);
+      }
+      return;
+    }
 
     if (result.hideFeedback) {
       const isLast = (currentQuestionIndex + 1 >= currentQuestions.length) || result.isFinished;
@@ -1949,16 +2300,32 @@
 
         if (isThisCorrect) {
           tile.classList.add('tile-correct');
+          const tfIcon = tile.querySelector('.quiz-tf-eval-badge .material-symbols-outlined');
+          if (tfIcon) tfIcon.textContent = 'check';
         } else if (isSelected && !isCorrect) {
           tile.classList.add('tile-wrong');
+          const tfIcon = tile.querySelector('.quiz-tf-eval-badge .material-symbols-outlined');
+          if (tfIcon) tfIcon.textContent = 'close';
         }
       });
 
     } else if (q && q.question_type === 'SHORT') {
       if (isCorrect) {
         shortAnswerInput.classList.add('input-correct');
+        if (shortAnswerEvalIcon) {
+          shortAnswerEvalIcon.classList.remove('eval-wrong');
+          shortAnswerEvalIcon.classList.add('eval-correct');
+          const sIcon = shortAnswerEvalIcon.querySelector('.material-symbols-outlined');
+          if (sIcon) sIcon.textContent = 'check';
+        }
       } else {
         shortAnswerInput.classList.add('input-wrong');
+        if (shortAnswerEvalIcon) {
+          shortAnswerEvalIcon.classList.remove('eval-correct');
+          shortAnswerEvalIcon.classList.add('eval-wrong');
+          const sIcon = shortAnswerEvalIcon.querySelector('.material-symbols-outlined');
+          if (sIcon) sIcon.textContent = 'close';
+        }
       }
     }
 
@@ -1998,10 +2365,23 @@
       feedbackTitle.innerHTML = `Helyes megoldás: <strong>${formatCode(displayCorrectAnswer)}</strong>`;
     }
 
-    // A magyarázat blokk elrejtve a letisztult visszajelzés és a duplikáció elkerülése érdekében
-    feedbackBody.innerHTML = '';
-    feedbackBody.style.display = 'none';
+    // Teacher Paced módban (bekapcsolt visszajelzés mellett) a magyarázat megjeleníthető; más módokban elrejtve marad
+    if (isTeacherPacedMode && result.explanation && String(result.explanation).trim()) {
+      feedbackBody.innerHTML = formatCode(String(result.explanation).trim()).replace(/\n/g, '<br>');
+      feedbackBody.style.display = 'block';
+    } else {
+      feedbackBody.innerHTML = '';
+      feedbackBody.style.display = 'none';
+    }
 
+    if (isTeacherPacedMode) {
+      btnNextQuestion.style.display = 'none';
+      showTeacherPacedWaitPill();
+      return;
+    }
+
+    if (teacherPacedWaitPill) teacherPacedWaitPill.style.display = 'none';
+    btnNextQuestion.style.display = 'inline-flex';
     const isLast = (currentQuestionIndex + 1 >= currentQuestions.length) || result.isFinished;
 
     // A kiértékelés pillanatában lép előre a folyamatjelző csík
@@ -2033,17 +2413,19 @@
   async function finishQuiz() {
     if (timerInterval) clearInterval(timerInterval);
 
-    try {
-      await fetch('/api/student/finish', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-session-token': sessionToken
-        },
-        body: JSON.stringify({ session_token: sessionToken })
-      });
-    } catch {
-      // ignore
+    if (!isTeacherPacedMode) {
+      try {
+        await fetch('/api/student/finish', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-session-token': sessionToken
+          },
+          body: JSON.stringify({ session_token: sessionToken })
+        });
+      } catch {
+        // ignore
+      }
     }
 
     let summaryData = null;
@@ -2053,13 +2435,14 @@
       });
       if (res.ok) {
         const data = await res.json();
+        const isTpFinished = data.participant && data.participant.session_mode === 'TEACHER_PACED' && data.participant.session_status === 'FINISHED';
         summaryData = {
           totalPoints: data.results ? data.results.total_points : 0,
           maxPoints: (data.results && data.results.max_points) || (currentQuiz ? currentQuiz.total_points : 0),
           percentage: data.results ? data.results.percentage : 0,
           grade: data.results ? data.results.grade : null,
           gradeText: data.results ? data.results.grade_text : '',
-          showFeedback: data.participant.show_feedback_on_end === 1,
+          showFeedback: isTpFinished ? true : (data.participant.show_feedback_on_end === 1),
           participant: data.participant,
           session: data.session,
           quiz: data.quiz,
@@ -2144,6 +2527,10 @@
    * Dolgozat végi értékelő felület megjelenítése (Sík, kártyamentes Calm Learner stílus)
    */
   function showSummary(data) {
+    questionViewSeq++;
+    if (data && data.participant) {
+      currentParticipant = data.participant;
+    }
     loginContainer.style.display = 'none';
     if (studentTopBar) studentTopBar.style.display = 'none';
     if (quizTopBar) quizTopBar.style.display = 'none';
@@ -2403,6 +2790,8 @@
     // 6. Új belépés gomb kezelése
     if (btnRestartStudent) {
       btnRestartStudent.onclick = () => {
+        currentParticipant = null;
+        questionViewSeq++;
         sessionStorage.removeItem('ropdolgozat_token');
         window.location.reload();
       };

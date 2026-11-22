@@ -82,6 +82,7 @@ const ALLOWED_ROUTES = new Set([
   'student.session_data',
   'admin.start_session',
   'admin.start_race',
+  'admin.teacher_step',
   'admin.finish_session',
   'admin.export_results'
 ]);

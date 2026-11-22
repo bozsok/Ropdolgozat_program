@@ -420,6 +420,9 @@
                 <span class="material-symbols-outlined quiz-short-icon">edit_note</span>
                 <input type="text" id="short-answer-input" class="quiz-short-input" placeholder="Írd be ide a választ..."
                   autocomplete="off">
+                <span id="short-answer-eval-icon" class="quiz-short-eval-icon" aria-hidden="true">
+                  <span class="material-symbols-outlined">check</span>
+                </span>
               </div>
             </div>
 
@@ -450,6 +453,16 @@
                   <span>Következő</span>
                   <span class="material-symbols-outlined">arrow_forward</span>
                 </button>
+                <span id="teacher-paced-wait-pill" class="teacher-paced-wait-pill" role="status" aria-live="polite" style="display: none;">
+                  <span class="material-symbols-outlined">hourglass_top</span>
+                  <span id="teacher-paced-wait-pill-text">Várd meg a tanár léptetését!</span>
+                </span>
+              </div>
+
+              <!-- Tanári léptetés (Teacher Paced) várakozó sáv (kikapcsolt visszajelzés esetén) -->
+              <div id="teacher-paced-wait-banner" class="teacher-paced-wait-banner" role="status" aria-live="polite" style="display: none;">
+                <span class="material-symbols-outlined">hourglass_top</span>
+                <span id="teacher-paced-wait-text">Válasz beküldve. Várd meg, amíg a tanár a következő kérdésre lép!</span>
               </div>
             </div>
           </div>

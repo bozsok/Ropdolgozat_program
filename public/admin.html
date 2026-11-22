@@ -225,6 +225,28 @@
           </div>
         </div>
 
+        <!-- Tanári léptetés (Teacher Paced) vezérlősáv -->
+        <div id="teacher-paced-controls" class="teacher-paced-bar" style="display: none;">
+          <div class="teacher-paced-nav">
+            <button id="btn-tp-prev" class="btn btn-secondary" type="button" title="Előző kérdés">
+              <span class="material-symbols-outlined">arrow_back</span>
+              <span>Előző</span>
+            </button>
+            <select id="tp-question-select" class="teacher-paced-select" aria-label="Aktív kérdés kiválasztása"></select>
+            <button id="btn-tp-next" class="btn btn-primary" type="button" title="Következő kérdés">
+              <span>Következő</span>
+              <span class="material-symbols-outlined">arrow_forward</span>
+            </button>
+          </div>
+          <div class="teacher-paced-info">
+            <span id="tp-question-preview" class="teacher-paced-preview">–</span>
+          </div>
+          <div class="teacher-paced-counter" title="Hány diák válaszolt az aktuális kérdésre">
+            <span class="material-symbols-outlined" style="font-size: 18px;">how_to_reg</span>
+            <span id="tp-answered-counter">0 / 0 diák válaszolt</span>
+          </div>
+        </div>
+
         <!-- Élő Mátrix Táblázat Kártya (Calm Learner Stílus) -->
         <div class="admin-matrix-card">
           <!-- Fejléc sáv és Színmagyarázat -->
@@ -1075,7 +1097,7 @@
           <select id="start-mode" class="form-control">
             <option value="STUDENT_PACED">Diák-tempó (Student Paced – önálló haladás)</option>
             <option value="SPACE_RACE">Űrhajós csapatverseny (Space Race)</option>
-            <option value="TEACHER_PACED" disabled style="display: none;">Tanári léptetés (Teacher Paced – Hamarosan)</option>
+            <option value="TEACHER_PACED">Tanári léptetés (Teacher Paced – közös haladás)</option>
           </select>
         </div>
 
@@ -1084,12 +1106,15 @@
           <input type="number" id="start-time-limit" class="form-control" value="0" min="0">
         </div>
 
-        <div class="form-group" style="display: flex; gap: 20px; margin-top: 14px; padding: 12px 14px; background-color: var(--surface-low, #f5f3f6); border-radius: var(--radius-md, 10px); border: 1px solid var(--border-color, #e4e1e5);">
+        <div class="form-group" style="display: flex; flex-wrap: wrap; gap: 14px 20px; margin-top: 14px; padding: 12px 14px; background-color: var(--surface-low, #f5f3f6); border-radius: var(--radius-md, 10px); border: 1px solid var(--border-color, #e4e1e5);">
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 600; color: var(--text-main);">
             <input type="checkbox" id="start-shuffle-questions" checked> Kérdések keverése
           </label>
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 600; color: var(--text-main);">
             <input type="checkbox" id="start-shuffle-options" checked> Válaszok keverése
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 600; color: var(--text-main); width: 100%;">
+            <input type="checkbox" id="start-show-feedback" checked> Azonnali visszajelzés és magyarázat megjelenítése
           </label>
         </div>
 
@@ -1101,6 +1126,42 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Teacher Paced Kérdések Befejezése (Összegzés kiosztása, javítás nyitva marad) Modal -->
+  <div id="modal-confirm-tp-complete" class="modal-backdrop">
+    <div class="modal-window" style="max-width: 500px;">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color, #e4e1e5);">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="calm-modal-icon-badge" style="background-color: #eff6ff; color: #2563eb;">
+            <span class="material-symbols-outlined">flag</span>
+          </div>
+          <div>
+            <h3 class="card-title" style="margin: 0; font-size: 1.2rem; font-weight: 800;">Kérdések befejezése és összegzés</h3>
+            <p class="card-subtitle" style="margin: 2px 0 0 0; font-size: 0.85rem; color: var(--text-muted);">Biztosan befejezed a kérdések léptetését?</p>
+          </div>
+        </div>
+        <button type="button" class="calm-modal-close-btn" onclick="closeModal('modal-confirm-tp-complete')" title="Bezárás">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div style="padding: 6px 0 16px 0; color: var(--text-main, #1b1b1e); line-height: 1.6; font-size: 0.95rem;">
+        <p style="margin-bottom: 12px;">
+          A diákok képernyőjén azonnal megjelenik a <strong>személyes összegzés és értékelőlap</strong>, és további választ már nem küldhetnek be.
+        </p>
+        <div style="background-color: #eff6ff; padding: 12px 14px; border-radius: var(--radius-md, 10px); border-left: 3px solid #3b82f6; font-size: 0.88rem; color: #1e3a8a; line-height: 1.45;">
+          <strong>Javítás és részpontadás nyitva marad:</strong><br>
+          A dolgozat továbbra is aktív marad, így a mátrixban szabadon adhatsz részpontot vagy felülbírálhatod az elírásokat. A végleges lezárást a felső <em>Dolgozat befejezése</em> gombbal tudod elvégezni.
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color, #e4e1e5);">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-confirm-tp-complete')">Mégse</button>
+        <button type="button" id="btn-submit-tp-complete" class="btn btn-primary">
+          <span class="material-symbols-outlined" style="font-size: 19px;">flag</span>
+          <span>Összegzés megjelenítése</span>
+        </button>
+      </div>
     </div>
   </div>
 

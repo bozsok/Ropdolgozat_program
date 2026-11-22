@@ -250,10 +250,6 @@ function startSession({
     throw new Error('A kiválasztott teszt nem található vagy korábban törlésre került!');
   }
 
-  if (mode === 'TEACHER_PACED') {
-    throw new Error('A Tanári léptetés mód fejlesztés alatt áll. Kérjük, válaszd a Diák-tempó vagy Űrhajós verseny módot!');
-  }
-
   // Ellenőrizzük, hogy fut-e már aktív dolgozat ezen a csatornán
   const existingActive = getActiveSessionByChannel(subject_id, trimmedGrade);
   if (existingActive) {
@@ -264,9 +260,16 @@ function startSession({
   const activeThresholds = grade_thresholds || (activeSettings ? activeSettings.grade_thresholds : null);
   const thresholdsJson = activeThresholds ? JSON.stringify(activeThresholds) : '{"2":30,"3":55,"4":75,"5":90}';
 
+  let effectiveTimeLimit = Number(time_limit_min) || 0;
   let effectiveShuffleQuestions = shuffle_questions;
   if (effectiveShuffleQuestions === null || effectiveShuffleQuestions === undefined) {
     effectiveShuffleQuestions = activeSettings?.classroom_settings?.shuffle_questions ? 1 : 0;
+  }
+
+  // Tanári léptetés (TEACHER_PACED) esetén a kérdéskeverés és az egyéni időkorlát szigorúan 0
+  if (mode === 'TEACHER_PACED') {
+    effectiveShuffleQuestions = 0;
+    effectiveTimeLimit = 0;
   }
 
   let effectiveShowFeedback = show_feedback_on_end;
@@ -309,7 +312,7 @@ function startSession({
       Number(quiz_id),
       String(class_name || '').trim(),
       mode,
-      Number(time_limit_min) || 0,
+      effectiveTimeLimit,
       effectiveShuffleQuestions ? 1 : 0,
       shuffle_options ? 1 : 0,
       effectiveShowFeedback ? 1 : 0,
@@ -620,6 +623,20 @@ function recordFocusLost(participantId) {
  * Diák önálló dolgozat-befejezése (Beküldés)
  */
 function finishParticipant(participantId) {
+  const check = db.prepare(`
+    SELECT p.id, s.mode AS session_mode, s.status AS session_status
+    FROM participants p
+    JOIN sessions s ON s.id = p.session_id
+    WHERE p.id = ?
+  `).get(participantId);
+
+  if (check && check.session_mode === 'TEACHER_PACED' && check.session_status === 'ACTIVE') {
+    throw Object.assign(
+      new Error('Tanári léptetés módban a dolgozatot a tanár zárja le!'),
+      { code: 'TEACHER_PACED_FINISH_FORBIDDEN' }
+    );
+  }
+
   const stmt = db.prepare(`
     UPDATE participants 
     SET is_finished = 1, finished_at = CURRENT_TIMESTAMP 
@@ -788,7 +805,7 @@ function submitAnswer({
     const participant = db.prepare(`
       SELECT 
         p.id, p.session_id, p.is_finished, p.deadline_at,
-        s.status AS session_status, s.quiz_id, s.quiz_snapshot_json
+        s.status AS session_status, s.mode AS session_mode, s.current_question_index, s.quiz_id, s.quiz_snapshot_json
       FROM participants p
       JOIN sessions s ON s.id = p.session_id
       WHERE p.id = ?
@@ -838,10 +855,12 @@ function submitAnswer({
     // 4. Kérdés adatainak lekérése a rögzített pillanatképből (Report 16 / 2. fejezet)
     let question = null;
     let totalQuestionsCount = 0;
+    let orderedQuestionsForMode = [];
     if (participant.quiz_snapshot_json) {
       try {
         const snap = JSON.parse(participant.quiz_snapshot_json);
         const qList = snap.questions || [];
+        orderedQuestionsForMode = qList;
         totalQuestionsCount = qList.length;
         const found = qList.find(q => String(q.id) === String(question_id));
         if (found) {
@@ -862,15 +881,27 @@ function submitAnswer({
 
     if (!question && !participant.quiz_snapshot_json) {
       // Csak pillanatkép nélküli történeti sessionök esetén megengedett a fallback a sablonra (Report 17 / 1.2 fejezet)
-      question = db.prepare(`
+      orderedQuestionsForMode = db.prepare(`
         SELECT id, quiz_id, question_type, options_json, correct_answer, explanation, points
         FROM questions
-        WHERE id = ? AND quiz_id = ?
-      `).get(question_id, participant.quiz_id);
+        WHERE quiz_id = ? AND question_order < 100000
+        ORDER BY question_order ASC, id ASC
+      `).all(participant.quiz_id);
+      totalQuestionsCount = orderedQuestionsForMode.length;
+      question = orderedQuestionsForMode.find(q => String(q.id) === String(question_id)) || null;
     }
 
     if (!question) {
       throw makeRejectError('A kérdés nem található a dolgozatban!', 'QUESTION_NOT_FOUND');
+    }
+
+    // 4b. Tanári léptetés (TEACHER_PACED) tranzakciós ellenőrzés: kizárólag az aktuálisan aktív kérdésre menthető új válasz
+    if (participant.session_mode === 'TEACHER_PACED') {
+      const activeIdx = Math.max(0, Number(participant.current_question_index) || 0);
+      const activeQ = orderedQuestionsForMode[activeIdx];
+      if (!activeQ || String(activeQ.id) !== String(question.id)) {
+        throw makeRejectError('Erre a kérdésre jelenleg nem lehet választ beküldeni!', 'QUESTION_NOT_ACTIVE');
+      }
     }
 
     let parsedOptions = [];
@@ -924,7 +955,8 @@ function submitAnswer({
     const answeredCount = db.prepare('SELECT COUNT(*) as cnt FROM answers WHERE participant_id = ?').get(participant.id).cnt;
 
     let isNowFinished = false;
-    if (answeredCount >= totalQuestions) {
+    // Tanári léptetés módban a válaszok száma csak haladási adat; a lezárást kizárólag a tanár végzi (finishSession)
+    if (participant.session_mode !== 'TEACHER_PACED' && answeredCount >= totalQuestions) {
       db.prepare(`
         UPDATE participants 
         SET is_finished = 1, finished_at = CURRENT_TIMESTAMP 
@@ -1223,7 +1255,152 @@ function getProjectorData(sessionId) {
 }
 
 /**
- * Tanári léptetés kérdésindexének mentése
+ * Tanári léptetés kérdésindexének validált, tranzakciós mentése (optimista ütközésvédelemmel)
+ */
+function setTeacherQuestionIndex(sessionId, targetIndex, expectedFromIndex = null) {
+  if (typeof targetIndex !== 'number' || !Number.isInteger(targetIndex)) {
+    throw Object.assign(new Error('A kérdés sorszámának egész számnak kell lennie!'), { status: 400, code: 'INVALID_QUESTION_INDEX' });
+  }
+  if (expectedFromIndex !== null && expectedFromIndex !== undefined) {
+    if (typeof expectedFromIndex !== 'number' || !Number.isInteger(expectedFromIndex)) {
+      throw Object.assign(new Error('A kiinduló kérdés sorszáma érvénytelen!'), { status: 400, code: 'INVALID_FROM_INDEX' });
+    }
+  }
+
+  let outcome = null;
+  const tx = db.transaction(() => {
+    const session = db.prepare(`
+      SELECT id, status, mode, current_question_index, quiz_id, quiz_snapshot_json
+      FROM sessions
+      WHERE id = ?
+    `).get(sessionId);
+
+    if (!session) {
+      throw Object.assign(new Error('A megadott dolgozat nem található!'), { status: 404, code: 'SESSION_NOT_FOUND' });
+    }
+    if (session.status !== 'ACTIVE') {
+      throw Object.assign(new Error('Lezárt dolgozatban már nem lehet kérdést léptetni!'), { status: 400, code: 'SESSION_INACTIVE' });
+    }
+    if (session.mode !== 'TEACHER_PACED') {
+      throw Object.assign(new Error('A kérdésléptetés kizárólag Tanári léptetés (Teacher Paced) módban engedélyezett!'), { status: 400, code: 'INVALID_SESSION_MODE' });
+    }
+
+    let totalQuestions = 0;
+    if (session.quiz_snapshot_json) {
+      try {
+        const snap = JSON.parse(session.quiz_snapshot_json);
+        if (snap && Array.isArray(snap.questions)) {
+          totalQuestions = snap.questions.length;
+        }
+      } catch {}
+    }
+    if (totalQuestions <= 0) {
+      totalQuestions = db.prepare('SELECT COUNT(*) as cnt FROM questions WHERE quiz_id = ? AND question_order < 100000').get(session.quiz_id).cnt;
+    }
+
+    if (targetIndex < 0 || targetIndex >= totalQuestions) {
+      throw Object.assign(
+        new Error(`A kérdés sorszáma kívül esik a tartományon (0 – ${Math.max(0, totalQuestions - 1)})!`),
+        { status: 400, code: 'QUESTION_INDEX_OUT_OF_RANGE' }
+      );
+    }
+
+    const currentIndex = Math.max(0, Number(session.current_question_index) || 0);
+    if (currentIndex >= totalQuestions) {
+      throw Object.assign(
+        new Error('A kérdések már le lettek zárva ebben a dolgozatban!'),
+        { status: 400, code: 'QUESTIONS_ALREADY_COMPLETED' }
+      );
+    }
+
+    if (expectedFromIndex !== null && expectedFromIndex !== undefined && currentIndex !== expectedFromIndex) {
+      outcome = {
+        conflict: true,
+        changed: false,
+        currentIndex,
+        totalQuestions
+      };
+      return;
+    }
+
+    if (currentIndex === targetIndex) {
+      outcome = {
+        conflict: false,
+        changed: false,
+        currentIndex,
+        totalQuestions
+      };
+      return;
+    }
+
+    db.prepare('UPDATE sessions SET current_question_index = ? WHERE id = ?').run(targetIndex, session.id);
+    outcome = {
+      conflict: false,
+      changed: true,
+      currentIndex: targetIndex,
+      totalQuestions
+    };
+  });
+
+  tx();
+  return outcome;
+}
+
+/**
+ * Tanári léptetés (Teacher Paced): kérdések befejezése és tanulói összegzés megnyitása
+ * A munkamenet ACTIVE marad, így a tanár a mátrixban továbbra is adhat részpontot / felülbírálhat!
+ */
+function completeTeacherPacedQuestions(sessionId) {
+  let outcome = null;
+  const tx = db.transaction(() => {
+    const session = db.prepare(`
+      SELECT id, status, mode, quiz_id, quiz_snapshot_json, current_question_index
+      FROM sessions
+      WHERE id = ?
+    `).get(sessionId);
+
+    if (!session) {
+      throw Object.assign(new Error('A dolgozat nem található!'), { status: 404, code: 'SESSION_NOT_FOUND' });
+    }
+    if (session.status !== 'ACTIVE') {
+      throw Object.assign(new Error('Lezárt dolgozatban már nem hajtható végre ez a művelet!'), { status: 400, code: 'SESSION_INACTIVE' });
+    }
+    if (session.mode !== 'TEACHER_PACED') {
+      throw Object.assign(new Error('Ez a művelet kizárólag Tanári léptetés (Teacher Paced) módban érhető el!'), { status: 400, code: 'INVALID_SESSION_MODE' });
+    }
+
+    let totalQuestions = 0;
+    if (session.quiz_snapshot_json) {
+      try {
+        const snap = JSON.parse(session.quiz_snapshot_json);
+        if (snap && Array.isArray(snap.questions)) {
+          totalQuestions = snap.questions.length;
+        }
+      } catch {}
+    }
+    if (totalQuestions <= 0) {
+      totalQuestions = db.prepare('SELECT COUNT(*) as cnt FROM questions WHERE quiz_id = ? AND question_order < 100000').get(session.quiz_id).cnt;
+    }
+
+    db.prepare('UPDATE sessions SET current_question_index = ? WHERE id = ?').run(totalQuestions, session.id);
+    db.prepare(`
+      UPDATE participants
+      SET is_finished = 1, finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP)
+      WHERE session_id = ?
+    `).run(session.id);
+
+    outcome = {
+      currentIndex: totalQuestions,
+      totalQuestions
+    };
+  });
+
+  tx();
+  return outcome;
+}
+
+/**
+ * Tanári léptetés kérdésindexének mentése (belső kompatibilitási segéd)
  */
 function updateCurrentQuestionIndex(sessionId, questionIndex) {
   const idx = Math.max(0, parseInt(questionIndex, 10) || 0);
@@ -1268,6 +1445,8 @@ module.exports = {
   overrideAnswer,
   getLiveMatrixData,
   getProjectorData,
+  setTeacherQuestionIndex,
+  completeTeacherPacedQuestions,
   updateCurrentQuestionIndex
 };
 
