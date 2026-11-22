@@ -4,6 +4,24 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.35.3] – 2026-11-22
+
+### Tesztszerkesztő UX-finomítás: Helyben mentés minden kérdéskártyán és pasztell fejlécgombok
+
+Kényelmi és vizuális fejlesztés a tesztszerkesztőben a hosszabb (20–30 kérdéses) feladatsorok gyors, görgetés nélküli javításához.
+
+#### Hozzáadva és módosítva (Added and Changed)
+* **Kérdéskártyánkénti helyben mentés (`public/js/admin.js`, `public/css/style.css`):**
+  - **Fájlok:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Minden kérdéskártya fejlécében az *Eltávolítás* gomb mellé bekerült egy azonos méretű, pasztell halványzöld **Mentés** gomb (`q-card-btn-save`) egyszínű Material `save` ikonnal; az *Eltávolítás* gomb egységes `close` ikont kapott.
+  - A közös `saveQuizEditor()` függvény a kártyáról indítva elmenti a teljes feladatsort (validációval, duplakattintás-védelemmel és az új teszt-/kérdésazonosítók DOM-szinkronizálásával), miközben **nyitva hagyja a szerkesztőt** az aktuális kérdésnél. Az alsó *Feladatsor mentése* gomb továbbra is ment, bezárja a szerkesztőt és frissíti a listát.
+
+* **Jól látható pasztell *Mégse* gomb a tesztszerkesztő fejlécében (`public/admin.html`, `public/css/style.css`):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A *Teszt szerkesztése* fejlécében lévő `#btn-close-editor` gomb pasztell halványpiros stílust (`q-editor-btn-cancel`) és egyszínű `close` ikont kapott.
+
+---
+
 ## [1.35.2] – 2026-11-22
 
 ### Teacher Paced böngészős visszaellenőrzés javításai: Célzott élő pontfrissítés, idempotens válaszmegjelenítés, késői hibaágak védelme és indítóablak-alapérték

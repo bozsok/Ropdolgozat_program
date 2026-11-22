@@ -2956,7 +2956,16 @@
             </div>
             <h5 class="q-card-number">Kérdés</h5>
           </div>
-          <button type="button" class="btn btn-secondary btn-remove-q" style="padding: 4px 8px; font-size: 0.8rem;">❌ Eltávolítás</button>
+          <div class="q-card-header-actions">
+            <button type="button" class="q-card-action-btn q-card-btn-save btn-save-q" title="Feladatsor mentése helyben (a szerkesztő nyitva marad)">
+              <span class="material-symbols-outlined">save</span>
+              <span>Mentés</span>
+            </button>
+            <button type="button" class="q-card-action-btn q-card-btn-remove btn-remove-q" title="Kérdés eltávolítása">
+              <span class="material-symbols-outlined">close</span>
+              <span>Eltávolítás</span>
+            </button>
+          </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 200px 100px 1fr; gap: 12px; margin-bottom: 12px;">
@@ -3203,6 +3212,14 @@
       });
     }
 
+    // Helyben mentés a kérdéskártyáról (a szerkesztő nyitva marad)
+    const btnSaveQ = item.querySelector('.btn-save-q');
+    if (btnSaveQ) {
+      btnSaveQ.addEventListener('click', () => {
+        saveQuizEditor({ closeAfterSave: false, triggerBtn: btnSaveQ });
+      });
+    }
+
     // Eltávolítás
     item.querySelector('.btn-remove-q').addEventListener('click', () => {
       item.remove();
@@ -3322,8 +3339,12 @@
     return item;
   }
 
-  // Teszt mentése validációval
-  btnSaveQuiz.addEventListener('click', async () => {
+  // Teszt mentése validációval (közös logika az alsó „Feladatsor mentése” és a kártyán lévő „Mentés” gombhoz)
+  let isSavingQuiz = false;
+
+  async function saveQuizEditor({ closeAfterSave = true, triggerBtn = null } = {}) {
+    if (isSavingQuiz) return;
+
     const title = editQuizTitle.value.trim();
     if (!title) {
       showAdminAlert('⚠️ Hiányzó cím', 'A feladatsor címének megadása kötelező!');
@@ -3435,6 +3456,10 @@
       questions
     };
 
+    isSavingQuiz = true;
+    if (btnSaveQuiz) btnSaveQuiz.disabled = true;
+    if (triggerBtn) triggerBtn.disabled = true;
+
     try {
       const url = quizId ? `/api/admin/quizzes/${quizId}` : '/api/admin/quizzes';
       const method = quizId ? 'PUT' : 'POST';
@@ -3447,15 +3472,36 @@
       const data = await res.json();
 
       if (res.ok && data.success) {
+        if (!quizId && data.quiz && data.quiz.id) {
+          editQuizId.value = String(data.quiz.id);
+        }
+        if (!closeAfterSave && data.quiz && Array.isArray(data.quiz.questions)) {
+          const savedSorted = [...data.quiz.questions].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
+          items.forEach((el, idx) => {
+            if (savedSorted[idx] && savedSorted[idx].id) {
+              el.dataset.questionId = String(savedSorted[idx].id);
+            }
+          });
+        }
         showToast('Teszt sikeresen elmentve!', 'success');
-        quizEditorCard.style.display = 'none';
+        if (closeAfterSave) {
+          quizEditorCard.style.display = 'none';
+        }
         await loadQuizzes(currentFolderId);
       } else {
         showAdminAlert('⚠️ Mentési hiba', data.error || 'Hiba a mentés során!');
       }
     } catch (err) {
       showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a mentéskor!');
+    } finally {
+      isSavingQuiz = false;
+      if (btnSaveQuiz) btnSaveQuiz.disabled = false;
+      if (triggerBtn) triggerBtn.disabled = false;
     }
+  }
+
+  btnSaveQuiz.addEventListener('click', () => {
+    saveQuizEditor({ closeAfterSave: true, triggerBtn: btnSaveQuiz });
   });
 
   /**

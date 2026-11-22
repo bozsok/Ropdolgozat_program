@@ -545,7 +545,10 @@
       <div id="quiz-editor-card" class="card" style="display: none; margin-top: 24px;">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
           <h3 id="editor-title" class="card-title">Teszt szerkesztése</h3>
-          <button id="btn-close-editor" class="btn btn-secondary">Mégse</button>
+          <button id="btn-close-editor" class="q-editor-btn-cancel" type="button" title="Szerkesztés bezárása">
+            <span class="material-symbols-outlined">close</span>
+            <span>Mégse</span>
+          </button>
         </div>
 
         <form id="form-quiz-editor" onsubmit="return false;">
