@@ -515,7 +515,24 @@
   const teacherPacedWaitBanner = document.getElementById('teacher-paced-wait-banner');
   const teacherPacedWaitText = document.getElementById('teacher-paced-wait-text');
 
-  // Teacher Paced (Tanári léptetés) és aktív résztvevő állapotváltozók
+  // Open Navigation (Szabad navigáció) DOM elemei
+  const quizMetricsWrap = document.querySelector('.quiz-metrics-wrap');
+  const openNavMapWrap = document.getElementById('open-nav-map-wrap');
+  const openNavMapGrid = document.getElementById('open-nav-map-grid');
+  const openNavFooterBar = document.getElementById('open-nav-footer-bar');
+  const btnOpenNavPrev = document.getElementById('btn-open-nav-prev');
+  const btnOpenNavClear = document.getElementById('btn-open-nav-clear');
+  const openNavSaveStatus = document.getElementById('open-nav-save-status');
+  const btnOpenNavNext = document.getElementById('btn-open-nav-next');
+  const btnOpenNavSubmit = document.getElementById('btn-open-nav-submit');
+  const openNavModalSummary = document.getElementById('open-nav-modal-summary');
+  const openNavUnansweredBox = document.getElementById('open-nav-unanswered-box');
+  const openNavUnansweredList = document.getElementById('open-nav-unanswered-list');
+  const btnCancelOpenNavSubmit = document.getElementById('btn-cancel-open-nav-submit');
+  const btnConfirmOpenNavSubmit = document.getElementById('btn-confirm-open-nav-submit');
+  const btnCloseOpenNavModal = document.getElementById('btn-close-open-nav-modal');
+
+  // Teacher Paced (Tanári léptetés), Open Navigation és aktív résztvevő állapotváltozók
   let currentParticipant = null;
   let questionViewSeq = 0;
   let isTeacherPacedMode = false;
@@ -525,6 +542,37 @@
   let teacherPacedCurrentAnswer = null;
   let teacherPacedSyncSeq = 0;
   let lastServerResults = null;
+
+  let isOpenNavigationMode = false;
+  const openNavDrafts = new Map();
+  const openNavQueues = new Map();
+  const openNavShortTimers = new Map();
+  let openNavIsSubmitting = false;
+  let openNavIsFinalized = false;
+  let openNavClosurePending = false;
+  let openNavPendingScoreRefresh = false;
+  let openNavSessionEpoch = 0;
+  let quizInterfaceLoadSeq = 0;
+  let openNavStatusCheckPromise = null;
+  let openNavTimerRetryId = null;
+  let openNavRetryAttempt = 0;
+  let modalAlertOwnerTag = null;
+  let loginListsLoadPromise = null;
+
+  const openNavConflictBanner = document.getElementById('open-nav-conflict-banner');
+  const openNavConflictServerVal = document.getElementById('open-nav-conflict-server-val');
+  const openNavConflictLocalVal = document.getElementById('open-nav-conflict-local-val');
+  const btnOpenNavKeepServer = document.getElementById('btn-open-nav-keep-server');
+  const btnOpenNavSaveLocal = document.getElementById('btn-open-nav-save-local');
+
+  const summaryReceiptView = document.getElementById('summary-receipt-view');
+  const summaryReceiptTitle = document.getElementById('summary-receipt-title');
+  const summaryReceiptSubtitle = document.getElementById('summary-receipt-subtitle');
+  const summaryReceiptTime = document.getElementById('summary-receipt-time');
+  const btnReloadSummaryFromReceipt = document.getElementById('btn-reload-summary-from-receipt');
+  const btnRestartReceipt = document.getElementById('btn-restart-receipt');
+  const summaryColLeft = document.querySelector('.calm-summary-col-left');
+  const summaryColRight = document.querySelector('.calm-summary-col-right');
 
   const summaryContainer = document.getElementById('summary-container');
   const finalScore = document.getElementById('final-score');
@@ -624,6 +672,7 @@
     }
 
     // 7. Tantárgyak és osztályok betöltése az 1. fázishoz
+    loginListsInitialized = true;
     await loadSubjects();
     await loadClasses();
   }
@@ -635,33 +684,48 @@
     socket.on('session:finished', (data) => {
       if (activeSession && String(data.sessionId) === String(activeSession.id)) {
         showToast('A tanár lezárta a dolgozatot!', 'warning');
-        finishQuiz();
+        const isOpenNavSession = isOpenNavigationMode
+          || (activeSession && activeSession.mode === 'OPEN_NAVIGATION')
+          || (currentParticipant && currentParticipant.session_mode === 'OPEN_NAVIGATION');
+        if (isOpenNavSession) {
+          isOpenNavigationMode = true;
+          openNavClosurePending = true;
+          quizInterfaceLoadSeq++;
+          syncOpenNavServerState({ requireFinal: true });
+        } else {
+          finishQuiz();
+        }
       }
     });
 
     socket.on('participant:kicked', (data) => {
-      // Csak akkor lépünk ki, ha az esemény kifejezetten a mi munkamenetünket vagy tanulónkat célozza
-      const matchesParticipant = data && currentParticipant && String(data.participantId) === String(currentParticipant.id);
-      const matchesStudent = data && data.studentId && selectedStudent && String(data.studentId) === String(selectedStudent.id);
-      const isTargeted = data && (data.participantId || data.studentId);
+      // Szigorú, egyértelmű címzés: hiányos esemény nem léptethet ki, aktív résztvevőnél participantId (és ha van, sessionId) egyezése kötelező!
+      if (!data || typeof data !== 'object') return;
+      const hasParticipantId = data.participantId !== undefined && data.participantId !== null;
+      const hasSessionId = data.sessionId !== undefined && data.sessionId !== null;
 
-      if (!isTargeted || matchesParticipant || matchesStudent) {
-        currentParticipant = null;
-        questionViewSeq++;
-        sessionStorage.removeItem('ropdolgozat_token');
-        clearDiagnosticsBuffer();
-        showCalmAlert('A tanár feloldotta a munkamenetedet vagy engedélyezte a gépváltást. Az oldal újratöltődik.', 'Munkamenet feloldva', 'info', () => {
-          window.location.reload();
-        });
+      if (currentParticipant) {
+        if (!hasParticipantId) return;
+        if (String(data.participantId) !== String(currentParticipant.id)) return;
+        if (hasSessionId && activeSession && String(data.sessionId) !== String(activeSession.id)) return;
+        handleInvalidStudentSession('A tanár feloldotta a munkamenetedet vagy engedélyezte a gépváltást. Most újra beléphetsz.');
+        return;
+      }
+
+      // Belépés előtti névválasztásnál (nincs aktív munkamenet) csak a névlista foglaltságát frissítjük, ha az érintett osztály nyitva van
+      if (selectedClass && loginStep2 && loginStep2.style.display !== 'none' && socket && socket.connected) {
+        socket.emit('student:get_occupied', { className: selectedClass });
       }
     });
 
     // Űrhajós verseny rajtot jelző esemény (Space Race indítása - Report 14 / 16. pont)
     socket.on('race:started', async (data) => {
       if (activeSession && (!data || !data.sessionId || String(data.sessionId) === String(activeSession.id))) {
+        const ctx = captureOpenNavContext();
+        if (!isOpenNavContextValid(ctx)) return;
         showToast('🚀 A verseny elindult! Sok sikert!', 'success');
-        // Kérdések és elindított időzítő azonnali lekérése a szerverről
-        await startQuizInterface(null);
+        // Kérdések és elindított időzítő azonnali lekérése a szerverről (kontextushoz kötve)
+        await startQuizInterface(null, ctx);
       }
     });
 
@@ -678,7 +742,11 @@
       if (String(data.sessionId) !== String(activeSession.id)) return;
       if (String(data.participantId) !== String(currentParticipant.id)) return;
       if (summaryContainer && summaryContainer.style.display !== 'none') {
-        await syncTeacherPacedState();
+        if (isOpenNavigationMode) {
+          await syncOpenNavServerState({ forceSummaryRefresh: true });
+        } else {
+          await syncTeacherPacedState();
+        }
       }
     });
 
@@ -735,6 +803,8 @@
         socket.emit('join:session', { sessionId: activeSession.id, role: 'student', token: sessionToken });
         if (isTeacherPacedMode) {
           syncTeacherPacedState();
+        } else if (isOpenNavigationMode) {
+          syncOpenNavServerState();
         }
       }
     });
@@ -747,7 +817,7 @@
    * @param {string} [type='warning'] - Típus: 'warning' | 'error' | 'info' | 'success'
    * @param {Function} [onClose] - Opcionális hívandó függvény a bezáráskor
    */
-  function showCalmAlert(message, title = 'Figyelmeztetés', type = 'warning', onClose = null) {
+  function showCalmAlert(message, title = 'Figyelmeztetés', type = 'warning', onClose = null, ownerTag = null) {
     if (!modalAlert) {
       alert(message);
       if (typeof onClose === 'function') onClose();
@@ -755,6 +825,7 @@
     }
 
     modalAlertCloseCallback = onClose;
+    modalAlertOwnerTag = ownerTag;
     if (modalAlertTitle) modalAlertTitle.textContent = title;
     if (modalAlertMessage) modalAlertMessage.textContent = message;
 
@@ -787,11 +858,23 @@
    */
   function closeCalmAlert() {
     closeModal('modal-alert');
+    modalAlertOwnerTag = null;
     if (typeof modalAlertCloseCallback === 'function') {
       const cb = modalAlertCloseCallback;
       modalAlertCloseCallback = null;
       cb();
     }
+  }
+
+  /**
+   * Egy adott művelethez (pl. Open Navigation beadás) tartozó elavult figyelmeztetés csendes bezárása
+   * (a korábbi visszahívás futtatása NÉLKÜL!)
+   */
+  function dismissCalmAlertByOwner(ownerTag) {
+    if (!ownerTag || modalAlertOwnerTag !== ownerTag) return;
+    modalAlertCloseCallback = null;
+    modalAlertOwnerTag = null;
+    closeModal('modal-alert');
   }
 
   /**
@@ -1012,7 +1095,11 @@
     // Dolgozat megszakítása és kilépési modal eseménykezelői
     if (btnQuizExit) {
       btnQuizExit.addEventListener('click', () => {
-        openModal('modal-confirm-exit');
+        if (isOpenNavigationMode) {
+          openOpenNavConfirmModal();
+        } else {
+          openModal('modal-confirm-exit');
+        }
       });
     }
 
@@ -1076,12 +1163,86 @@
         closeImageLightbox();
       }
     });
+
+    // Open Navigation (Szabad navigáció) vezérlőgombok és megerősítő modal
+    if (btnOpenNavPrev) {
+      btnOpenNavPrev.addEventListener('click', () => {
+        if (!isOpenNavigationMode || openNavIsSubmitting) return;
+        navigateOpenNavTo(currentQuestionIndex - 1);
+      });
+    }
+    if (btnOpenNavNext) {
+      btnOpenNavNext.addEventListener('click', () => {
+        if (!isOpenNavigationMode || openNavIsSubmitting) return;
+        navigateOpenNavTo(currentQuestionIndex + 1);
+      });
+    }
+    if (btnOpenNavClear) {
+      btnOpenNavClear.addEventListener('click', () => {
+        if (!isOpenNavigationMode || openNavIsSubmitting) return;
+        const q = currentQuestions[currentQuestionIndex];
+        if (!q || (q.question_type !== 'ABCD' && q.question_type !== 'TF')) return;
+        document.querySelectorAll('.quiz-option-tile, .quiz-tf-tile').forEach((tile) => {
+          tile.classList.remove('selected');
+          tile.setAttribute('aria-checked', 'false');
+        });
+        queueOpenNavDraftSave(q.id, '');
+      });
+    }
+    if (btnOpenNavSubmit) {
+      btnOpenNavSubmit.addEventListener('click', () => {
+        if (!isOpenNavigationMode || openNavIsSubmitting) return;
+        openOpenNavConfirmModal();
+      });
+    }
+    if (btnCancelOpenNavSubmit) {
+      btnCancelOpenNavSubmit.addEventListener('click', () => {
+        if (openNavIsSubmitting) return;
+        closeModal('modal-confirm-open-nav-submit');
+        if (isOpenNavigationMode && !openNavIsFinalized && btnOpenNavSubmit && typeof btnOpenNavSubmit.focus === 'function') {
+          btnOpenNavSubmit.focus();
+        }
+      });
+    }
+    if (btnCloseOpenNavModal) {
+      btnCloseOpenNavModal.addEventListener('click', () => {
+        if (openNavIsSubmitting) return;
+        closeModal('modal-confirm-open-nav-submit');
+        if (isOpenNavigationMode && !openNavIsFinalized && btnOpenNavSubmit && typeof btnOpenNavSubmit.focus === 'function') {
+          btnOpenNavSubmit.focus();
+        }
+      });
+    }
+    if (btnConfirmOpenNavSubmit) {
+      btnConfirmOpenNavSubmit.addEventListener('click', () => {
+        submitOpenNavQuiz();
+      });
+    }
+    if (btnOpenNavKeepServer) {
+      btnOpenNavKeepServer.addEventListener('click', () => {
+        resolveOpenNavConflictKeepServer();
+      });
+    }
+    if (btnOpenNavSaveLocal) {
+      btnOpenNavSaveLocal.addEventListener('click', () => {
+        resolveOpenNavConflictSaveLocal();
+      });
+    }
   }
 
   /**
    * Élő mérőszámok (Eredmény % és Érdemjegy) frissítése a felső kártyán
    */
   function updateLiveMetrics() {
+    if (isOpenNavigationMode) {
+      if (quizMetricScoreVal) quizMetricScoreVal.textContent = '–';
+      if (quizMetricGradeVal) quizMetricGradeVal.textContent = '–';
+      if (quizMetricScoreChip) {
+        quizMetricScoreChip.classList.remove('grade-1', 'grade-2', 'grade-3', 'grade-4', 'grade-5');
+      }
+      return;
+    }
+
     if (isTeacherPacedMode && !teacherPacedShowFeedback) {
       if (quizMetricScoreVal) quizMetricScoreVal.textContent = '–';
       if (quizMetricGradeVal) quizMetricGradeVal.textContent = '–';
@@ -1438,6 +1599,14 @@
 
       sessionToken = data.token;
       currentParticipant = data.participant || null;
+      openNavSessionEpoch++;
+      openNavIsFinalized = false;
+      openNavClosurePending = false;
+      openNavPendingScoreRefresh = false;
+      isOpenNavigationMode = Boolean(
+        (activeSession && activeSession.mode === 'OPEN_NAVIGATION')
+        || (currentParticipant && currentParticipant.session_mode === 'OPEN_NAVIGATION')
+      );
       sessionStorage.setItem('ropdolgozat_token', sessionToken);
 
       // Diagnosztikai állapot és hatókör beállítása
@@ -1454,8 +1623,8 @@
         data.answers.forEach(ans => answeredQuestionIds.add(ans.question_id));
       }
 
-      // Kvíz felület elindítása
-      await startQuizInterface();
+      // Kvíz felület elindítása (a most rögzített munkamenet-kontextussal)
+      await startQuizInterface(null, captureOpenNavContext());
 
     } catch (err) {
       console.error('Hiba a belépés során:', err);
@@ -1463,115 +1632,254 @@
     }
   }
 
+  let loginListsInitialized = false;
+
+  /**
+   * Teljes kérés- és választest-időkorlátos JSON fetch wrapper
+   * Az abort időzítője a fejlécek ÉS a teljes választest beolvasásának végéig fut!
+   */
+  async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 10000) {
+    const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    let timedOut = false;
+    const timerId = controller
+      ? setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs)
+      : null;
+
+    try {
+      const res = await fetch(url, controller ? { ...options, signal: controller.signal } : options);
+      const rawText = await res.text();
+      let data = null;
+      if (rawText) {
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          return { ok: false, status: res.status, data: null, errorKind: 'invalid_body' };
+        }
+      }
+      return { ok: res.ok, status: res.status, data, errorKind: null };
+    } catch {
+      return { ok: false, status: 0, data: null, errorKind: timedOut ? 'timeout' : 'network' };
+    } finally {
+      if (timerId !== null) clearTimeout(timerId);
+    }
+  }
+
+  function isConfirmedTokenInvalidResponse(resObj) {
+    if (!resObj || (resObj.status !== 401 && resObj.status !== 404)) return false;
+    // Kizárólag valódi API JSON hiba esetén tekintjük igazolt tokenérvénytelenségnek (pl. proxy/HTML 404 nem!)
+    return Boolean(resObj.data && typeof resObj.data === 'object' && (resObj.data.error || resObj.data.code));
+  }
+
+  /**
+   * Egységes, atomi visszatérés a belépési felületre igazolt érvénytelen munkamenetnél vagy feloldáskor.
+   * Először érvényteleníti a régi kontextust, majd teljesen törli az előző diák összes kliensoldali adatát!
+   */
+  async function handleInvalidStudentSession(reasonMessage = null) {
+    // 1. Először érvénytelenítjük a régi kontextust (minden késői async művelet kizárása)
+    openNavSessionEpoch++;
+    quizInterfaceLoadSeq++;
+    questionViewSeq++;
+    teacherPacedSyncSeq++;
+
+    // 2. Előző diák összes kliensoldali adatának és időzítőjének teljes törlése
+    sessionToken = null;
+    currentParticipant = null;
+    activeSession = null;
+    currentQuiz = null;
+    currentQuestions = [];
+    currentQuestionIndex = 0;
+    answeredQuestionIds.clear();
+    studentSubmittedAnswers.clear();
+    earnedPoints = 0;
+    lastServerResults = null;
+    quizStartTime = null;
+    selectedStudent = null;
+
+    isTeacherPacedMode = false;
+    teacherPacedQuestionIndex = 0;
+    teacherPacedTotalQuestions = 0;
+    teacherPacedCurrentAnswer = null;
+
+    isOpenNavigationMode = false;
+    openNavIsFinalized = false;
+    openNavIsSubmitting = false;
+    openNavClosurePending = false;
+    openNavPendingScoreRefresh = false;
+    openNavStatusCheckPromise = null;
+    openNavRetryAttempt = 0;
+    syncOpenNavConfirmModalControls();
+
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    if (openNavTimerRetryId) { clearTimeout(openNavTimerRetryId); openNavTimerRetryId = null; }
+    for (const tId of openNavShortTimers.values()) clearTimeout(tId);
+    openNavShortTimers.clear();
+    openNavDrafts.clear();
+    openNavQueues.clear();
+
+    sessionStorage.removeItem('ropdolgozat_token');
+    clearDiagnosticsBuffer();
+    dismissCalmAlertByOwner('open_nav_submit');
+
+    // 3. Felület visszaállítása tiszta belépési állapotba
+    closeModal('modal-confirm-open-nav-submit');
+    if (openNavConflictBanner) openNavConflictBanner.style.display = 'none';
+    if (quizContainer) quizContainer.style.display = 'none';
+    if (lobbyContainer) lobbyContainer.style.display = 'none';
+    if (summaryContainer) summaryContainer.style.display = 'none';
+    if (quizTopBar) quizTopBar.style.display = 'none';
+    if (studentTopBar) studentTopBar.style.display = 'flex';
+    if (loginContainer) loginContainer.style.display = 'block';
+    if (studentEntryWrapper) studentEntryWrapper.classList.remove('quiz-active', 'summary-active');
+    if (studentEntryInner) studentEntryInner.classList.remove('quiz-active', 'summary-active', 'has-image');
+    if (selectStudent) selectStudent.value = '';
+    if (btnJoinSession) btnJoinSession.disabled = true;
+
+    // 4. Belépési listák egyszeri, párhuzamosság-védett betöltése
+    if (!loginListsInitialized) {
+      if (!loginListsLoadPromise) {
+        loginListsLoadPromise = (async () => {
+          try {
+            await loadSubjects();
+            await loadClasses();
+            loginListsInitialized = true;
+          } catch {
+            loginListsInitialized = false;
+          } finally {
+            loginListsLoadPromise = null;
+          }
+        })();
+      }
+      await loginListsLoadPromise;
+    }
+
+    if (reasonMessage) {
+      showCalmAlert(reasonMessage, 'Munkamenet lejárt', 'info');
+    }
+  }
+
   /**
    * Munkamenet helyreállítása (Session Recovery)
+   * Kizárólag igazolt API 401/404 esetén törli a tokent és vezeti vissza a belépéshez; 5xx/hálózati/timeout hibánál megőrzi!
    */
   async function tryRestoreSession(token) {
-    try {
-      const res = await fetch('/api/student/session-data', {
-        headers: { 'x-session-token': token }
-      });
-      if (!res.ok) {
-        currentParticipant = null;
-        questionViewSeq++;
-        sessionStorage.removeItem('ropdolgozat_token');
-        clearDiagnosticsBuffer();
-        return false;
-      }
+    const restoreEpoch = openNavSessionEpoch;
+    const resObj = await fetchJsonWithTimeout('/api/student/session-data', {
+      headers: { 'x-session-token': token }
+    }, 10000);
 
-      const data = await res.json();
-      sessionToken = token;
-      currentParticipant = data.participant || null;
-      const restoredScope = data.participant ? `${data.participant.session_id}_${data.participant.id}` : null;
-      applyDiagnosticsScope(restoredScope, data.diagnosticsEnabled);
-      activeSession = {
-        id: data.participant.session_id,
-        title: data.quiz.title,
-        status: data.participant.session_status
-      };
-
-      if (socket) {
-        socket.emit('join:session', { sessionId: activeSession.id, role: 'student', token: sessionToken });
-      }
-
-      if (data.participant.is_finished === 1 || data.participant.session_status === 'FINISHED' || (data.session && data.session.review_phase)) {
-        const isTpFinished = data.participant.session_mode === 'TEACHER_PACED'
-          && (data.participant.session_status === 'FINISHED' || Boolean(data.session && data.session.review_phase));
-        showSummary({
-          totalPoints: data.results ? data.results.total_points : 0,
-          maxPoints: (data.results && data.results.max_points) || (data.quiz && data.quiz.total_points),
-          percentage: data.results ? data.results.percentage : 0,
-          grade: data.results ? data.results.grade : null,
-          gradeText: data.results ? data.results.grade_text : '',
-          showFeedback: isTpFinished ? true : (data.participant.show_feedback_on_end === 1),
-          participant: data.participant,
-          session: data.session,
-          quiz: data.quiz,
-          answers: data.answers || []
-        });
-        return true;
-      }
-
-      await startQuizInterface(data);
-      return true;
-    } catch {
-      currentParticipant = null;
-      questionViewSeq++;
-      sessionStorage.removeItem('ropdolgozat_token');
-      clearDiagnosticsBuffer();
+    // Ha közben munkamenet-érvénytelenítés vagy új belépés történt, a régi helyreállítás eldobandó!
+    if (restoreEpoch !== openNavSessionEpoch || sessionStorage.getItem('ropdolgozat_token') !== token) {
       return false;
     }
+
+    if (isConfirmedTokenInvalidResponse(resObj)) {
+      await handleInvalidStudentSession();
+      return false;
+    }
+
+    if (!resObj.ok || !resObj.data || !resObj.data.participant) {
+      showCalmAlert(
+        'A szerver átmenetileg nem elérhető, de a munkameneted megmaradt. Kattints az OK gombra az újrapróbáláshoz!',
+        'Átmeneti kapcsolati hiba',
+        'warning',
+        () => { tryRestoreSession(token); }
+      );
+      return true;
+    }
+
+    const data = resObj.data;
+    sessionToken = token;
+    currentParticipant = data.participant || null;
+    const restoredScope = data.participant ? `${data.participant.session_id}_${data.participant.id}` : null;
+    applyDiagnosticsScope(restoredScope, data.diagnosticsEnabled);
+    activeSession = {
+      id: data.participant.session_id,
+      title: data.quiz.title,
+      status: data.participant.session_status,
+      mode: data.participant.session_mode
+    };
+
+    if (socket) {
+      socket.emit('join:session', { sessionId: activeSession.id, role: 'student', token: sessionToken });
+    }
+
+    if (data.participant.is_finished === 1 || data.participant.session_status === 'FINISHED' || (data.session && data.session.review_phase)) {
+      const isTpFinished = data.participant.session_mode === 'TEACHER_PACED'
+        && (data.participant.session_status === 'FINISHED' || Boolean(data.session && data.session.review_phase));
+      openNavIsFinalized = data.participant.session_mode === 'OPEN_NAVIGATION' && data.participant.is_finished === 1;
+      if (openNavIsFinalized) quizInterfaceLoadSeq++;
+      showSummary({
+        totalPoints: data.results ? data.results.total_points : null,
+        maxPoints: (data.results && data.results.max_points) || (data.quiz && data.quiz.total_points),
+        percentage: data.results ? data.results.percentage : null,
+        grade: data.results ? data.results.grade : null,
+        gradeText: data.results ? data.results.grade_text : '',
+        showFeedback: isTpFinished ? true : Boolean(data.participant.show_feedback_on_end === 1 && data.results !== null),
+        participant: data.participant,
+        session: data.session,
+        quiz: data.quiz,
+        answers: data.answers || []
+      });
+      return true;
+    }
+
+    await startQuizInterface(data, captureOpenNavContext());
+    return true;
   }
 
   /**
    * Teacher Paced (Tanári léptetés) és élő összegzés sorosított, verziózott állapot-szinkronizálás
    */
   async function syncTeacherPacedState() {
-    if (!sessionToken) return;
-    const reqSessionId = activeSession ? activeSession.id : null;
-    const reqParticipantId = currentParticipant ? currentParticipant.id : null;
+    const ctx = captureOpenNavContext();
+    if (!isOpenNavContextValid(ctx)) return;
     const mySeq = ++teacherPacedSyncSeq;
-    try {
-      const res = await fetch('/api/student/session-data', {
-        headers: { 'x-session-token': sessionToken }
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (mySeq !== teacherPacedSyncSeq) return;
-      if (reqSessionId && data.participant && String(data.participant.session_id) !== String(reqSessionId)) return;
-      if (reqParticipantId && data.participant && String(data.participant.id) !== String(reqParticipantId)) return;
+    const resObj = await fetchJsonWithTimeout('/api/student/session-data', {
+      headers: { 'x-session-token': ctx.token }
+    }, 10000);
 
-      if (data.participant) {
-        currentParticipant = data.participant;
-      }
+    if (!isOpenNavContextValid(ctx) || mySeq !== teacherPacedSyncSeq) return;
 
-      const isSummaryReady = data.participant && (
-        data.participant.session_status === 'FINISHED'
-        || data.participant.is_finished === 1
-        || (data.session && data.session.review_phase)
-      );
-      if (isSummaryReady) {
-        const isTpSummary = data.participant.session_mode === 'TEACHER_PACED'
-          && (data.participant.session_status === 'FINISHED' || Boolean(data.session && data.session.review_phase));
-        showSummary({
-          totalPoints: data.results ? data.results.total_points : 0,
-          maxPoints: (data.results && data.results.max_points) || (data.quiz && data.quiz.total_points),
-          percentage: data.results ? data.results.percentage : 0,
-          grade: data.results ? data.results.grade : null,
-          gradeText: data.results ? data.results.grade_text : '',
-          showFeedback: isTpSummary ? true : (data.participant.show_feedback_on_end === 1),
-          participant: data.participant,
-          session: data.session,
-          quiz: data.quiz,
-          answers: data.answers || []
-        });
-        return;
-      }
-
-      await startQuizInterface(data);
-    } catch (err) {
-      console.error('Hiba a Teacher Paced szinkronizálásakor:', err);
+    if (isConfirmedTokenInvalidResponse(resObj)) {
+      await handleInvalidStudentSession('A munkameneted érvénytelen lett vagy gépváltás történt. Kérlek, lépj be újra!');
+      return;
     }
+    if (!resObj.ok || !resObj.data) return;
+    const data = resObj.data;
+    if (ctx.sessionId && data.participant && String(data.participant.session_id) !== ctx.sessionId) return;
+    if (ctx.participantId && data.participant && String(data.participant.id) !== ctx.participantId) return;
+
+    if (data.participant) {
+      currentParticipant = data.participant;
+    }
+
+    const isSummaryReady = data.participant && (
+      data.participant.session_status === 'FINISHED'
+      || data.participant.is_finished === 1
+      || (data.session && data.session.review_phase)
+    );
+    if (isSummaryReady) {
+      const isTpSummary = data.participant.session_mode === 'TEACHER_PACED'
+        && (data.participant.session_status === 'FINISHED' || Boolean(data.session && data.session.review_phase));
+      showSummary({
+        totalPoints: data.results ? data.results.total_points : null,
+        maxPoints: (data.results && data.results.max_points) || (data.quiz && data.quiz.total_points),
+        percentage: data.results ? data.results.percentage : null,
+        grade: data.results ? data.results.grade : null,
+        gradeText: data.results ? data.results.grade_text : '',
+        showFeedback: isTpSummary ? true : Boolean(data.participant.show_feedback_on_end === 1 && data.results !== null),
+        participant: data.participant,
+        session: data.session,
+        quiz: data.quiz,
+        answers: data.answers || []
+      });
+      return;
+    }
+
+    await startQuizInterface(data, ctx);
   }
 
   function showTeacherPacedWaitPill() {
@@ -1598,16 +1906,968 @@
     teacherPacedWaitBanner.style.display = 'flex';
   }
 
+  // =========================================================================
+  // OPEN NAVIGATION (SZABAD NAVIGÁCIÓ) – KÉRDÉSTÉRKÉP, PISZKOZATMENTÉS, BEADÁS
+  // =========================================================================
+
+  const OPEN_NAV_MAX_SHORT_LEN = 500;
+
+  function getOpenNavEntry(questionId) {
+    const qId = Number(questionId);
+    if (!openNavDrafts.has(qId)) {
+      openNavDrafts.set(qId, {
+        localValue: '',
+        serverValue: '',
+        version: 0,
+        localSeq: 0,
+        ackedSeq: 0,
+        inFlight: false,
+        conflict: null,
+        status: 'empty',
+        hasUnsaved: false
+      });
+    }
+    return openNavDrafts.get(qId);
+  }
+
+  function findOpenNavQuestion(questionId) {
+    const qId = Number(questionId);
+    return currentQuestions.find(q => Number(q.id) === qId) || null;
+  }
+
+  function normalizeDraftForQuestion(q, rawValue) {
+    const str = String(rawValue ?? '');
+    if (q && q.question_type === 'ABCD') {
+      // Veszteségmentes: sem trim, sem 500 karakteres vágás!
+      return str;
+    }
+    if (q && q.question_type === 'TF') {
+      return str.trim();
+    }
+    // SHORT (szabad szöveg): trim, a 500-as korlátot validáljuk, nem némán vágjuk
+    return str.trim();
+  }
+
+  function isOpenNavEntryPending(entry) {
+    return Boolean(entry && !entry.conflict && (entry.inFlight || entry.localSeq > entry.ackedSeq || entry.hasUnsaved || entry.status === 'saving'));
+  }
+
+  function getOpenNavSavedCount() {
+    let count = 0;
+    for (const q of currentQuestions) {
+      const entry = openNavDrafts.get(Number(q.id));
+      if (entry && String(entry.serverValue ?? '') !== '') {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  function renderOpenNavConflictBanner() {
+    if (!openNavConflictBanner) return;
+    if (!isOpenNavigationMode) {
+      openNavConflictBanner.style.display = 'none';
+      return;
+    }
+    const q = currentQuestions[currentQuestionIndex];
+    const entry = q ? getOpenNavEntry(q.id) : null;
+    if (!entry || !entry.conflict) {
+      openNavConflictBanner.style.display = 'none';
+      return;
+    }
+    const fmtVal = (v) => (String(v ?? '') === '' ? '(üres / nincs megjelölve)' : String(v));
+    if (openNavConflictServerVal) openNavConflictServerVal.textContent = fmtVal(entry.conflict.serverValue);
+    if (openNavConflictLocalVal) openNavConflictLocalVal.textContent = fmtVal(entry.localValue);
+    openNavConflictBanner.style.display = 'block';
+  }
+
+  function resolveOpenNavConflictKeepServer() {
+    const q = currentQuestions[currentQuestionIndex];
+    if (!q || !isOpenNavigationMode || openNavIsSubmitting) return;
+    const entry = getOpenNavEntry(q.id);
+    if (!entry.conflict) return;
+    entry.localValue = String(entry.conflict.serverValue ?? '');
+    entry.serverValue = entry.localValue;
+    entry.version = Number(entry.conflict.serverVersion) || entry.version;
+    entry.conflict = null;
+    entry.ackedSeq = entry.localSeq;
+    entry.hasUnsaved = false;
+    entry.status = entry.serverValue !== '' ? 'saved' : 'empty';
+    renderQuestion(currentQuestionIndex);
+    refreshOpenNavUi();
+  }
+
+  function resolveOpenNavConflictSaveLocal() {
+    const q = currentQuestions[currentQuestionIndex];
+    if (!q || !isOpenNavigationMode || openNavIsSubmitting) return;
+    const entry = getOpenNavEntry(q.id);
+    if (!entry.conflict) return;
+    const chosenLocal = String(entry.localValue ?? '');
+    entry.version = Number(entry.conflict.serverVersion) || entry.version;
+    entry.conflict = null;
+    queueOpenNavDraftSave(q.id, chosenLocal);
+  }
+
+  function updateOpenNavProgressBar() {
+    if (!isOpenNavigationMode || !currentQuestions.length) return;
+    const savedCount = getOpenNavSavedCount();
+    const total = currentQuestions.length;
+    const pct = Math.round((savedCount / total) * 100);
+    if (quizProgressBarFill) quizProgressBarFill.style.width = `${pct}%`;
+    if (progressTextDone) {
+      progressTextDone.textContent = savedCount === 0 ? 'Szabad navigáció' : `${savedCount} válasz mentve`;
+    }
+    if (progressTextCurrent) {
+      progressTextCurrent.textContent = `${currentQuestionIndex + 1}. kérdés megtekintve`;
+    }
+    const remaining = Math.max(0, total - savedCount);
+    if (progressTextRemaining) {
+      progressTextRemaining.textContent = remaining === 0 ? 'Minden kérdés megválaszolva' : `${remaining} megválaszolatlan`;
+    }
+  }
+
+  function refreshOpenNavUi() {
+    renderOpenNavMap();
+    updateOpenNavProgressBar();
+    updateOpenNavFooter();
+    renderOpenNavConflictBanner();
+    const confirmModal = document.getElementById('modal-confirm-open-nav-submit');
+    if (confirmModal && confirmModal.classList.contains('active')) {
+      refreshOpenNavConfirmModal();
+    }
+  }
+
+  function renderOpenNavMap() {
+    if (!isOpenNavigationMode || !openNavMapGrid) return;
+    openNavMapGrid.innerHTML = '';
+
+    currentQuestions.forEach((q, idx) => {
+      const entry = getOpenNavEntry(q.id);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'open-nav-map-btn';
+      btn.disabled = openNavIsSubmitting;
+
+      if (idx === currentQuestionIndex) {
+        btn.classList.add('is-current');
+        btn.setAttribute('aria-current', 'step');
+      }
+
+      let stateIcon = '';
+      let stateLabel = 'üres';
+      if (entry.conflict || entry.status === 'conflict') {
+        btn.classList.add('is-error');
+        stateIcon = 'error';
+        stateLabel = 'eltérő verzió – egyeztetés szükséges';
+      } else if (entry.status === 'error') {
+        btn.classList.add('is-error');
+        stateIcon = 'error';
+        stateLabel = 'mentési hiba';
+      } else if (isOpenNavEntryPending(entry)) {
+        btn.classList.add('is-saving');
+        stateIcon = 'sync';
+        stateLabel = 'mentés folyamatban';
+      } else if (String(entry.serverValue ?? '') !== '') {
+        btn.classList.add('is-saved');
+        stateIcon = 'check';
+        stateLabel = 'mentett válasz';
+      }
+
+      btn.title = `${idx + 1}. kérdés – ${stateLabel}`;
+      btn.setAttribute('aria-label', `${idx + 1}. kérdés, ${stateLabel}`);
+      btn.innerHTML = `
+        <span>${idx + 1}</span>
+        ${stateIcon ? `<span class="material-symbols-outlined open-nav-map-icon">${stateIcon}</span>` : ''}
+      `;
+
+      btn.addEventListener('click', () => {
+        if (openNavIsSubmitting) return;
+        navigateOpenNavTo(idx);
+      });
+
+      openNavMapGrid.appendChild(btn);
+    });
+  }
+
+  function updateOpenNavFooter() {
+    if (!isOpenNavigationMode) return;
+    const q = currentQuestions[currentQuestionIndex];
+    const entry = q ? getOpenNavEntry(q.id) : null;
+
+    if (btnOpenNavPrev) {
+      btnOpenNavPrev.disabled = openNavIsSubmitting || currentQuestionIndex <= 0;
+    }
+    if (btnOpenNavNext) {
+      btnOpenNavNext.disabled = openNavIsSubmitting || currentQuestionIndex >= currentQuestions.length - 1;
+    }
+    if (btnOpenNavSubmit) {
+      btnOpenNavSubmit.disabled = openNavIsSubmitting;
+    }
+
+    if (btnOpenNavClear) {
+      const canClearType = q && (q.question_type === 'ABCD' || q.question_type === 'TF');
+      const hasVal = entry && (String(entry.localValue ?? '') !== '' || String(entry.serverValue ?? '') !== '');
+      if (!canClearType) {
+        btnOpenNavClear.style.display = 'none';
+        btnOpenNavClear.classList.remove('is-hidden-slot');
+        btnOpenNavClear.disabled = true;
+      } else {
+        btnOpenNavClear.style.display = 'inline-flex';
+        if (hasVal) {
+          btnOpenNavClear.classList.remove('is-hidden-slot');
+          btnOpenNavClear.disabled = openNavIsSubmitting;
+          btnOpenNavClear.removeAttribute('aria-hidden');
+          btnOpenNavClear.tabIndex = 0;
+        } else {
+          btnOpenNavClear.classList.add('is-hidden-slot');
+          btnOpenNavClear.disabled = true;
+          btnOpenNavClear.setAttribute('aria-hidden', 'true');
+          btnOpenNavClear.tabIndex = -1;
+        }
+      }
+    }
+
+    if (openNavSaveStatus) {
+      openNavSaveStatus.classList.remove('status-saving', 'status-saved', 'status-error');
+      if (openNavClosurePending) {
+        openNavSaveStatus.textContent = 'A lezárás ellenőrzése folyamatban…';
+        openNavSaveStatus.classList.add('status-saving');
+      } else if (openNavIsSubmitting) {
+        openNavSaveStatus.textContent = 'Válaszok mentése és beadás…';
+        openNavSaveStatus.classList.add('status-saving');
+      } else if (entry && (entry.conflict || entry.status === 'conflict')) {
+        openNavSaveStatus.textContent = 'Ütközés: válaszd ki fenn, melyik válasz maradjon!';
+        openNavSaveStatus.classList.add('status-error');
+      } else if (entry && entry.status === 'error') {
+        openNavSaveStatus.textContent = 'Mentési hiba – ellenőrizd és próbáld újra';
+        openNavSaveStatus.classList.add('status-error');
+      } else if (isOpenNavEntryPending(entry)) {
+        openNavSaveStatus.textContent = 'Mentés folyamatban…';
+        openNavSaveStatus.classList.add('status-saving');
+      } else if (entry && String(entry.serverValue ?? '') !== '') {
+        openNavSaveStatus.textContent = 'Válasz mentve';
+        openNavSaveStatus.classList.add('status-saved');
+      } else {
+        openNavSaveStatus.textContent = 'Még nincs kiválasztott válasz';
+      }
+    }
+  }
+
+  function captureOpenNavContext() {
+    return {
+      epoch: openNavSessionEpoch,
+      token: sessionToken,
+      sessionId: activeSession ? String(activeSession.id) : null,
+      participantId: currentParticipant ? String(currentParticipant.id) : null
+    };
+  }
+
+  function isOpenNavContextValid(ctx) {
+    if (!ctx || !ctx.token) return false;
+    if (ctx.epoch !== openNavSessionEpoch) return false;
+    if (sessionToken !== ctx.token) return false;
+    if (ctx.sessionId && (!activeSession || String(activeSession.id) !== ctx.sessionId)) return false;
+    if (ctx.participantId && (!currentParticipant || String(currentParticipant.id) !== ctx.participantId)) return false;
+    return true;
+  }
+
   /**
-   * Kvíz felület elindítása és kérdések betöltése
+   * Egyetlen közös helyi szerkesztés-rögzítő: már a beírás/kijelölés pillanatában növeli localSeq-et!
    */
-  async function startQuizInterface(cachedData = null) {
+  function recordOpenNavLocalEdit(questionId, rawValue) {
+    if (!isOpenNavigationMode || !sessionToken || openNavIsFinalized) return null;
+    const qId = Number(questionId);
+    const q = findOpenNavQuestion(qId);
+    const entry = getOpenNavEntry(qId);
+    const normalized = normalizeDraftForQuestion(q, rawValue);
+
+    entry.localSeq += 1;
+    entry.localValue = normalized;
+    entry.hasUnsaved = true;
+
+    if (q && q.question_type === 'SHORT' && normalized.length > OPEN_NAV_MAX_SHORT_LEN) {
+      entry.status = 'error';
+    } else if (entry.conflict) {
+      entry.status = 'conflict';
+    } else {
+      entry.status = 'saving';
+    }
+    refreshOpenNavUi();
+    return entry;
+  }
+
+  function flushShortDraftForQuestion(questionId) {
+    const qId = Number(questionId);
+    if (openNavShortTimers.has(qId)) {
+      clearTimeout(openNavShortTimers.get(qId));
+      openNavShortTimers.delete(qId);
+      // Mindig a kérdés már rögzített entry.localValue értékét küldjük, új sorszám generálása nélkül!
+      dispatchOpenNavDraftSave(qId);
+    }
+  }
+
+  function navigateOpenNavTo(targetIndex) {
+    if (!isOpenNavigationMode || openNavIsSubmitting) return;
+    if (targetIndex < 0 || targetIndex >= currentQuestions.length) return;
+    const currentQ = currentQuestions[currentQuestionIndex];
+    if (currentQ && currentQ.question_type === 'SHORT') {
+      flushShortDraftForQuestion(currentQ.id);
+    }
+    renderQuestion(targetIndex);
+  }
+
+  function queueOpenNavDraftSave(questionId, targetValue) {
+    const entry = recordOpenNavLocalEdit(questionId, targetValue);
+    if (!entry) return Promise.resolve(false);
+    return dispatchOpenNavDraftSave(questionId);
+  }
+
+  function dispatchOpenNavDraftSave(questionId) {
+    if (!isOpenNavigationMode || !sessionToken || openNavIsFinalized) return Promise.resolve(false);
+    const qId = Number(questionId);
+    const q = findOpenNavQuestion(qId);
+    const entry = getOpenNavEntry(qId);
+    const ctx = captureOpenNavContext();
+
+    if (q && q.question_type === 'SHORT' && String(entry.localValue ?? '').length > OPEN_NAV_MAX_SHORT_LEN) {
+      entry.status = 'error';
+      refreshOpenNavUi();
+      return Promise.resolve(false);
+    }
+
+    if (entry.conflict) {
+      entry.status = 'conflict';
+      refreshOpenNavUi();
+      return Promise.resolve(false);
+    }
+
+    const prevChain = openNavQueues.get(qId) || Promise.resolve();
+    const nextChain = prevChain.catch(() => {}).then(async () => {
+      if (!isOpenNavContextValid(ctx) || !isOpenNavigationMode || openNavIsFinalized) {
+        return false;
+      }
+
+      while (isOpenNavContextValid(ctx) && isOpenNavigationMode && !openNavIsFinalized) {
+        if (entry.conflict) {
+          entry.status = 'conflict';
+          refreshOpenNavUi();
+          return false;
+        }
+        if (entry.localSeq <= entry.ackedSeq && !entry.hasUnsaved && entry.status !== 'error') {
+          return true;
+        }
+
+        const sentSeq = entry.localSeq;
+        const valueToSend = String(entry.localValue ?? '');
+        if (q && q.question_type === 'SHORT' && valueToSend.length > OPEN_NAV_MAX_SHORT_LEN) {
+          entry.status = 'error';
+          refreshOpenNavUi();
+          return false;
+        }
+
+        const baseVer = Number.isSafeInteger(entry.version) && entry.version >= 0 ? entry.version : 0;
+        entry.inFlight = true;
+        entry.status = 'saving';
+        refreshOpenNavUi();
+
+        const resObj = await fetchJsonWithTimeout('/api/student/save-draft', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-session-token': ctx.token
+          },
+          body: JSON.stringify({
+            session_token: ctx.token,
+            question_id: qId,
+            draft_answer: valueToSend,
+            base_version: baseVer
+          })
+        }, 10000);
+
+        if (!isOpenNavContextValid(ctx) || openNavIsFinalized) return false;
+        entry.inFlight = false;
+
+        const result = (resObj.data && typeof resObj.data === 'object') ? resObj.data : {};
+
+        if (isConfirmedTokenInvalidResponse(resObj)) {
+          await handleInvalidStudentSession('A munkameneted érvénytelen lett vagy gépváltás történt. Kérlek, lépj be újra!');
+          return false;
+        }
+
+        if (resObj.ok && result.success) {
+          entry.version = Number.isSafeInteger(Number(result.version)) ? Number(result.version) : (baseVer + 1);
+          entry.serverValue = String(result.draft_answer ?? '');
+          if (entry.localSeq === sentSeq) {
+            entry.ackedSeq = sentSeq;
+            entry.hasUnsaved = false;
+            entry.status = entry.serverValue !== '' ? 'saved' : 'empty';
+            refreshOpenNavUi();
+            return true;
+          }
+          // Sikeres nyugta érkezett, de azóta már újabb helyi szerkesztés (localSeq > sentSeq) történt!
+          entry.hasUnsaved = true;
+          entry.status = 'saving';
+          refreshOpenNavUi();
+          // Ha még fut a 400 ms-os debounce timer az újabb SHORT szöveghez, ne küldjük el idő előtt, hagyjuk meg a timert
+          if (openNavShortTimers.has(qId)) {
+            return true;
+          }
+          continue;
+        }
+
+        if (resObj.status === 409 && result.code === 'DRAFT_VERSION_CONFLICT') {
+          const srvVer = Number.isSafeInteger(Number(result.currentVersion)) ? Number(result.currentVersion) : entry.version;
+          const srvVal = String(result.currentAnswer ?? '');
+          entry.version = srvVer;
+          entry.serverValue = srvVal;
+
+          if (srvVal === valueToSend) {
+            if (entry.localSeq === sentSeq) {
+              entry.ackedSeq = sentSeq;
+              entry.hasUnsaved = false;
+              entry.status = srvVal !== '' ? 'saved' : 'empty';
+              refreshOpenNavUi();
+              return true;
+            }
+            entry.hasUnsaved = true;
+            entry.status = 'saving';
+            refreshOpenNavUi();
+            if (openNavShortTimers.has(qId)) return true;
+            continue;
+          }
+
+          entry.conflict = { serverValue: srvVal, serverVersion: srvVer };
+          entry.status = 'conflict';
+          entry.hasUnsaved = true;
+          refreshOpenNavUi();
+          return false;
+        }
+
+        if (result.code === 'DEADLINE_EXCEEDED' || result.code === 'PARTICIPANT_ALREADY_FINISHED' || result.code === 'SESSION_INACTIVE') {
+          openNavClosurePending = true;
+          entry.status = 'closure_pending';
+          refreshOpenNavUi();
+          await syncOpenNavServerState({ requireFinal: true, expectedCtx: ctx });
+          return false;
+        }
+
+        entry.status = 'error';
+        entry.hasUnsaved = true;
+        refreshOpenNavUi();
+        return false;
+      }
+      return false;
+    });
+
+    openNavQueues.set(qId, nextChain);
+    return nextChain;
+  }
+
+  async function flushAllOpenNavDrafts() {
+    // 1. Függő SHORT időzítők azonnali elsütése (a már rögzített entry.localValue alapján, új sorszám nélkül!)
+    for (const [qId, timerId] of Array.from(openNavShortTimers.entries())) {
+      clearTimeout(timerId);
+      openNavShortTimers.delete(qId);
+      const entry = getOpenNavEntry(qId);
+      if (entry.conflict) continue;
+      dispatchOpenNavDraftSave(qId);
+    }
+
+    // 2. Feloldatlan ütközéseket NEM írjuk felül; a többi hibás/mentetlen kérdést elindítjuk
+    let conflictCount = 0;
+    for (const q of currentQuestions) {
+      const entry = getOpenNavEntry(q.id);
+      if (entry.conflict) {
+        conflictCount++;
+      } else if (entry.status === 'error' || entry.hasUnsaved || entry.localSeq > entry.ackedSeq) {
+        dispatchOpenNavDraftSave(q.id);
+      }
+    }
+
+    if (conflictCount > 0) {
+      return { ok: false, failedCount: conflictCount, conflictCount };
+    }
+
+    const pendingPromises = Array.from(openNavQueues.values());
+    if (pendingPromises.length > 0) {
+      await Promise.allSettled(pendingPromises);
+    }
+
+    // 4. Ellenőrzés: elkülönítjük a függő lezárásellenőrzést, az ütközést és a javítható mentési hibát
+    if (openNavClosurePending) {
+      return { ok: false, failedCount: 0, conflictCount: 0, closurePending: true };
+    }
+
+    let failedCount = 0;
+    conflictCount = 0;
+    for (const q of currentQuestions) {
+      const entry = getOpenNavEntry(q.id);
+      if (entry.status === 'closure_pending') {
+        openNavClosurePending = true;
+        return { ok: false, failedCount: 0, conflictCount: 0, closurePending: true };
+      }
+      if (entry.conflict) {
+        conflictCount++;
+        failedCount++;
+      } else if (entry.status === 'error' || entry.hasUnsaved || entry.localSeq > entry.ackedSeq) {
+        failedCount++;
+      }
+    }
+    return { ok: failedCount === 0, failedCount, conflictCount, closurePending: false };
+  }
+
+  function refreshOpenNavConfirmModal() {
+    if (!isOpenNavigationMode) return;
+    syncOpenNavConfirmModalControls();
+
+    const activeEl = document.activeElement;
+    const focusedId = activeEl && activeEl.id ? activeEl.id : null;
+    const focusedUnansweredIdx = activeEl && activeEl.dataset && activeEl.dataset.unansweredIdx !== undefined
+      ? activeEl.dataset.unansweredIdx
+      : null;
+
+    const total = currentQuestions.length;
+    const savedCount = getOpenNavSavedCount();
+    const unansweredIndices = [];
+    let pendingCount = 0;
+    let errorCount = 0;
+    let conflictCount = 0;
+
+    currentQuestions.forEach((q, idx) => {
+      const entry = getOpenNavEntry(q.id);
+      if (entry.conflict) {
+        conflictCount++;
+      } else if (entry.status === 'error') {
+        errorCount++;
+      } else if (isOpenNavEntryPending(entry)) {
+        pendingCount++;
+      }
+      if (String(entry.serverValue ?? '') === '') {
+        unansweredIndices.push(idx);
+      }
+    });
+
+    if (openNavModalSummary) {
+      let summaryMsg = `${savedCount} / ${total} kérdésre van visszaigazolt mentett válaszod.`;
+      if (pendingCount > 0) {
+        summaryMsg += ` (${pendingCount} mentés folyamatban van.)`;
+      }
+      if (conflictCount > 0) {
+        summaryMsg += ` (${conflictCount} kérdésnél verzióütközés van – előbb döntsd el, melyik válasz maradjon!)`;
+      } else if (errorCount > 0) {
+        summaryMsg += ` (${errorCount} kérdés mentése hibás – ellenőrizd beadás előtt!)`;
+      }
+      openNavModalSummary.textContent = summaryMsg;
+    }
+
+    if (openNavUnansweredBox && openNavUnansweredList) {
+      openNavUnansweredList.innerHTML = '';
+      if (unansweredIndices.length > 0) {
+        openNavUnansweredBox.style.display = 'block';
+        unansweredIndices.forEach((idx) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'open-nav-unanswered-btn';
+          btn.dataset.unansweredIdx = String(idx);
+          btn.textContent = `${idx + 1}. kérdés`;
+          btn.addEventListener('click', () => {
+            closeModal('modal-confirm-open-nav-submit');
+            navigateOpenNavTo(idx);
+          });
+          openNavUnansweredList.appendChild(btn);
+        });
+      } else {
+        openNavUnansweredBox.style.display = 'none';
+      }
+    }
+
+    if (focusedId) {
+      const el = document.getElementById(focusedId);
+      if (el && typeof el.focus === 'function') el.focus();
+    } else if (focusedUnansweredIdx !== null && openNavUnansweredList) {
+      const el = openNavUnansweredList.querySelector(`[data-unanswered-idx="${focusedUnansweredIdx}"]`);
+      if (el && typeof el.focus === 'function') el.focus();
+    }
+  }
+
+  /**
+   * Egyetlen állapotforrás a beadási megerősítő modál gombjaihoz (2. fejezet)
+   */
+  function syncOpenNavConfirmModalControls() {
+    const lockConfirm = Boolean(openNavIsSubmitting || openNavIsFinalized || openNavClosurePending);
+    const lockCancel = Boolean(openNavIsSubmitting);
+    if (btnConfirmOpenNavSubmit) btnConfirmOpenNavSubmit.disabled = lockConfirm;
+    if (btnCancelOpenNavSubmit) btnCancelOpenNavSubmit.disabled = lockCancel;
+    if (btnCloseOpenNavModal) btnCloseOpenNavModal.disabled = lockCancel;
+  }
+
+  function openOpenNavConfirmModal() {
+    if (!isOpenNavigationMode || openNavIsSubmitting || openNavIsFinalized) return;
+    if (openNavClosurePending) {
+      syncOpenNavServerState({ requireFinal: true });
+      return;
+    }
+    const currentQ = currentQuestions[currentQuestionIndex];
+    if (currentQ && currentQ.question_type === 'SHORT') {
+      flushShortDraftForQuestion(currentQ.id);
+    }
+    syncOpenNavConfirmModalControls();
+    refreshOpenNavConfirmModal();
+    openModal('modal-confirm-open-nav-submit');
+    if (btnConfirmOpenNavSubmit && !btnConfirmOpenNavSubmit.disabled && typeof btnConfirmOpenNavSubmit.focus === 'function') {
+      btnConfirmOpenNavSubmit.focus();
+    } else if (btnCancelOpenNavSubmit && !btnCancelOpenNavSubmit.disabled && typeof btnCancelOpenNavSubmit.focus === 'function') {
+      btnCancelOpenNavSubmit.focus();
+    }
+  }
+
+  function buildOpenNavSummaryPayload(data) {
+    return {
+      totalPoints: data.results ? data.results.total_points : null,
+      maxPoints: (data.results && data.results.max_points) || (currentQuiz ? currentQuiz.total_points : null),
+      percentage: data.results ? data.results.percentage : null,
+      grade: data.results ? data.results.grade : null,
+      gradeText: data.results ? data.results.grade_text : '',
+      showFeedback: Boolean(data.participant && data.participant.show_feedback_on_end === 1 && data.results !== null),
+      participant: data.participant,
+      session: data.session,
+      quiz: data.quiz,
+      answers: data.answers || []
+    };
+  }
+
+  function scheduleOpenNavStatusRetry(ctx, { fromTimer = false, requireFinal = false } = {}) {
+    if (openNavIsFinalized || !isOpenNavContextValid(ctx) || !isOpenNavigationMode) return;
+    if (openNavTimerRetryId) clearTimeout(openNavTimerRetryId);
+    const backoffSteps = [1500, 3000, 5000, 8000];
+    const baseDelay = backoffSteps[Math.min(openNavRetryAttempt, backoffSteps.length - 1)];
+    const jitter = Math.floor(Math.random() * 400);
+    openNavRetryAttempt += 1;
+    openNavTimerRetryId = setTimeout(() => {
+      openNavTimerRetryId = null;
+      if (!openNavIsFinalized && isOpenNavContextValid(ctx) && isOpenNavigationMode) {
+        syncOpenNavServerState({ fromTimer, requireFinal });
+      }
+    }, baseDelay + jitter);
+  }
+
+  function showOpenNavReceiptFromFallback(ctx, fallbackReceipt) {
+    if (!isOpenNavContextValid(ctx)) return;
+    if (timerInterval) clearInterval(timerInterval);
+    if (openNavTimerRetryId) { clearTimeout(openNavTimerRetryId); openNavTimerRetryId = null; }
+    closeModal('modal-confirm-open-nav-submit');
+    openNavIsSubmitting = false;
+    openNavIsFinalized = true;
+    openNavClosurePending = false;
+    quizInterfaceLoadSeq++;
+    syncOpenNavConfirmModalControls();
+    showSummary({
+      showFeedback: false,
+      pendingEvaluationReload: fallbackReceipt.show_feedback_on_end === 1,
+      participant: {
+        ...(currentParticipant || {}),
+        is_finished: 1,
+        finished_at: fallbackReceipt.finished_at || null,
+        show_feedback_on_end: fallbackReceipt.show_feedback_on_end
+      }
+    });
+  }
+
+  /**
+   * Hiteles szerverállapot lekérése Open Navigation módban.
+   * Egyszerre max 1 GET futhat, a Promise-azonosságot ellenőrzi, és minden await után munkamenetet validál!
+   */
+  async function syncOpenNavServerState({ fromTimer = false, requireFinal = false, forceSummaryRefresh = false, fallbackReceipt = null, expectedCtx = null } = {}) {
+    const ctx = expectedCtx || captureOpenNavContext();
+    if (!isOpenNavContextValid(ctx)) return { state: 'stale' };
+
+    if (openNavIsFinalized && !fallbackReceipt && !forceSummaryRefresh) {
+      const isReceiptVisible = summaryReceiptView && summaryReceiptView.style.display !== 'none';
+      if (!isReceiptVisible) return { state: 'finished' };
+    }
+
+    // Ha pontfrissítés érkezik egy már futó státuszlekérés közben, összevont utólekérést jegyzünk be
+    if (forceSummaryRefresh && openNavStatusCheckPromise) {
+      openNavPendingScoreRefresh = true;
+    }
+
+    if (!openNavStatusCheckPromise) {
+      const thisPromise = (async () => {
+        try {
+          const resObj = await fetchJsonWithTimeout('/api/student/session-data', {
+            headers: { 'x-session-token': ctx.token }
+          }, 10000);
+
+          if (!isOpenNavContextValid(ctx)) return { state: 'stale' };
+
+          if (isConfirmedTokenInvalidResponse(resObj)) {
+            await handleInvalidStudentSession('A munkameneted érvénytelen lett vagy gépváltás történt. Kérlek, lépj be újra!');
+            return { state: 'invalid_token', httpStatus: resObj.status };
+          }
+          if (!resObj.ok || !resObj.data) {
+            return { state: resObj.errorKind ? 'network_error' : 'error', httpStatus: resObj.status };
+          }
+
+          const data = resObj.data;
+          if (ctx.sessionId && data.participant && String(data.participant.session_id) !== ctx.sessionId) return { state: 'stale' };
+          if (ctx.participantId && data.participant && String(data.participant.id) !== ctx.participantId) return { state: 'stale' };
+          openNavRetryAttempt = 0;
+
+          if (data && data.participant) {
+            currentParticipant = data.participant;
+          }
+
+          if (data && data.participant && data.participant.is_finished === 1) {
+            if (timerInterval) clearInterval(timerInterval);
+            if (openNavTimerRetryId) { clearTimeout(openNavTimerRetryId); openNavTimerRetryId = null; }
+            closeModal('modal-confirm-open-nav-submit');
+            openNavIsSubmitting = false;
+            openNavIsFinalized = true;
+            openNavClosurePending = false;
+            quizInterfaceLoadSeq++;
+            syncOpenNavConfirmModalControls();
+            showSummary(buildOpenNavSummaryPayload(data));
+            return { state: 'finished' };
+          }
+
+          if (data && data.participant && data.participant.session_status === 'FINISHED' && data.participant.is_finished === 0) {
+            openNavIsSubmitting = false;
+            syncOpenNavConfirmModalControls();
+            showCalmAlert(
+              'A dolgozat lezárása a szerveren folyamatban van vagy eltérés történt. Kérlek, jelezd a tanárodnak és próbáld újra!',
+              'Lezárási ellenőrzés szükséges',
+              'warning',
+              null,
+              'open_nav_submit'
+            );
+            return { state: 'inconsistent_finished' };
+          }
+
+          openNavClosurePending = false;
+          syncOpenNavConfirmModalControls();
+          return { state: 'active' };
+        } finally {
+          if (openNavStatusCheckPromise === thisPromise) {
+            openNavStatusCheckPromise = null;
+          }
+        }
+      })();
+      openNavStatusCheckPromise = thisPromise;
+    }
+
+    const outcome = await openNavStatusCheckPromise;
+    if (outcome.state === 'invalid_token') return outcome;
+    if (!isOpenNavContextValid(ctx)) return { state: 'stale' };
+
+    // Ha közben újabb pontfrissítési esemény érkezett, futtatunk egy összevont frissítő lekérést
+    if (openNavPendingScoreRefresh && isOpenNavContextValid(ctx)) {
+      openNavPendingScoreRefresh = false;
+      return syncOpenNavServerState({ forceSummaryRefresh: true, expectedCtx: ctx });
+    }
+
+    if (outcome.state === 'finished') {
+      return outcome;
+    }
+
+    if (fallbackReceipt && fallbackReceipt.is_finished === 1 && (outcome.state === 'error' || outcome.state === 'network_error')) {
+      showOpenNavReceiptFromFallback(ctx, fallbackReceipt);
+      return { state: 'finished_receipt' };
+    }
+
+    if ((fromTimer || requireFinal) && !openNavIsFinalized && (outcome.state === 'active' || outcome.state === 'error' || outcome.state === 'network_error')) {
+      scheduleOpenNavStatusRetry(ctx, { fromTimer, requireFinal });
+    }
+
+    return outcome;
+  }
+
+  async function submitOpenNavQuiz() {
+    if (!isOpenNavigationMode || openNavIsSubmitting || openNavIsFinalized) return;
+    const ctx = captureOpenNavContext();
+    if (!isOpenNavContextValid(ctx)) return;
+
+    openNavIsSubmitting = true;
+    syncOpenNavConfirmModalControls();
+    refreshOpenNavUi();
+
+    const unlockAfterError = () => {
+      if (!isOpenNavContextValid(ctx) || openNavIsFinalized) return;
+      openNavIsSubmitting = false;
+      syncOpenNavConfirmModalControls();
+      closeModal('modal-confirm-open-nav-submit');
+      refreshOpenNavUi();
+    };
+
+    // 1. Összes függő és hibás piszkozat mentésének bevárása (feloldatlan ütközést NEM ír felül!)
+    const flushRes = await flushAllOpenNavDrafts();
+    // Ha a flush közben lezárult a dolgozat (pl. tanári lezárás) vagy munkamenetváltás történt -> AZONNAL kilépünk hibaablak nélkül!
+    if (!isOpenNavContextValid(ctx) || openNavIsFinalized) return;
+
+    if (!flushRes.ok) {
+      unlockAfterError();
+      if (flushRes.closurePending || openNavClosurePending) {
+        // A szerver lezárást jelzett, az állapotlekérés még folyamatban van -> NE nyissunk „Mentési hiba” ablakot!
+        showCalmAlert(
+          'A dolgozat lezárásának visszaigazolása folyamatban van. Kattints az OK gombra az azonnali újraellenőrzéshez, vagy várj néhány másodpercet!',
+          'Lezárás ellenőrzése folyamatban',
+          'info',
+          () => { syncOpenNavServerState({ requireFinal: true, expectedCtx: ctx }); },
+          'open_nav_submit'
+        );
+      } else if (flushRes.conflictCount > 0) {
+        const firstConflictIdx = currentQuestions.findIndex(q => Boolean(getOpenNavEntry(q.id).conflict));
+        if (firstConflictIdx >= 0) renderQuestion(firstConflictIdx);
+        showCalmAlert(
+          'Egy vagy több kérdésnél eltérő mentett válasz van a szerveren. Kérlek, előbb válaszd ki a piros figyelmeztető sávban, melyik válasz maradjon meg!',
+          'Egyeztetés szükséges',
+          'warning',
+          null,
+          'open_nav_submit'
+        );
+      } else {
+        showCalmAlert(
+          'Nem minden válasz mentése sikerült a hálózati vagy formai hiba miatt. Kérlek, ellenőrizd a piros ikonnal jelölt kérdéseket, majd próbáld újra a beadást!',
+          'Mentési hiba',
+          'error',
+          null,
+          'open_nav_submit'
+        );
+      }
+      return;
+    }
+
+    // 2. Végleges beadás kérése a szerverhez (teljes választest-időkorláttal!)
+    const resObj = await fetchJsonWithTimeout('/api/student/finish', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-session-token': ctx.token
+      },
+      body: JSON.stringify({ session_token: ctx.token })
+    }, 12000);
+
+    // Munkamenet- és végállapot-ellenőrzés a teljes POST + JSON után!
+    if (!isOpenNavContextValid(ctx) || openNavIsFinalized) return;
+
+    if (isConfirmedTokenInvalidResponse(resObj)) {
+      await handleInvalidStudentSession('A munkameneted érvénytelen lett vagy gépváltás történt. Kérlek, lépj be újra!');
+      return;
+    }
+
+    const finishBody = (resObj.data && typeof resObj.data === 'object') ? resObj.data : {};
+
+    if (resObj.ok && finishBody.success) {
+      const receipt = finishBody.receipt || {
+        is_finished: 1,
+        finished_at: finishBody.participant ? finishBody.participant.finished_at : null,
+        show_feedback_on_end: currentParticipant ? currentParticipant.show_feedback_on_end : 0
+      };
+      const syncOutcome = await syncOpenNavServerState({ fallbackReceipt: receipt, expectedCtx: ctx });
+      if (!isOpenNavContextValid(ctx) || openNavIsFinalized) return;
+      if (syncOutcome.state === 'finished' || syncOutcome.state === 'finished_receipt') return;
+      showOpenNavReceiptFromFallback(ctx, receipt);
+      return;
+    }
+
+    // Hiba vagy elveszett válasz esetén hiteles állapotlekérés a saját kontextussal
+    const syncOutcome = await syncOpenNavServerState({ expectedCtx: ctx });
+    if (!isOpenNavContextValid(ctx) || openNavIsFinalized) return;
+    if (syncOutcome.state === 'finished') return;
+
+    unlockAfterError();
+    if (resObj.errorKind) {
+      showCalmAlert(
+        'A beadás visszaigazolása hálózati hiba miatt függőben maradt. A válaszaid megmaradtak – kérlek, kattints újra a „Dolgozat beadása” gombra!',
+        'Visszaigazolás függőben',
+        'warning',
+        null,
+        'open_nav_submit'
+      );
+    } else {
+      showCalmAlert(
+        (finishBody && finishBody.error) || 'A dolgozat beadása közben szerverhiba történt. Kérlek, próbáld újra!',
+        'Beadási hiba',
+        'error',
+        null,
+        'open_nav_submit'
+      );
+    }
+  }
+
+  /**
+   * Kvíz felület elindítása és kérdések betöltése (szigorú munkamenet-kontextus és sorszámvédelemmel)
+   */
+  async function startQuizInterface(cachedData = null, expectedCtx = null) {
+    const ctx = expectedCtx || captureOpenNavContext();
+    const myLoadSeq = ++quizInterfaceLoadSeq;
+    if (!isOpenNavContextValid(ctx)) return;
+
     let data = cachedData;
     if (!data) {
-      const res = await fetch('/api/student/session-data', {
-        headers: { 'x-session-token': sessionToken }
+      const resObj = await fetchJsonWithTimeout('/api/student/session-data', {
+        headers: { 'x-session-token': ctx.token }
+      }, 10000);
+
+      // Az állapot módosítása, token-törlés vagy hibaablak ELŐTT ellenőrizzük, hogy még ugyanaz a munkamenet aktív-e!
+      if (!isOpenNavContextValid(ctx) || myLoadSeq !== quizInterfaceLoadSeq) return;
+
+      if (isConfirmedTokenInvalidResponse(resObj)) {
+        await handleInvalidStudentSession('A munkameneted érvénytelen lett. Kérlek, lépj be újra!');
+        return;
+      }
+      if (!resObj.ok || !resObj.data || !resObj.data.quiz) {
+        showCalmAlert('Nem sikerült betölteni a dolgozat kérdéseit a szerverről. Kérlek, próbáld újra!', 'Betöltési hiba', 'warning');
+        return;
+      }
+      data = resObj.data;
+    }
+
+    // Végső kontextus- és válasz-azonosság ellenőrzés (akár friss lekérés, akár cachedData esetén)
+    if (!isOpenNavContextValid(ctx) || myLoadSeq !== quizInterfaceLoadSeq) return;
+    if (!data || !data.quiz) return;
+    if (ctx.sessionId && data.participant && String(data.participant.session_id) !== ctx.sessionId) return;
+    if (ctx.participantId && data.participant && String(data.participant.id) !== ctx.participantId) return;
+
+    // Ha a betöltés alatt közben a szerver lezárta a résztvevőt vagy dolgozatot -> nyugtára / összegzőre váltunk
+    if (data.participant && (data.participant.is_finished === 1 || data.participant.session_status === 'FINISHED')) {
+      currentParticipant = data.participant;
+      const isTpFinished = data.participant.session_mode === 'TEACHER_PACED'
+        && (data.participant.session_status === 'FINISHED' || Boolean(data.session && data.session.review_phase));
+      openNavIsFinalized = data.participant.session_mode === 'OPEN_NAVIGATION' && data.participant.is_finished === 1;
+      if (openNavIsFinalized) {
+        openNavClosurePending = false;
+        quizInterfaceLoadSeq++;
+        syncOpenNavConfirmModalControls();
+      }
+      showSummary({
+        totalPoints: data.results ? data.results.total_points : null,
+        maxPoints: (data.results && data.results.max_points) || (data.quiz && data.quiz.total_points),
+        percentage: data.results ? data.results.percentage : null,
+        grade: data.results ? data.results.grade : null,
+        gradeText: data.results ? data.results.grade_text : '',
+        showFeedback: isTpFinished ? true : Boolean(data.participant.show_feedback_on_end === 1 && data.results !== null),
+        participant: data.participant,
+        session: data.session,
+        quiz: data.quiz,
+        answers: data.answers || []
       });
-      data = await res.json();
+      return;
+    }
+
+    // Igazolt végállapot vagy folyó lezárásellenőrzés mellett aktív válasz soha nem nyithatja vissza a kitöltést!
+    if (openNavIsFinalized || openNavClosurePending) return;
+
+    const prevParticipantId = currentParticipant ? String(currentParticipant.id) : null;
+    const nextParticipantId = (data && data.participant) ? String(data.participant.id) : null;
+    if (prevParticipantId !== nextParticipantId) {
+      answeredQuestionIds.clear();
+      studentSubmittedAnswers.clear();
+      quizStartTime = null;
+      if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+      if (timerBadge) {
+        timerBadge.style.display = 'none';
+        timerBadge.classList.remove('timer-urgent');
+      }
     }
 
     if (data && data.participant) {
@@ -1620,8 +2880,52 @@
     isTeacherPacedMode = (data.session && data.session.mode === 'TEACHER_PACED')
       || (data.participant && data.participant.session_mode === 'TEACHER_PACED')
       || (activeSession && activeSession.mode === 'TEACHER_PACED');
+    isOpenNavigationMode = (data.session && data.session.mode === 'OPEN_NAVIGATION')
+      || (data.participant && data.participant.session_mode === 'OPEN_NAVIGATION')
+      || (activeSession && activeSession.mode === 'OPEN_NAVIGATION');
     teacherPacedShowFeedback = data.participant ? (data.participant.show_feedback_on_end !== 0) : true;
     lastServerResults = data.results || null;
+
+    if (quizMetricsWrap) {
+      quizMetricsWrap.style.display = isOpenNavigationMode ? 'none' : 'flex';
+    }
+    if (openNavMapWrap) {
+      openNavMapWrap.style.display = isOpenNavigationMode ? 'block' : 'none';
+    }
+    if (openNavFooterBar) {
+      openNavFooterBar.style.display = isOpenNavigationMode ? 'flex' : 'none';
+    }
+
+    if (isOpenNavigationMode) {
+      openNavSessionEpoch++;
+      openNavIsFinalized = false;
+      openNavClosurePending = false;
+      openNavPendingScoreRefresh = false;
+      openNavRetryAttempt = 0;
+      if (openNavTimerRetryId) { clearTimeout(openNavTimerRetryId); openNavTimerRetryId = null; }
+      openNavDrafts.clear();
+      openNavQueues.clear();
+      for (const timerId of openNavShortTimers.values()) clearTimeout(timerId);
+      openNavShortTimers.clear();
+      openNavIsSubmitting = false;
+      syncOpenNavConfirmModalControls();
+      if (Array.isArray(data.drafts)) {
+        data.drafts.forEach((d) => {
+          const val = String(d.draft_answer ?? '');
+          openNavDrafts.set(Number(d.question_id), {
+            localValue: val,
+            serverValue: val,
+            version: Number(d.version) || 1,
+            localSeq: 0,
+            ackedSeq: 0,
+            inFlight: false,
+            conflict: null,
+            status: val !== '' ? 'saved' : 'empty',
+            hasUnsaved: false
+          });
+        });
+      }
+    }
 
     if (isTeacherPacedMode) {
       teacherPacedQuestionIndex = Number(
@@ -1741,6 +3045,19 @@
       return;
     }
 
+    if (isOpenNavigationMode) {
+      let firstUnanswered = 0;
+      for (let i = 0; i < currentQuestions.length; i++) {
+        const entry = openNavDrafts.get(Number(currentQuestions[i].id));
+        if (!entry || String(entry.serverValue || '').trim() === '') {
+          firstUnanswered = i;
+          break;
+        }
+      }
+      renderQuestion(firstUnanswered);
+      return;
+    }
+
     let nextIndex = 0;
     for (let i = 0; i < currentQuestions.length; i++) {
       if (!answeredQuestionIds.has(currentQuestions[i].id)) {
@@ -1799,7 +3116,9 @@
     }
 
     // 2. Haladási sáv és 3 részes szöveges állapot
-    if (isTeacherPacedMode) {
+    if (isOpenNavigationMode) {
+      updateOpenNavProgressBar();
+    } else if (isTeacherPacedMode) {
       const tpPct = displayTotal > 0 ? Math.round(((displayIndex + 1) / displayTotal) * 100) : 0;
       if (quizProgressBarFill) quizProgressBarFill.style.width = `${tpPct}%`;
       if (progressTextDone) progressTextDone.textContent = 'Tanári léptetés';
@@ -1839,8 +3158,11 @@
     if (teacherPacedWaitPill) teacherPacedWaitPill.style.display = 'none';
     if (teacherPacedWaitBanner) teacherPacedWaitBanner.style.display = 'none';
     btnSubmitAnswer.disabled = true;
-    btnSubmitAnswer.style.display = 'inline-flex';
-    actionButtonsBox.style.display = 'flex';
+    btnSubmitAnswer.style.display = isOpenNavigationMode ? 'none' : 'inline-flex';
+    actionButtonsBox.style.display = isOpenNavigationMode ? 'none' : 'flex';
+    if (openNavFooterBar) {
+      openNavFooterBar.style.display = isOpenNavigationMode ? 'flex' : 'none';
+    }
 
     optionsContainer.innerHTML = '';
     optionsContainer.removeAttribute('role');
@@ -1859,14 +3181,18 @@
       tile.setAttribute('aria-checked', 'false');
 
       const selectTile = () => {
-        if (tile.style.pointerEvents === 'none') return;
+        if (tile.style.pointerEvents === 'none' || openNavIsSubmitting) return;
         document.querySelectorAll(selector).forEach(b => {
           b.classList.remove('selected');
           b.setAttribute('aria-checked', 'false');
         });
         tile.classList.add('selected');
         tile.setAttribute('aria-checked', 'true');
-        btnSubmitAnswer.disabled = false;
+        if (isOpenNavigationMode) {
+          queueOpenNavDraftSave(q.id, tile.dataset.value);
+        } else {
+          btnSubmitAnswer.disabled = false;
+        }
       };
 
       tile.addEventListener('click', selectTile);
@@ -1943,16 +3269,79 @@
     } else if (q.question_type === 'SHORT') {
       optionsContainer.className = 'quiz-options-group';
       shortAnswerContainer.style.display = 'block';
-      shortAnswerInput.disabled = false;
+      shortAnswerInput.disabled = openNavIsSubmitting;
 
-      shortAnswerInput.oninput = () => {
-        btnSubmitAnswer.disabled = shortAnswerInput.value.trim().length === 0;
-      };
-      shortAnswerInput.onkeydown = (e) => {
-        if (e.key === 'Enter' && !btnSubmitAnswer.disabled) {
-          submitAnswer();
+      if (isOpenNavigationMode) {
+        const qId = Number(q.id);
+        shortAnswerInput.oninput = () => {
+          if (openNavIsSubmitting || openNavIsFinalized) return;
+          // Már a beírás pillanatában rögzítjük a helyi szerkesztést és növeljük localSeq-et!
+          recordOpenNavLocalEdit(qId, shortAnswerInput.value);
+          if (openNavShortTimers.has(qId)) {
+            clearTimeout(openNavShortTimers.get(qId));
+          }
+          // A 400 ms-os késleltetés kizárólag a küldést ütemezi a kérdés saját entry.localValue-jából
+          const tId = setTimeout(() => {
+            openNavShortTimers.delete(qId);
+            dispatchOpenNavDraftSave(qId);
+          }, 400);
+          openNavShortTimers.set(qId, tId);
+        };
+        shortAnswerInput.onblur = () => {
+          if (openNavIsSubmitting || openNavIsFinalized) return;
+          flushShortDraftForQuestion(qId);
+        };
+        shortAnswerInput.onkeydown = (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            flushShortDraftForQuestion(qId);
+          }
+        };
+      } else {
+        shortAnswerInput.onblur = null;
+        shortAnswerInput.oninput = () => {
+          btnSubmitAnswer.disabled = shortAnswerInput.value.trim().length === 0;
+        };
+        shortAnswerInput.onkeydown = (e) => {
+          if (e.key === 'Enter' && !btnSubmitAnswer.disabled) {
+            submitAnswer();
+          }
+        };
+      }
+    }
+
+    // 5b. Open Navigation: korábban elmentett vagy helyi piszkozat visszatöltése + térkép és ütközéssáv frissítése
+    if (isOpenNavigationMode) {
+      const entry = getOpenNavEntry(q.id);
+      const restoredVal = String(entry.localValue ?? '');
+      if (restoredVal !== '') {
+        if (q.question_type === 'ABCD') {
+          const tiles = Array.from(document.querySelectorAll('.quiz-option-tile'));
+          let matchedTile = tiles.find(t => t.dataset.value === restoredVal) || null;
+          if (!matchedTile) {
+            const trimmedMatches = tiles.filter(t => String(t.dataset.value || '').trim() === restoredVal.trim());
+            if (trimmedMatches.length === 1) matchedTile = trimmedMatches[0];
+          }
+          if (matchedTile) {
+            matchedTile.classList.add('selected');
+            matchedTile.setAttribute('aria-checked', 'true');
+          }
+        } else if (q.question_type === 'TF') {
+          document.querySelectorAll('.quiz-tf-tile').forEach((tile) => {
+            if (tile.dataset.value === restoredVal) {
+              tile.classList.add('selected');
+              tile.setAttribute('aria-checked', 'true');
+            }
+          });
+        } else if (q.question_type === 'SHORT') {
+          shortAnswerInput.value = restoredVal;
         }
-      };
+      }
+      renderOpenNavMap();
+      updateOpenNavFooter();
+      renderOpenNavConflictBanner();
+    } else if (openNavConflictBanner) {
+      openNavConflictBanner.style.display = 'none';
     }
 
     // 6. Teacher Paced: ha erre a kérdésre a diák már korábban válaszolt (oldalfrissítés / tanári visszalépés)
@@ -2535,6 +3924,12 @@
    */
   function showSummary(data) {
     questionViewSeq++;
+    openNavClosurePending = false;
+    openNavIsSubmitting = false;
+    syncOpenNavConfirmModalControls();
+    // A beadási művelethez tartozó elavult figyelmeztetés csendes bezárása (régi callback futtatása nélkül!)
+    dismissCalmAlertByOwner('open_nav_submit');
+    closeModal('modal-confirm-open-nav-submit');
     if (data && data.participant) {
       currentParticipant = data.participant;
     }
@@ -2559,11 +3954,92 @@
 
     if (!data) return;
 
-    // 1. Megszerzett KRÉTA érdemjegy kiszámítása az adatok alapján
-    const grade = data.grade || (data.percentage !== undefined ? calculateKRÉTAGrade(percentage, sessionThresholds) : 5);
+    const studentName = (data.participant && data.participant.student_name) || (selectedStudent && selectedStudent.student_name) || 'Diák';
+
+    // Külön beadási nyugta kikapcsolt visszajelzés esetén (pont, jegy, helyesség és megoldás nélkül!)
+    if (data.showFeedback === false) {
+      lastServerResults = null;
+      earnedPoints = 0;
+      studentSubmittedAnswers.clear();
+      if (summaryQuestionsList) summaryQuestionsList.innerHTML = '';
+      if (finalScore) finalScore.textContent = '';
+      if (finalGrade) finalGrade.textContent = '';
+      if (summaryGradeNum) summaryGradeNum.textContent = '';
+      if (summaryPercentVal) summaryPercentVal.textContent = '';
+      if (summaryColLeft) summaryColLeft.style.display = 'none';
+      if (summaryColRight) summaryColRight.style.display = 'none';
+      if (summaryReceiptView) {
+        summaryReceiptView.style.display = 'block';
+        if (summaryReceiptTitle) {
+          summaryReceiptTitle.textContent = `Dolgozat sikeresen beadva, ${studentName}!`;
+          summaryReceiptTitle.setAttribute('tabindex', '-1');
+          try { summaryReceiptTitle.focus(); } catch {}
+        }
+        if (summaryReceiptSubtitle) {
+          summaryReceiptSubtitle.textContent = data.pendingEvaluationReload
+            ? 'A válaszaidat a rendszer véglegesen rögzítette. Az értékelőlap betöltése hálózati hiba miatt megszakadt – lent bármikor újratöltheted.'
+            : 'A válaszaidat a rendszer véglegesen rögzítette. Az eredményt a tanárod ismerteti.';
+        }
+        if (summaryReceiptTime) {
+          const finishedAtRaw = data.participant && data.participant.finished_at;
+          if (finishedAtRaw) {
+            const rawStr = String(finishedAtRaw).trim();
+            const utcStr = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(rawStr)
+              ? rawStr.replace(' ', 'T') + 'Z'
+              : rawStr;
+            const dt = new Date(utcStr);
+            summaryReceiptTime.textContent = Number.isNaN(dt.getTime())
+              ? 'Állapot: Véglegesen rögzítve'
+              : `Beadás ideje: ${dt.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+          } else {
+            summaryReceiptTime.textContent = 'Állapot: Véglegesen rögzítve';
+          }
+        }
+        if (btnReloadSummaryFromReceipt) {
+          btnReloadSummaryFromReceipt.style.display = data.pendingEvaluationReload ? 'inline-flex' : 'none';
+          btnReloadSummaryFromReceipt.onclick = async () => {
+            btnReloadSummaryFromReceipt.disabled = true;
+            await syncOpenNavServerState();
+            btnReloadSummaryFromReceipt.disabled = false;
+          };
+        }
+      }
+      if (btnRestartReceipt) {
+        btnRestartReceipt.onclick = () => {
+          currentParticipant = null;
+          questionViewSeq++;
+          openNavSessionEpoch++;
+          sessionStorage.removeItem('ropdolgozat_token');
+          window.location.reload();
+        };
+      }
+      return;
+    }
+
+    // Normál értékelőlap mód: nyugta elrejtése, értékelő oszlopok megjelenítése
+    if (summaryReceiptView) summaryReceiptView.style.display = 'none';
+    if (summaryColLeft) summaryColLeft.style.display = '';
+    if (summaryColRight) summaryColRight.style.display = '';
+
+    // 1. Pontszám, százalék és KRÉTA érdemjegy kiszámítása biztonságos sorrendben
+    const totalPoints = (data.totalPoints !== undefined && data.totalPoints !== null) ? Number(data.totalPoints) : earnedPoints;
+    const maxPoints = (data.maxPoints !== undefined && data.maxPoints !== null && Number(data.maxPoints) > 0)
+      ? Number(data.maxPoints)
+      : ((currentQuiz && currentQuiz.total_points > 0) ? currentQuiz.total_points : 1);
+    const percentage = Math.min(
+      100,
+      Math.max(
+        0,
+        (data.percentage !== undefined && data.percentage !== null)
+          ? Math.round(Number(data.percentage))
+          : Math.round((totalPoints / maxPoints) * 100)
+      )
+    );
+    const grade = (data.grade !== undefined && data.grade !== null)
+      ? Number(data.grade)
+      : calculateKRÉTAGrade(percentage, sessionThresholds);
 
     // Szöveges értékelések, jelvények és megszólítások érdemjegyenként (3-3 pedagógiai változat)
-    const studentName = (data.participant && data.participant.student_name) || (selectedStudent && selectedStudent.student_name) || 'Diák';
     const GRADE_FEEDBACKS = {
       5: {
         badge: 'Jeles teljesítmény',
@@ -2621,11 +4097,7 @@
       summaryGreeting.innerHTML = greetingHtml;
     }
 
-    // 2. Pontszám és SVG kördiagram
-    const totalPoints = data.totalPoints !== undefined ? Number(data.totalPoints) : earnedPoints;
-    const maxPoints = data.maxPoints || (currentQuiz ? currentQuiz.total_points : 0) || 1;
-    const percentage = Math.min(100, Math.max(0, data.percentage !== undefined ? data.percentage : Math.round((totalPoints / maxPoints) * 100)));
-
+    // 2. Pontszám és SVG kördiagram megjelenítése
     if (summaryPercentVal) {
       summaryPercentVal.textContent = `${percentage}%`;
     }
@@ -2660,15 +4132,18 @@
       summaryPerformanceText.textContent = gradeFeedback.badge;
     }
 
-    // 4. Kitöltési idő és tempójelzés
+    // 4. Kitöltési idő és tempójelzés (elsősorban a hiteles szerveroldali joined_at -> finished_at alapján)
     if (summaryTimeSpent) {
       let spentSec = 0;
-      if (quizStartTime) {
-        spentSec = Math.max(5, Math.round((Date.now() - quizStartTime) / 1000));
-      } else if (data.participant && data.participant.joined_at) {
+      const hasServerJoined = Boolean(data.participant && data.participant.joined_at);
+      if (hasServerJoined) {
         const startMs = new Date(data.participant.joined_at).getTime();
         const endMs = data.participant.finished_at ? new Date(data.participant.finished_at).getTime() : Date.now();
-        spentSec = Math.max(5, Math.round((endMs - startMs) / 1000));
+        if (!Number.isNaN(startMs) && !Number.isNaN(endMs)) {
+          spentSec = Math.max(1, Math.round((endMs - startMs) / 1000));
+        }
+      } else if (quizStartTime) {
+        spentSec = Math.max(1, Math.round((Date.now() - quizStartTime) / 1000));
       }
       const min = Math.floor(spentSec / 60);
       const sec = spentSec % 60;
@@ -2681,14 +4156,15 @@
       const questions = (data.quiz && data.quiz.questions) || currentQuestions || [];
       let correctCount = 0;
 
-      // Válaszok összeállítása
+      // Válaszok összeállítása: ha a szerver teljes válaszlistát adott, kizárólag abból építünk (kihagyott kérdés nem örököl régi gyorsítótárat!)
       const answersMap = new Map();
       if (Array.isArray(data.answers)) {
         data.answers.forEach(a => answersMap.set(a.question_id, a));
+      } else {
+        studentSubmittedAnswers.forEach((val, key) => {
+          answersMap.set(key, val);
+        });
       }
-      studentSubmittedAnswers.forEach((val, key) => {
-        if (!answersMap.has(key)) answersMap.set(key, val);
-      });
 
       questions.forEach((q, idx) => {
         const userAns = answersMap.get(q.id);
@@ -2809,22 +4285,28 @@
    * Szerveroldali határidő időzítője
    */
   function setupTimer(deadlineIso) {
+    if (timerInterval) clearInterval(timerInterval);
     timerBadge.style.display = 'flex';
     const deadlineMs = new Date(deadlineIso).getTime();
 
     function update() {
       const now = Date.now();
-      const remainingSec = Math.max(0, Math.floor((deadlineMs - now) / 1000));
+      const remainingMs = deadlineMs - now;
+      const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
       timerText.textContent = formatTime(remainingSec);
 
       if (remainingSec <= 60) {
         timerBadge.classList.add('timer-urgent');
       }
 
-      if (remainingSec <= 0) {
+      if (remainingMs <= 0) {
         clearInterval(timerInterval);
-        finishQuiz();
-        showCalmAlert('Az időkorlát lejárt! A dolgozat automatikusan lezárásra kerül.', 'Időkorlát lejárt', 'warning');
+        if (isOpenNavigationMode) {
+          syncOpenNavServerState({ fromTimer: true });
+        } else {
+          finishQuiz();
+          showCalmAlert('Az időkorlát lejárt! A dolgozat automatikusan lezárásra kerül.', 'Időkorlát lejárt', 'warning');
+        }
       }
     }
 
@@ -2833,7 +4315,7 @@
   }
 
   /**
-   * Fókuszvesztés figyelése (visibilitychange)
+   * Fókuszvesztés figyelése (visibilitychange) és előtérbe kerüléskori állapot-szinkron
    */
   function setupFocusListener() {
     document.addEventListener('visibilitychange', () => {
@@ -2848,6 +4330,8 @@
         }).catch(() => { });
 
         showToast('⚠️ Figyelem! A dolgozat közben az ablak elhagyását a rendszer rögzíti!', 'danger');
+      } else if (!document.hidden && sessionToken && isOpenNavigationMode && quizContainer.style.display === 'block') {
+        syncOpenNavServerState();
       }
     });
   }

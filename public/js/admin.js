@@ -85,6 +85,7 @@
   function formatSessionMode(mode) {
     const modeMap = {
       'STUDENT_PACED': 'Diák-tempó',
+      'OPEN_NAVIGATION': 'Szabad navigáció',
       'SPACE_RACE': 'Űrhajós csapatverseny',
       'TEACHER_PACED': 'Tanári léptetés'
     };
@@ -919,11 +920,15 @@
       }
     };
 
-    // Válaszok indexelése gyors eléréshez: `participant_id:question_id` -> answer
+    // Válaszok és Open Navigation piszkozatok indexelése gyors eléréshez
     const answerMap = new Map();
     answers.forEach(a => {
       answerMap.set(`${a.participant_id}:${a.question_id}`, a);
     });
+    const draftSet = new Set();
+    if (Array.isArray(data.drafts)) {
+      data.drafts.forEach(d => draftSet.add(`${d.participant_id}:${d.question_id}`));
+    }
 
     // Sorok renderelése
     matrixBody.innerHTML = '';
@@ -983,7 +988,11 @@
         const ans = answerMap.get(`${p.id}:${q.id}`);
 
         if (!ans) {
-          tdQ.innerHTML = `<span class="matrix-cell cell-empty">–</span>`;
+          if (draftSet.has(`${p.id}:${q.id}`)) {
+            tdQ.innerHTML = `<span class="matrix-cell cell-draft" title="Elmentett piszkozat (a tanuló még nem adta be a dolgozatot)"><span class="material-symbols-outlined" style="font-size: 14px;">edit</span></span>`;
+          } else {
+            tdQ.innerHTML = `<span class="matrix-cell cell-empty">–</span>`;
+          }
         } else {
           let cellClass = 'cell-wrong';
           let icon = 'close';
@@ -4297,6 +4306,7 @@
 
       const modeStyleMap = {
         'TEACHER_PACED': { icon: 'co_present', bg: '#eff6ff', color: '#1d4ed8' },
+        'OPEN_NAVIGATION': { icon: 'explore', bg: '#ecfeff', color: '#0e7490' },
         'SPACE_RACE': { icon: 'rocket_launch', bg: '#f3e8ff', color: '#7e22ce' },
         'STUDENT_PACED': { icon: 'person', bg: '#fff7ed', color: '#c2410c' }
       };

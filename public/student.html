@@ -381,6 +381,20 @@
             <span id="progress-text-current" class="quiz-status-active">1. folyamatban</span>
             <span id="progress-text-remaining" class="quiz-status-muted">kérdések betöltése...</span>
           </div>
+
+          <!-- Open Navigation (Szabad navigáció) kattintható kérdéstérkép -->
+          <div id="open-nav-map-wrap" class="open-nav-map-wrap" style="display: none;">
+            <div class="open-nav-map-header">
+              <span class="open-nav-map-title">Kérdéstérkép (kattints bármelyik számra az ugráshoz):</span>
+              <div class="open-nav-map-legend">
+                <span class="open-nav-legend-item"><span class="open-nav-dot dot-current"></span> Aktuális</span>
+                <span class="open-nav-legend-item"><span class="open-nav-dot dot-saved"></span> Mentve</span>
+                <span class="open-nav-legend-item"><span class="open-nav-dot dot-saving"></span> Mentés…</span>
+                <span class="open-nav-legend-item"><span class="open-nav-dot dot-empty"></span> Üres</span>
+              </div>
+            </div>
+            <div id="open-nav-map-grid" class="open-nav-map-grid" role="navigation" aria-label="Kérdéstérkép"></div>
+          </div>
         </div>
 
         <!-- 2.2 Fő Kérdés és Kép elrendezés (Két kártya egymás mellett, ha van kép) -->
@@ -419,7 +433,7 @@
               <div class="quiz-short-input-box">
                 <span class="material-symbols-outlined quiz-short-icon">edit_note</span>
                 <input type="text" id="short-answer-input" class="quiz-short-input" placeholder="Írd be ide a választ..."
-                  autocomplete="off">
+                  autocomplete="off" maxlength="500">
                 <span id="short-answer-eval-icon" class="quiz-short-eval-icon" aria-hidden="true">
                   <span class="material-symbols-outlined">check</span>
                 </span>
@@ -464,6 +478,50 @@
                 <span class="material-symbols-outlined">hourglass_top</span>
                 <span id="teacher-paced-wait-text">Válasz beküldve. Várd meg, amíg a tanár a következő kérdésre lép!</span>
               </div>
+
+              <!-- Open Navigation: Verzióütközés egyeztető sáv -->
+              <div id="open-nav-conflict-banner" role="alert" style="display: none; margin-bottom: 12px; padding: 12px 14px; border-radius: 12px; background: #fef2f2; border: 1.5px solid #fca5a5; color: #7f1d1d;">
+                <div style="font-weight: 800; font-size: 0.94rem; margin-bottom: 6px;">
+                  Eltérő mentett válasz található a szerveren! Válaszd ki, melyik maradjon meg:
+                </div>
+                <div style="font-size: 0.88rem; margin-bottom: 10px; line-height: 1.45;">
+                  <div><strong>Szerveren mentett:</strong> <span id="open-nav-conflict-server-val"></span></div>
+                  <div><strong>Mostani helyi válaszod:</strong> <span id="open-nav-conflict-local-val"></span></div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                  <button type="button" id="btn-open-nav-keep-server" class="btn btn-secondary" style="font-size: 0.86rem; padding: 6px 12px;">
+                    A mentett választ megtartom
+                  </button>
+                  <button type="button" id="btn-open-nav-save-local" class="btn btn-primary" style="font-size: 0.86rem; padding: 6px 12px;">
+                    A mostani válaszomat mentem
+                  </button>
+                </div>
+              </div>
+
+              <!-- Open Navigation (Szabad navigáció) lábléc vezérlősáv -->
+              <div id="open-nav-footer-bar" class="open-nav-footer-bar" style="display: none;">
+                <div class="open-nav-footer-left">
+                  <button id="btn-open-nav-prev" class="btn btn-secondary" type="button">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                    <span>Előző</span>
+                  </button>
+                  <button id="btn-open-nav-clear" class="open-nav-btn-clear" type="button" style="display: none;" title="Kiválasztott válasz törlése">
+                    <span class="material-symbols-outlined">backspace</span>
+                    <span>Válasz törlése</span>
+                  </button>
+                </div>
+                <span id="open-nav-save-status" class="open-nav-save-status" role="status" aria-live="polite"></span>
+                <div class="open-nav-footer-right">
+                  <button id="btn-open-nav-next" class="btn btn-secondary" type="button">
+                    <span>Következő</span>
+                    <span class="material-symbols-outlined">arrow_forward</span>
+                  </button>
+                  <button id="btn-open-nav-submit" class="quiz-btn-submit" type="button">
+                    <span>Dolgozat beadása</span>
+                    <span class="material-symbols-outlined">send</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -479,6 +537,31 @@
 
       <!-- 3. LÉPÉS: Dolgozat végi értékelő felület (Kétoszlopos tágas Calm dizájn) -->
       <div id="summary-container" class="calm-summary-view" style="display: none;">
+
+        <!-- Különálló beadási nyugta kikapcsolt visszajelzéshez (pont, jegy és megoldás nélkül) -->
+        <div id="summary-receipt-view" style="display: none; grid-column: 1 / -1; max-width: 560px; margin: 24px auto; text-align: center; background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 18px; padding: 36px 28px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);">
+          <div style="width: 68px; height: 68px; border-radius: 50%; background: #dcfce7; color: #15803d; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+            <span class="material-symbols-outlined" style="font-size: 38px;">task_alt</span>
+          </div>
+          <h1 id="summary-receipt-title" style="margin: 0 0 10px 0; font-size: 1.55rem; font-weight: 800; color: #0f172a;">Dolgozat sikeresen beadva!</h1>
+          <p id="summary-receipt-subtitle" style="margin: 0 0 18px 0; font-size: 1rem; color: #475569; line-height: 1.55;">
+            A válaszaidat a rendszer véglegesen rögzítette. Az eredményt a tanárod ismerteti.
+          </p>
+          <div style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: #f1f5f9; color: #334155; font-size: 0.92rem; font-weight: 700; margin-bottom: 24px;">
+            <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+            <span id="summary-receipt-time">Beadás ideje rögzítve</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
+            <button id="btn-reload-summary-from-receipt" type="button" class="btn btn-secondary" style="display: none;">
+              <span class="material-symbols-outlined">refresh</span>
+              <span>Értékelőlap betöltése</span>
+            </button>
+            <button id="btn-restart-receipt" type="button" class="calm-summary-btn-finish" style="margin: 0;">
+              <span>Kész, vissza a kezdőlapra</span>
+              <span class="material-symbols-outlined">arrow_forward</span>
+            </button>
+          </div>
+        </div>
 
         <!-- Bal oldali oszlop: Hero + Eredmény + Vissza gomb -->
         <div class="calm-summary-col-left">
@@ -574,6 +657,38 @@
     </div>
   </main>
 
+  <!-- Open Navigation: Beadás előtti ellenőrző és megerősítő ablak -->
+  <div id="modal-confirm-open-nav-submit" class="modal-backdrop">
+    <div class="modal-window" style="max-width: 500px;">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--border-color, #e4e1e5);">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="material-symbols-outlined" style="font-size: 26px; color: #2563eb;">fact_check</span>
+          <h3 class="card-title" style="margin: 0; font-size: 1.2rem; font-weight: 800;">Dolgozat végleges beadása</h3>
+        </div>
+        <button type="button" id="btn-close-open-nav-modal" class="calm-modal-close-btn" title="Bezárás">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div style="padding: 4px 0 16px 0; color: var(--text-main, #1b1b1e); line-height: 1.55; font-size: 0.96rem;">
+        <p id="open-nav-modal-summary" style="margin: 0 0 12px 0; font-weight: 700;"></p>
+        <div id="open-nav-unanswered-box" style="display: none; background-color: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">
+          <div style="font-weight: 700; color: #c2410c; margin-bottom: 8px;">Még megválaszolatlan kérdések (kattints rá a pótláshoz):</div>
+          <div id="open-nav-unanswered-list" class="open-nav-unanswered-list"></div>
+        </div>
+        <p style="margin: 0; font-size: 0.88rem; color: var(--text-muted, #5a4138);">
+          A beadás után a válaszaid véglegesítésre kerülnek, és már nem módosíthatók.
+        </p>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border-color, #e4e1e5);">
+        <button type="button" id="btn-cancel-open-nav-submit" class="btn btn-secondary">Vissza a kérdésekhez</button>
+        <button type="button" id="btn-confirm-open-nav-submit" class="btn btn-primary">
+          <span class="material-symbols-outlined" style="font-size: 18px;">send</span>
+          <span>Dolgozat beadása</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Lebegő helyes válasz portál popover a kérdésáttekintéshez (Floating UI Portal) -->
   <div id="summary-portal-popover" class="calm-summary-portal-popover" style="display: none;">
     <div class="calm-summary-tooltip-header">
@@ -587,8 +702,8 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.33.0"></script>
-  <script src="/js/student.js?v=1.33.0"></script>
+  <script src="/js/utils.js?v=1.37.7"></script>
+  <script src="/js/student.js?v=1.37.7"></script>
 </body>
 
 </html>

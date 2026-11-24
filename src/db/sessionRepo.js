@@ -335,12 +335,25 @@ function startSession({
  */
 function finishSession(sessionId) {
   const tx = db.transaction(() => {
-    // 1. Még aktív tanulók automatikus lezárása (amíg a session még ACTIVE státuszú)
-    db.prepare(`
-      UPDATE participants
-      SET is_finished = 1, finished_at = CURRENT_TIMESTAMP
-      WHERE session_id = ? AND is_finished = 0
-    `).run(sessionId);
+    const sess = db.prepare('SELECT id, mode, status FROM sessions WHERE id = ?').get(sessionId);
+    if (!sess || sess.status !== 'ACTIVE') {
+      throw new Error('A dolgozat nem található vagy már le van zárva!');
+    }
+
+    // 1. Open Navigation esetén még a FINISHED beállítása előtt véglegesítjük minden aktív tanuló piszkozatát
+    if (sess.mode === 'OPEN_NAVIGATION') {
+      const activeParticipants = db.prepare('SELECT id FROM participants WHERE session_id = ? AND is_finished = 0').all(sessionId);
+      for (const ap of activeParticipants) {
+        finalizeOpenNavigationParticipantInTx(ap.id);
+      }
+    } else {
+      // Még aktív tanulók automatikus lezárása (amíg a session még ACTIVE státuszú)
+      db.prepare(`
+        UPDATE participants
+        SET is_finished = 1, finished_at = CURRENT_TIMESTAMP
+        WHERE session_id = ? AND is_finished = 0
+      `).run(sessionId);
+    }
 
     // 2. Session státusz végleges lezárása (FINISHED), max_points beégetése és osztálynév beégetése történeti archívumként
     const quizPointsRow = db.prepare('SELECT COALESCE(SUM(points), 0.0) as mp FROM questions WHERE quiz_id = (SELECT quiz_id FROM sessions WHERE id = ?)').get(sessionId);
@@ -637,6 +650,11 @@ function finishParticipant(participantId) {
     );
   }
 
+  if (check && check.session_mode === 'OPEN_NAVIGATION') {
+    const fin = finalizeOpenNavigationParticipant(participantId);
+    return fin.participant;
+  }
+
   const stmt = db.prepare(`
     UPDATE participants 
     SET is_finished = 1, finished_at = CURRENT_TIMESTAMP 
@@ -707,7 +725,8 @@ function resetParticipant(participantId) {
   }
 
   const tx = db.transaction(() => {
-    // Válaszok törlése
+    // Piszkozatok és válaszok törlése
+    db.prepare('DELETE FROM answer_drafts WHERE participant_id = ?').run(participantId);
     db.prepare('DELETE FROM answers WHERE participant_id = ?').run(participantId);
     // Résztvevő törlése
     db.prepare('DELETE FROM participants WHERE id = ?').run(participantId);
@@ -746,6 +765,11 @@ function submitAnswer({
   const makeRejectError = (msg, code) => Object.assign(new Error(msg), { code });
 
   if (!preCheck) throw makeRejectError('A résztvevő nem található!', 'PARTICIPANT_UNKNOWN');
+
+  // Open Navigation módban az egyedi submit-answer szigorúan tiltott (minden más ellenőrzés és állapotmódosítás ELŐTT!)
+  if (preCheck.session_mode === 'OPEN_NAVIGATION') {
+    throw makeRejectError('Szabad navigáció módban a válaszok piszkozatként mentődnek, és a dolgozat beadásakor kerülnek kiértékelésre!', 'INVALID_SESSION_MODE');
+  }
 
   // Idempotens védelem: ha erre a kérdésre már mentve van válasz, azt hiba nélkül visszaadjuk (befejezett dolgozatnál is!)
   const existingAnswer = db.prepare(`
@@ -812,6 +836,11 @@ function submitAnswer({
     `).get(participant_id);
 
     if (!participant) throw makeRejectError('A résztvevő nem található!', 'PARTICIPANT_UNKNOWN');
+
+    // 1b. Open Navigation módban a régi válaszbeküldő útvonal a tranzakción belül is legelsőként elutasítandó
+    if (participant.session_mode === 'OPEN_NAVIGATION') {
+      throw makeRejectError('Szabad navigáció módban a válaszok piszkozatként mentődnek, és a dolgozat beadásakor kerülnek kiértékelésre!', 'INVALID_SESSION_MODE');
+    }
 
     // 2. Idempotens védelem: ha már mentve van ez a válasz, hiba nélkül visszaadjuk a meglévőt!
     const existingAnswer = db.prepare(`
@@ -1176,13 +1205,23 @@ function getLiveMatrixData(sessionId) {
     };
   });
 
+  let drafts = [];
+  if (session.mode === 'OPEN_NAVIGATION') {
+    drafts = db.prepare(`
+      SELECT participant_id, question_id, version
+      FROM answer_drafts
+      WHERE session_id = ? AND draft_answer != ''
+    `).all(sessionId);
+  }
+
   return {
     session,
     thresholds,
     totalMaxPoints,
     questions,
     participants: enrichedParticipants,
-    answers
+    answers,
+    drafts
   };
 }
 
@@ -1229,6 +1268,8 @@ function getProjectorData(sessionId) {
   const data = getLiveMatrixData(sessionId);
   if (!data) return null;
 
+  const isOpenNav = data.session.mode === 'OPEN_NAVIGATION';
+
   return {
     session: {
       id: data.session.id,
@@ -1236,21 +1277,28 @@ function getProjectorData(sessionId) {
       subject_name: data.session.subject_name,
       grade_level: data.session.grade_level,
       mode: data.session.mode,
+      status: data.session.status,
       current_question_index: data.session.current_question_index
     },
-    participants: data.participants.map(p => ({
-      team_color: p.team_color || 'Kék',
-      total_points: p.total_points || 0
-    })),
+    participants: isOpenNav
+      ? data.participants.map(p => ({
+        is_finished: p.is_finished === 1 ? 1 : 0
+      }))
+      : data.participants.map(p => ({
+        team_color: p.team_color || 'Kék',
+        total_points: p.total_points || 0
+      })),
     questions: data.questions.map(q => ({
       id: q.id,
       question_text: q.question_text
     })),
-    answers: data.answers.map(a => ({
-      question_id: a.question_id,
-      is_correct: a.is_correct
-    })),
-    totalMaxPoints: data.totalMaxPoints
+    answers: isOpenNav
+      ? []
+      : data.answers.map(a => ({
+        question_id: a.question_id,
+        is_correct: a.is_correct
+      })),
+    totalMaxPoints: isOpenNav ? null : data.totalMaxPoints
   };
 }
 
@@ -1409,6 +1457,356 @@ function updateCurrentQuestionIndex(sessionId, questionIndex) {
 }
 
 /**
+ * Open Navigation: Egyetlen résztvevő összes nem üres piszkozatának atomi véglegesítése (már nyitott tranzakción belül!)
+ * Sima INSERT-et használ (nem INSERT OR IGNORE), így bármilyen integritási hiba esetén a teljes tranzakció visszagördül.
+ */
+function finalizeOpenNavigationParticipantInTx(participantId) {
+  const participant = db.prepare(`
+    SELECT p.id, p.session_id, p.is_finished,
+           s.mode AS session_mode, s.status AS session_status, s.quiz_id, s.quiz_snapshot_json
+    FROM participants p
+    JOIN sessions s ON s.id = p.session_id
+    WHERE p.id = ?
+  `).get(participantId);
+
+  if (!participant) {
+    throw Object.assign(new Error('Érvénytelen résztvevő!'), { code: 'PARTICIPANT_UNKNOWN' });
+  }
+  if (participant.session_mode !== 'OPEN_NAVIGATION') {
+    throw Object.assign(new Error('Ez a művelet kizárólag Szabad navigáció (Open Navigation) módban érhető el!'), { code: 'INVALID_SESSION_MODE' });
+  }
+
+  // Idempotens lezárás: ha már véglegesítve van, nem módosít semmit
+  if (participant.is_finished === 1) {
+    return { alreadyFinished: true, finalizedCount: 0 };
+  }
+
+  if (participant.session_status !== 'ACTIVE') {
+    throw Object.assign(new Error('Lezárt dolgozatban már nem véglegesíthető új válasz!'), { code: 'SESSION_INACTIVE' });
+  }
+
+  // Kérdés-térkép felépítése a rögzített snapshotból (vagy fallback a questions táblából)
+  const questionMap = new Map();
+  if (participant.quiz_snapshot_json) {
+    try {
+      const snap = JSON.parse(participant.quiz_snapshot_json);
+      if (snap && Array.isArray(snap.questions)) {
+        for (const q of snap.questions) {
+          questionMap.set(Number(q.id), {
+            id: Number(q.id),
+            question_type: q.question_type,
+            options_json: typeof q.options === 'string' ? q.options : JSON.stringify(q.options || []),
+            correct_answer: q.correct_answer,
+            explanation: q.explanation || '',
+            points: Number(q.points !== undefined ? q.points : 1)
+          });
+        }
+      }
+    } catch {}
+  }
+
+  if (questionMap.size === 0) {
+    const dbQuestions = db.prepare(`
+      SELECT id, question_type, options_json, correct_answer, explanation, points
+      FROM questions
+      WHERE quiz_id = ? AND question_order < 100000
+    `).all(participant.quiz_id);
+    for (const q of dbQuestions) {
+      questionMap.set(Number(q.id), q);
+    }
+  }
+
+  const drafts = db.prepare(`
+    SELECT question_id, draft_answer
+    FROM answer_drafts
+    WHERE participant_id = ?
+    ORDER BY id ASC
+  `).all(participant.id);
+
+  const insertStmt = db.prepare(`
+    INSERT INTO answers (
+      session_id, participant_id, question_id, submitted_answer,
+      eval_status, is_correct, points_earned, original_points_earned,
+      is_manually_overridden, overridden_at, time_spent_sec, answered_at
+    ) VALUES (
+      ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      0, NULL, 0, CURRENT_TIMESTAMP
+    )
+  `);
+
+  let finalizedCount = 0;
+  for (const d of drafts) {
+    const rawDraft = String(d.draft_answer ?? '');
+    if (rawDraft === '') continue; // Verziózott logikai ürítés -> kihagyott kérdés
+
+    const q = questionMap.get(Number(d.question_id));
+    if (!q) {
+      throw Object.assign(new Error(`A(z) #${d.question_id} kérdés nem található a dolgozat pillanatképében!`), { code: 'QUESTION_NOT_FOUND' });
+    }
+
+    let parsedOptions = [];
+    try {
+      parsedOptions = JSON.parse(q.options_json || '[]');
+    } catch {
+      parsedOptions = [];
+    }
+
+    let finalAnswerText = '';
+    if (q.question_type === 'ABCD') {
+      const optStrings = Array.isArray(parsedOptions) ? parsedOptions.map(o => String(o)) : [];
+      if (optStrings.includes(rawDraft)) {
+        // Pontos, pillanatképhez kötött ABCD opciószöveg megőrzése (szélső szóközökkel együtt!)
+        finalAnswerText = rawDraft;
+      } else if (rawDraft.trim() === '') {
+        continue;
+      } else {
+        const trimmedMatches = optStrings.filter(o => o.trim() === rawDraft.trim());
+        finalAnswerText = trimmedMatches.length === 1 ? trimmedMatches[0] : rawDraft;
+      }
+    } else {
+      const trimmed = rawDraft.trim();
+      if (!trimmed) continue;
+      finalAnswerText = trimmed;
+    }
+
+    const evaluation = grader.evaluateAnswer(
+      q.question_type,
+      finalAnswerText,
+      q.correct_answer,
+      q.points,
+      parsedOptions
+    );
+
+    insertStmt.run(
+      participant.session_id,
+      participant.id,
+      q.id,
+      finalAnswerText,
+      evaluation.eval_status,
+      evaluation.is_correct,
+      evaluation.points_earned,
+      evaluation.points_earned
+    );
+    finalizedCount++;
+  }
+
+  // Piszkozatok takarítása és résztvevő lezárása ugyanabban a tranzakcióban
+  db.prepare('DELETE FROM answer_drafts WHERE participant_id = ?').run(participant.id);
+  db.prepare(`
+    UPDATE participants
+    SET is_finished = 1, finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP)
+    WHERE id = ?
+  `).run(participant.id);
+
+  return { alreadyFinished: false, finalizedCount };
+}
+
+/**
+ * Open Navigation: Egyetlen résztvevő véglegesítése önálló tranzakcióban
+ */
+function finalizeOpenNavigationParticipant(participantId) {
+  let outcome = null;
+  const tx = db.transaction(() => {
+    outcome = finalizeOpenNavigationParticipantInTx(participantId);
+  });
+  tx();
+  const participant = db.prepare('SELECT * FROM participants WHERE id = ?').get(participantId);
+  return { ...outcome, participant };
+}
+
+const MAX_SHORT_DRAFT_LENGTH = 500;
+
+/**
+ * Open Navigation: Verziózott piszkozatválasz mentése vagy logikai ürítése
+ * Határidő-lejárat esetén előbb COMMIT-olja a véglegesítést, majd { deadlineExceeded: true } értékkel tér vissza.
+ */
+function saveDraftAnswer({ participant_id, question_id, draft_answer, base_version }) {
+  const makeErr = (msg, code, status = 400) => Object.assign(new Error(msg), { code, status });
+
+  if (typeof question_id !== 'number' || !Number.isSafeInteger(question_id) || question_id <= 0) {
+    throw makeErr('Érvénytelen kérdésazonosító!', 'INVALID_QUESTION_ID', 400);
+  }
+  if (typeof base_version !== 'number' || !Number.isSafeInteger(base_version) || base_version < 0) {
+    throw makeErr('A base_version kötelező nem negatív egész szám!', 'INVALID_BASE_VERSION', 400);
+  }
+  if (typeof draft_answer !== 'string') {
+    throw makeErr('A piszkozatválasz csak szöveges érték lehet!', 'INVALID_DRAFT_ANSWER', 400);
+  }
+
+  let outcome = null;
+
+  const tx = db.transaction(() => {
+    const participant = db.prepare(`
+      SELECT p.id, p.session_id, p.is_finished, p.deadline_at,
+             s.status AS session_status, s.mode AS session_mode, s.quiz_id, s.quiz_snapshot_json
+      FROM participants p
+      JOIN sessions s ON s.id = p.session_id
+      WHERE p.id = ?
+    `).get(participant_id);
+
+    if (!participant) {
+      throw makeErr('Érvénytelen résztvevő!', 'PARTICIPANT_UNKNOWN', 400);
+    }
+    if (participant.session_mode !== 'OPEN_NAVIGATION') {
+      throw makeErr('A piszkozatmentés kizárólag Szabad navigáció (Open Navigation) módban érhető el!', 'INVALID_SESSION_MODE', 400);
+    }
+    if (participant.session_status !== 'ACTIVE') {
+      throw makeErr('A dolgozat már lezárult!', 'SESSION_INACTIVE', 400);
+    }
+    if (participant.is_finished === 1) {
+      throw makeErr('Már beadtad a dolgozatot, további módosítás nem lehetséges!', 'PARTICIPANT_ALREADY_FINISHED', 400);
+    }
+
+    // Szerveroldali határidő ellenőrzése: lejáratkor automatikus véglegesítés és COMMIT (kivétel nélkül!)
+    if (participant.deadline_at) {
+      const deadlineMs = new Date(participant.deadline_at).getTime();
+      if (!Number.isNaN(deadlineMs) && Date.now() >= deadlineMs) {
+        const fin = finalizeOpenNavigationParticipantInTx(participant.id);
+        const freshPart = db.prepare('SELECT finished_at FROM participants WHERE id = ?').get(participant.id);
+        outcome = {
+          deadlineExceeded: true,
+          conflict: false,
+          finalizedCount: fin.finalizedCount,
+          finished_at: freshPart ? freshPart.finished_at : null
+        };
+        return;
+      }
+    }
+
+    // Kérdés lekérése és validálása a rögzített pillanatképből (vagy fallbackből)
+    let questionObj = null;
+    if (participant.quiz_snapshot_json) {
+      try {
+        const snap = JSON.parse(participant.quiz_snapshot_json);
+        if (snap && Array.isArray(snap.questions)) {
+          questionObj = snap.questions.find(q => Number(q.id) === question_id) || null;
+        }
+      } catch {}
+    } else {
+      const qRow = db.prepare('SELECT id, question_type, options_json FROM questions WHERE id = ? AND quiz_id = ?').get(question_id, participant.quiz_id);
+      if (qRow) {
+        let opts = [];
+        try { opts = JSON.parse(qRow.options_json || '[]'); } catch { opts = []; }
+        questionObj = { id: qRow.id, question_type: qRow.question_type, options: opts };
+      }
+    }
+
+    if (!questionObj) {
+      throw makeErr('A kérdés nem található a dolgozatban!', 'QUESTION_NOT_FOUND', 400);
+    }
+
+    let valueToStore = '';
+    if (questionObj.question_type === 'SHORT') {
+      const trimmedShort = draft_answer.trim();
+      if (trimmedShort.length > MAX_SHORT_DRAFT_LENGTH) {
+        throw makeErr(`A rövid válasz legfeljebb ${MAX_SHORT_DRAFT_LENGTH} karakter lehet!`, 'DRAFT_ANSWER_TOO_LONG', 400);
+      }
+      valueToStore = trimmedShort;
+    } else if (questionObj.question_type === 'TF') {
+      const trimmedTf = draft_answer.trim();
+      if (trimmedTf === '') {
+        valueToStore = '';
+      } else if (trimmedTf === 'Igaz' || trimmedTf === 'Hamis') {
+        valueToStore = trimmedTf;
+      } else {
+        throw makeErr('Igaz / Hamis kérdésnél csak az „Igaz” vagy a „Hamis” érték választható!', 'INVALID_DRAFT_OPTION', 400);
+      }
+    } else if (questionObj.question_type === 'ABCD') {
+      let validOpts = [];
+      if (Array.isArray(questionObj.options)) {
+        validOpts = questionObj.options.map(o => String(o));
+      } else if (typeof questionObj.options === 'string') {
+        try { validOpts = JSON.parse(questionObj.options).map(o => String(o)); } catch { validOpts = []; }
+      }
+
+      if (draft_answer === '') {
+        valueToStore = '';
+      } else if (validOpts.length === 0 || validOpts.includes(draft_answer)) {
+        // Pontos, veszteségmentes egyezés a pillanatkép opciójával (hosszú és szélső szóközös opciók is!)
+        valueToStore = draft_answer;
+      } else if (draft_answer.trim() === '') {
+        valueToStore = '';
+      } else {
+        // Kompatibilitási feloldás: csak akkor fogadjuk el a trimmelt egyezést, ha pontosan egy opcióra illik
+        const trimmedMatches = validOpts.filter(o => o.trim() === draft_answer.trim());
+        if (trimmedMatches.length === 1) {
+          valueToStore = trimmedMatches[0];
+        } else {
+          throw makeErr('A kiválasztott válaszlehetőség nem tartozik ehhez a kérdéshez!', 'INVALID_DRAFT_OPTION', 400);
+        }
+      }
+    } else {
+      valueToStore = draft_answer.trim();
+    }
+
+    const existing = db.prepare(`
+      SELECT id, draft_answer, version
+      FROM answer_drafts
+      WHERE participant_id = ? AND question_id = ?
+    `).get(participant.id, question_id);
+
+    const currentVersion = existing ? Number(existing.version) : 0;
+
+    if (base_version !== currentVersion) {
+      outcome = {
+        conflict: true,
+        deadlineExceeded: false,
+        question_id,
+        currentVersion,
+        currentAnswer: existing ? existing.draft_answer : ''
+      };
+      return;
+    }
+
+    const nextVersion = currentVersion + 1;
+
+    if (existing) {
+      db.prepare(`
+        UPDATE answer_drafts
+        SET draft_answer = ?, version = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(valueToStore, nextVersion, existing.id);
+    } else {
+      db.prepare(`
+        INSERT INTO answer_drafts (session_id, participant_id, question_id, draft_answer, version, updated_at)
+        VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+      `).run(participant.session_id, participant.id, question_id, valueToStore);
+    }
+
+    const countRow = db.prepare(`
+      SELECT COUNT(*) AS cnt
+      FROM answer_drafts
+      WHERE participant_id = ? AND draft_answer != ''
+    `).get(participant.id);
+
+    outcome = {
+      conflict: false,
+      deadlineExceeded: false,
+      question_id,
+      draft_answer: valueToStore,
+      isEmpty: valueToStore === '',
+      version: nextVersion,
+      savedCount: countRow ? Number(countRow.cnt) : 0
+    };
+  });
+
+  tx();
+  return outcome;
+}
+
+/**
+ * Open Navigation: Egy résztvevő összes piszkozatának és verziójának lekérése
+ */
+function getParticipantDrafts(participantId) {
+  return db.prepare(`
+    SELECT question_id, draft_answer, version, updated_at
+    FROM answer_drafts
+    WHERE participant_id = ?
+  `).all(participantId);
+}
+
+/**
  * Dolgozat végleges törlése az archívumból (válaszokkal és résztvevőkkel együtt)
  */
 function deleteSession(sessionId) {
@@ -1416,6 +1814,7 @@ function deleteSession(sessionId) {
   if (!session) throw new Error('A törlendő dolgozat nem található!');
 
   const tx = db.transaction(() => {
+    db.prepare('DELETE FROM answer_drafts WHERE session_id = ?').run(sessionId);
     db.prepare('DELETE FROM answers WHERE session_id = ?').run(sessionId);
     db.prepare('DELETE FROM participants WHERE session_id = ?').run(sessionId);
     db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
@@ -1442,6 +1841,10 @@ module.exports = {
   resetParticipant,
   unlockParticipant,
   submitAnswer,
+  saveDraftAnswer,
+  getParticipantDrafts,
+  finalizeOpenNavigationParticipant,
+  finalizeOpenNavigationParticipantInTx,
   overrideAnswer,
   getLiveMatrixData,
   getProjectorData,

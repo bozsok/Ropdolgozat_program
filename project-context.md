@@ -1,5 +1,5 @@
 # PROJEKT KONTEXTUS ÉS RENDSZERMEGÁLLAPODÁS (project-context.md)
-**Projekt verzió:** v1.36.0 (Éles tantermi kiadás, változási napló: `CHANGELOG.md`)  
+**Projekt verzió:** v1.37.7 (Éles tantermi kiadás, változási napló: `CHANGELOG.md`)  
 **Projekt neve:** Röpdolgozat program – Iskolai Helyi Hálózatos Röpdolgozat Rendszer (Socrative-klón)  
 **Célközönség:** Általános iskola 3–8. osztály (Digitális kultúra, Technika és Fejlesztő foglalkozás tantárgyak)  
 **Működési környezet:** 100% Offline Helyi Hálózat (LAN) – 1 db Windows Server 2016 (vagy újabb) + 42 db Windows 10 kliensgép + több tanári munkaállomás.  
@@ -79,8 +79,9 @@
   4. `questions` (Kérdések: ABCD, TF, SHORT opciókkal, pontszámmal, képpel, magyarázattal)
   5. `sessions` (Aktív és lezárt órai alkalmak / szobák, évfolyammal, tantárggyal, ponthatárokkal)
   6. `participants` (Csatlakozott tanulók, gépazonosító `1-42`, csapatszín, fókuszvesztés-számláló)
-  7. `answers` (Egyedi diákválaszok, `eval_status`, `points_earned`, manuális felülbírálás)
-  8. `system_settings` (Rendszerbeállítások, egyéni értékelési határok és tantermi felügyeleti opciók)
+  7. `answers` (Egyedi végleges diákválaszok, `eval_status`, `points_earned`, manuális felülbírálás)
+  8. `answer_drafts` (Open Navigation mód verziózott piszkozatválaszai beadás előtt)
+  9. `system_settings` (Rendszerbeállítások, egyéni értékelési határok és tantermi felügyeleti opciók)
 
 ---
 

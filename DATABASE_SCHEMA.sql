@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     grade_level TEXT NOT NULL DEFAULT '',       -- Évfolyam (pl. "6" vagy "3")
     quiz_id INTEGER NOT NULL,
     class_name TEXT DEFAULT '',                 -- Opcionális osztálynév (pl. "6.a", vagy üres, ha teljes évfolyam)
-    mode TEXT NOT NULL CHECK(mode IN ('STUDENT_PACED', 'TEACHER_PACED', 'SPACE_RACE')),
+    mode TEXT NOT NULL CHECK(mode IN ('STUDENT_PACED', 'TEACHER_PACED', 'SPACE_RACE', 'OPEN_NAVIGATION')),
     status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE', 'FINISHED')),
     time_limit_min INTEGER DEFAULT 0 CHECK(time_limit_min >= 0), -- Időkorlát percben (0 = nincs korlát)
     shuffle_questions INTEGER DEFAULT 0 CHECK(shuffle_questions IN (0, 1)), -- 1 = kérdések keverése
@@ -145,6 +145,7 @@ CREATE TABLE IF NOT EXISTS participants (
 
 CREATE INDEX IF NOT EXISTS idx_participants_session ON participants(session_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_token ON participants(session_token);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_id_session ON participants(id, session_id);
 
 -- ----------------------------------------------------------------------------
 -- 7. TÁBLA: answers (A diákok által beküldött egyedi válaszok)
@@ -170,6 +171,26 @@ CREATE TABLE IF NOT EXISTS answers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_answers_session_participant ON answers(session_id, participant_id);
+
+-- ----------------------------------------------------------------------------
+-- 7b. TÁBLA: answer_drafts (Open Navigation verziózott diák piszkozatválaszok)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS answer_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    participant_id INTEGER NOT NULL,
+    question_id INTEGER NOT NULL,
+    draft_answer TEXT NOT NULL DEFAULT '',      -- Üres string = verziózott logikai ürítés
+    version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1), -- Szerver által kezelt monoton verzió
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (participant_id, session_id) REFERENCES participants(id, session_id) ON DELETE CASCADE,
+    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE RESTRICT,
+    UNIQUE(participant_id, question_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_answer_drafts_session ON answer_drafts(session_id);
+CREATE INDEX IF NOT EXISTS idx_answer_drafts_participant ON answer_drafts(participant_id);
 
 -- ----------------------------------------------------------------------------
 -- 7. TÁBLA: system_settings (Rendszerbeállítások, értékelési határok és tantermi opciók)

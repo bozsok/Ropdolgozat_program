@@ -134,7 +134,7 @@ function restoreSystemBackup(zipFilePath) {
       if (fkCheck.length > 0) {
         throw new Error('A mentésben lévő adatbázis idegen kulcsai sérültek (PRAGMA foreign_key_check failed)!');
       }
-      const requiredTables = ['quizzes', 'questions', 'students', 'sessions', 'participants', 'answers'];
+      const requiredTables = ['quizzes', 'questions', 'students', 'sessions', 'participants', 'answers', 'answer_drafts'];
       const existingTables = testDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(t => t.name);
       for (const t of requiredTables) {
         if (!existingTables.includes(t)) {
@@ -173,7 +173,14 @@ function restoreSystemBackup(zipFilePath) {
       `).all();
 
       const existingTriggers = testDb.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all().map(t => t.name);
-      const requiredTriggers = ['trg_validate_answer_points_limit', 'trg_validate_answer_points_limit_update', 'trg_validate_answer_question'];
+      const requiredTriggers = [
+        'trg_validate_answer_points_limit',
+        'trg_validate_answer_points_limit_update',
+        'trg_validate_answer_question',
+        'trg_prevent_finished_session_update',
+        'trg_prevent_finished_participant_update',
+        'trg_prevent_answer_update_when_session_finished'
+      ];
       for (const trg of requiredTriggers) {
         if (!existingTriggers.includes(trg)) {
           throw new Error(`Inkompatibilis mentés: a kötelező '${trg}' trigger hiányzik az adatbázisból!`);

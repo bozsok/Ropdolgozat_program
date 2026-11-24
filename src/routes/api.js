@@ -657,8 +657,15 @@ router.post('/admin/sessions/start', requireAdminAuth, (req, res) => {
 });
 
 // Szobák és kivetítő szinkronizált frissítése (Report 15 / 1. fejezet)
+const pendingMatrixTimers = new Map();
+
 function broadcastMatrixUpdate(io, sessionId) {
   if (!io || !sessionId) return;
+  const key = String(sessionId);
+  if (pendingMatrixTimers.has(key)) {
+    clearTimeout(pendingMatrixTimers.get(key));
+    pendingMatrixTimers.delete(key);
+  }
   const matrixData = sessionRepo.getLiveMatrixData(sessionId);
   if (matrixData) {
     io.to(`session_${sessionId}_teacher`).emit('matrix:updated', matrixData);
@@ -667,6 +674,50 @@ function broadcastMatrixUpdate(io, sessionId) {
   if (projectorData) {
     io.to(`session_${sessionId}_projector`).emit('matrix:updated', projectorData);
   }
+}
+
+// Közös UTC ISO 8601 időbélyeg-formázó (SQLite zóna nélküli UTC 'YYYY-MM-DD HH:mm:ss' -> 'YYYY-MM-DDTHH:mm:ssZ')
+function toUtcIsoTimestamp(rawVal) {
+  if (rawVal === null || rawVal === undefined) return null;
+  const s = String(rawVal).trim();
+  if (!s) return null;
+  // SQLite CURRENT_TIMESTAMP formátum: 'YYYY-MM-DD HH:mm:ss' (vagy tizedesmásodperccel)
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(s)) {
+    const dt = new Date(s.replace(' ', 'T') + 'Z');
+    return Number.isNaN(dt.getTime()) ? null : dt.toISOString();
+  }
+  // Ha már van időzóna jelölés (Z vagy ±HH:MM), normalizáljuk ISO UTC-re
+  if (/(Z|[+-]\d{2}:?\d{2})$/i.test(s)) {
+    const dt = new Date(s);
+    return Number.isNaN(dt.getTime()) ? null : dt.toISOString();
+  }
+  const dt = new Date(s + 'Z');
+  return Number.isNaN(dt.getTime()) ? null : dt.toISOString();
+}
+
+// Ritkított (összevont) mátrix-frissítés sűrű Open Navigation piszkozatmentésekhez (saját hibakezeléssel!)
+function scheduleMatrixUpdate(io, sessionId, delayMs = 350, operationId = null) {
+  if (!io || !sessionId) return;
+  const key = String(sessionId);
+  if (pendingMatrixTimers.has(key)) return;
+  const timer = setTimeout(() => {
+    pendingMatrixTimers.delete(key);
+    try {
+      broadcastMatrixUpdate(io, sessionId);
+    } catch (err) {
+      console.warn(`Háttérmátrix-frissítési hiba (session ${sessionId}):`, err.message);
+      try {
+        diagnosticsService.logEvent({
+          source: 'server',
+          event: 'matrix.broadcast_failed',
+          operationId: operationId || null,
+          reasonCode: 'MATRIX_BROADCAST_ERROR'
+        });
+      } catch {}
+    }
+  }, delayMs);
+  if (typeof timer.unref === 'function') timer.unref();
+  pendingMatrixTimers.set(key, timer);
 }
 
 // Dolgozat befejezése / lezárása (Admin)
@@ -866,8 +917,9 @@ router.post('/admin/participants/:id/authorize-seat-change', requireAdminAuth, (
 
     const io = req.app.get('io');
     if (io) {
-      // Célzott értesítés a régi gépnek a munkamenet lezárásához
+      // Célzott értesítés a régi gépnek a munkamenet lezárásához (sessionId + participantId!)
       io.emit('participant:kicked', { 
+        sessionId: result.sessionId,
         participantId: Number(participantId), 
         studentId: participant ? participant.student_id : null 
       });
@@ -921,8 +973,9 @@ router.post('/admin/participants/:id/reset', requireAdminAuth, (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      // Célzott kiléptetés a tévesen bejelentkezett kliensnek
+      // Célzott kiléptetés a tévesen bejelentkezett kliensnek (sessionId + participantId!)
       io.emit('participant:kicked', { 
+        sessionId: participant.session_id,
         participantId: Number(participantId), 
         studentId: participant.student_id 
       });
@@ -978,6 +1031,7 @@ router.post('/admin/participants/:id/unlock', requireAdminAuth, (req, res) => {
     const io = req.app.get('io');
     if (io) {
       io.emit('participant:kicked', { 
+        sessionId: participant.session_id,
         participantId: Number(participantId), 
         studentId: participant.student_id 
       });
@@ -1047,20 +1101,24 @@ router.post('/student/join', (req, res) => {
     }
 
     const joinedSession = sessionRepo.getSessionById(session_id);
-    const maskJoinAnswers = Boolean(
-      joinedSession &&
-      joinedSession.mode === 'TEACHER_PACED' &&
-      joinedSession.status === 'ACTIVE' &&
-      joinedSession.show_feedback_on_end === 0
+    const isOpenNavJoinMasked = Boolean(
+      joinedSession && joinedSession.mode === 'OPEN_NAVIGATION' &&
+      (joinedSession.show_feedback_on_end === 0 || (joinResult.participant && joinResult.participant.is_finished === 0))
     );
-    const safeJoinAnswers = maskJoinAnswers
-      ? (Array.isArray(joinResult.answers)
-        ? joinResult.answers.map(a => ({
-          question_id: a.question_id,
-          submitted_answer: a.submitted_answer
-        }))
-        : [])
-      : joinResult.answers;
+    const isTpJoinMasked = Boolean(
+      joinedSession && joinedSession.mode === 'TEACHER_PACED' &&
+      joinedSession.status === 'ACTIVE' && joinedSession.show_feedback_on_end === 0
+    );
+    const safeJoinAnswers = isOpenNavJoinMasked
+      ? []
+      : (isTpJoinMasked
+        ? (Array.isArray(joinResult.answers)
+          ? joinResult.answers.map(a => ({
+            question_id: a.question_id,
+            submitted_answer: a.submitted_answer
+          }))
+          : [])
+        : joinResult.answers);
 
     res.json({
       success: true,
@@ -1186,6 +1244,37 @@ router.get('/student/session-data', (req, res) => {
     }
 
     const isTeacherPaced = participant.mode === 'TEACHER_PACED';
+    const isOpenNav = participant.mode === 'OPEN_NAVIGATION';
+
+    // Open Navigation: ha a résztvevő határideje már lejárt, a lekérés pillanatában automatikusan véglegesítjük a piszkozatait
+    if (isOpenNav && participant.session_status === 'ACTIVE' && participant.is_finished === 0 && participant.deadline_at) {
+      const deadlineMs = new Date(participant.deadline_at).getTime();
+      if (!Number.isNaN(deadlineMs) && Date.now() >= deadlineMs) {
+        try {
+          const finRes = sessionRepo.finalizeOpenNavigationParticipant(participant.id);
+          participant.is_finished = 1;
+          if (finRes && finRes.participant && finRes.participant.finished_at) {
+            participant.finished_at = finRes.participant.finished_at;
+          }
+          try {
+            const io = req.app.get('io');
+            if (io) broadcastMatrixUpdate(io, participant.session_id);
+          } catch (matErr) {
+            console.warn('Mátrix-frissítési figyelmeztetés lejárati véglegesítés után:', matErr.message);
+          }
+        } catch (finErr) {
+          console.error('Hiba az Open Navigation automatikus lejárati véglegesítésekor:', finErr.message);
+          return res.status(500).json({
+            error: 'A határidő lejártakor a válaszok véglegesítése átmenetileg sikertelen volt. Kérlek, próbáld újra!',
+            code: 'AUTO_FINALIZE_FAILED'
+          });
+        }
+      }
+    }
+
+    const isActiveOpenNav = isOpenNav && participant.session_status === 'ACTIVE' && participant.is_finished === 0;
+    const hideOpenNavEval = isOpenNav && (isActiveOpenNav || participant.show_feedback_on_end === 0);
+
     const rawTpIdx = Number(participant.current_question_index) || 0;
     const isTpReviewPhase = isTeacherPaced && participant.session_status === 'ACTIVE' && orderedQuestions.length > 0 && rawTpIdx >= orderedQuestions.length;
     const isActiveTeacherPaced = isTeacherPaced && participant.session_status === 'ACTIVE' && !isTpReviewPhase;
@@ -1193,6 +1282,7 @@ router.get('/student/session-data', (req, res) => {
       ? Math.max(0, Math.min(orderedQuestions.length - 1, rawTpIdx))
       : 0;
     const hideActiveTpFeedback = isActiveTeacherPaced && participant.show_feedback_on_end === 0;
+    const hideResults = hideActiveTpFeedback || hideOpenNavEval;
 
     // Tanuló pontszámának és jegyének kalkulációja
     const pointsRow = db.prepare('SELECT COALESCE(SUM(points_earned), 0.0) AS total_points FROM answers WHERE participant_id = ?').get(participant.id);
@@ -1221,11 +1311,20 @@ router.get('/student/session-data', (req, res) => {
       || ((participant.is_finished === 1 || participant.session_status === 'FINISHED') && participant.show_feedback_on_end !== 0);
 
     let answers = [];
+    let drafts = [];
     let currentQuestion = null;
     let currentAnswer = null;
     let exposedQuestions = [];
 
-    if (isActiveTeacherPaced) {
+    if (isActiveOpenNav) {
+      drafts = sessionRepo.getParticipantDrafts(participant.id);
+      answers = [];
+      exposedQuestions = orderedQuestions;
+    } else if (isOpenNav && participant.show_feedback_on_end === 0) {
+      // Kikapcsolt visszajelzésnél beadás után kizárólag beadási nyugta (pontszám, helyesség, megoldás nélkül)
+      answers = [];
+      exposedQuestions = orderedQuestions;
+    } else if (isActiveTeacherPaced) {
       currentQuestion = orderedQuestions[activeIdx] || null;
       if (currentQuestion) {
         const rawCurrentAnswer = db.prepare(`
@@ -1319,8 +1418,8 @@ router.get('/student/session-data', (req, res) => {
         is_finished: participant.is_finished,
         deadline_at: participant.deadline_at,
         time_limit_min: participant.time_limit_min,
-        joined_at: participant.joined_at,
-        finished_at: participant.finished_at,
+        joined_at: toUtcIsoTimestamp(participant.joined_at) || participant.joined_at,
+        finished_at: toUtcIsoTimestamp(participant.finished_at),
         session_status: participant.session_status,
         session_mode: participant.mode,
         is_race_started: isRaceStarted,
@@ -1336,7 +1435,8 @@ router.get('/student/session-data', (req, res) => {
       totalQuestions: orderedQuestions.length,
       currentQuestion: isActiveTeacherPaced ? currentQuestion : null,
       currentAnswer: isActiveTeacherPaced ? currentAnswer : null,
-      results: hideActiveTpFeedback ? null : {
+      drafts: isActiveOpenNav ? drafts : [],
+      results: hideResults ? null : {
         total_points: totalPoints,
         max_points: totalMax,
         percentage,
@@ -1510,6 +1610,119 @@ router.post('/student/submit-answer', (req, res) => {
   }
 });
 
+// Open Navigation: Verziózott diák piszkozatválasz mentése (kiértékelés nélkül)
+router.post('/student/save-draft', (req, res) => {
+  req.routeLogged = 'student.save_draft';
+  const opId = (req.body && typeof req.body.operation_id === 'string' && req.body.operation_id.length <= 64)
+    ? req.body.operation_id
+    : null;
+  try {
+    const token = (req.body && req.body.session_token) || req.headers['x-session-token'];
+    const { question_id, draft_answer, base_version } = req.body || {};
+
+    if (!token || typeof token !== 'string') {
+      return res.status(401).json({ error: 'Munkamenet token hiányzik!', code: 'AUTH_TOKEN_MISSING' });
+    }
+    if (typeof question_id !== 'number' || !Number.isSafeInteger(question_id) || question_id <= 0) {
+      return res.status(400).json({ error: 'A kérdés azonosítójának pozitív egész számnak kell lennie!', code: 'INVALID_QUESTION_ID' });
+    }
+    if (typeof base_version !== 'number' || !Number.isSafeInteger(base_version) || base_version < 0) {
+      return res.status(400).json({ error: 'A base_version kötelező nem negatív egész szám!', code: 'INVALID_BASE_VERSION' });
+    }
+    if (typeof draft_answer !== 'string') {
+      return res.status(400).json({ error: 'A piszkozatválasz csak szöveges érték lehet!', code: 'INVALID_DRAFT_ANSWER' });
+    }
+
+    const participant = sessionRepo.getParticipantByToken(token);
+    if (!participant) {
+      return res.status(404).json({ error: 'Érvénytelen munkamenet!', code: 'PARTICIPANT_UNKNOWN' });
+    }
+
+    const result = sessionRepo.saveDraftAnswer({
+      participant_id: participant.id,
+      question_id,
+      draft_answer,
+      base_version
+    });
+
+    const io = req.app.get('io');
+
+    if (result.deadlineExceeded) {
+      try {
+        if (io) broadcastMatrixUpdate(io, participant.session_id);
+      } catch (matErr) {
+        console.warn('Mátrix-frissítési figyelmeztetés lejáratnál:', matErr.message);
+      }
+      return res.status(400).json({
+        error: 'Lejárt a rendelkezésre álló időd! Az eddigi válaszaid automatikusan beadásra kerültek.',
+        code: 'DEADLINE_EXCEEDED',
+        autoFinalized: true,
+        finished_at: toUtcIsoTimestamp(result.finished_at)
+      });
+    }
+
+    if (result.conflict) {
+      return res.status(409).json({
+        success: false,
+        conflict: true,
+        code: 'DRAFT_VERSION_CONFLICT',
+        error: 'A válasz közben egy újabb verzióval frissült.',
+        question_id: result.question_id,
+        currentVersion: result.currentVersion,
+        currentAnswer: result.currentAnswer
+      });
+    }
+
+    // Mátrix-értesítés hibája nem ronthatja el a már sikeresen mentett választ
+    try {
+      if (io) {
+        scheduleMatrixUpdate(io, participant.session_id, 350, opId);
+      }
+    } catch (matErr) {
+      console.warn('Mátrix-értesítési figyelmeztetés piszkozatmentés után:', matErr.message);
+    }
+
+    res.json({
+      success: true,
+      question_id: result.question_id,
+      draft_answer: result.draft_answer,
+      isEmpty: Boolean(result.isEmpty),
+      version: result.version,
+      savedCount: result.savedCount
+    });
+  } catch (err) {
+    const clientErrorCodes = new Set([
+      'INVALID_QUESTION_ID', 'INVALID_BASE_VERSION', 'INVALID_DRAFT_ANSWER',
+      'DRAFT_ANSWER_TOO_LONG', 'INVALID_DRAFT_OPTION', 'PARTICIPANT_UNKNOWN',
+      'INVALID_SESSION_MODE', 'SESSION_INACTIVE', 'PARTICIPANT_ALREADY_FINISHED',
+      'QUESTION_NOT_FOUND'
+    ]);
+    if (err && err.code && clientErrorCodes.has(err.code)) {
+      diagnosticsService.logEvent({
+        source: 'server',
+        event: 'draft.rejected',
+        requestId: req.requestId,
+        operationId: opId,
+        reasonCode: err.code,
+        httpStatus: 400
+      });
+      return res.status(400).json({ error: err.message, code: err.code });
+    }
+    diagnosticsService.logEvent({
+      source: 'server',
+      event: 'draft.failed',
+      requestId: req.requestId,
+      operationId: opId,
+      reasonCode: 'DRAFT_PERSISTENCE_ERROR',
+      httpStatus: 500
+    });
+    res.status(500).json({
+      error: 'Szerverhiba történt a válasz mentése közben. Kérlek, próbáld újra!',
+      code: 'DRAFT_PERSISTENCE_ERROR'
+    });
+  }
+});
+
 // Fókuszvesztés rögzítése (Report 14 / 21., 24.)
 router.post('/student/focus-lost', (req, res) => {
   try {
@@ -1554,17 +1767,35 @@ router.post('/student/finish', (req, res) => {
 
     const finished = sessionRepo.finishParticipant(participant.id);
 
-    const io = req.app.get('io');
-    if (io) {
-      broadcastMatrixUpdate(io, participant.session_id);
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        broadcastMatrixUpdate(io, participant.session_id);
+      }
+    } catch (matErr) {
+      console.warn('Mátrix-értesítési figyelmeztetés beadás után:', matErr.message);
     }
 
-    res.json({ success: true, participant: finished });
+    const finishedAtUtc = toUtcIsoTimestamp(finished ? finished.finished_at : null);
+    const finishedPayload = finished ? { ...finished, finished_at: finishedAtUtc } : finished;
+
+    res.json({
+      success: true,
+      participant: finishedPayload,
+      receipt: {
+        is_finished: 1,
+        finished_at: finishedAtUtc,
+        session_status: participant.session_status,
+        session_mode: participant.session_mode || participant.mode || null,
+        show_feedback_on_end: participant.show_feedback_on_end
+      }
+    });
   } catch (err) {
-    if (err && err.code === 'TEACHER_PACED_FINISH_FORBIDDEN') {
+    const clientCodes = new Set(['TEACHER_PACED_FINISH_FORBIDDEN', 'SESSION_INACTIVE', 'PARTICIPANT_UNKNOWN', 'INVALID_SESSION_MODE']);
+    if (err && err.code && clientCodes.has(err.code)) {
       return res.status(400).json({ error: err.message, code: err.code });
     }
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 

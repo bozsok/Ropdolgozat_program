@@ -27,7 +27,8 @@ const testFiles = [
   'scratch/test_merge_quizzes.js',
   'scratch/test_report14_fixes.js',
   'scratch/test_diagnostics.js',
-  'scratch/test_teacher_paced.js'
+  'scratch/test_teacher_paced.js',
+  'scratch/test_open_navigation.js'
 ];
 
 let allPassed = true;

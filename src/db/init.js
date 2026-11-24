@@ -11,9 +11,9 @@ if (!fs.existsSync(config.uploadsDir)) {
   fs.mkdirSync(config.uploadsDir, { recursive: true });
 }
 
-// Konstansok: Hivatalos Okoskodó SQLite formátum- és sémaverzió (Report 19, 20, 21 & 22)
+// Konstansok: Hivatalos Okoskodó SQLite formátum- és sémaverzió (Report 19, 20, 21, 22 & v1.37.0)
 const OKOS_APPLICATION_ID = 1330335571; // ASCII: 'OKOS' (0x4F4B4F53)
-const CURRENT_SCHEMA_VERSION = 13300;   // v1.33.0 sémaverzió
+const CURRENT_SCHEMA_VERSION = 13700;   // v1.37.0 sémaverzió (OPEN_NAVIGATION + answer_drafts)
 
 function applyPragmas(targetDb) {
   targetDb.pragma('journal_mode = WAL');
@@ -150,251 +150,346 @@ function migrateDatabase(targetDb = currentDb) {
 
   const schemaPath = path.join(__dirname, '..', '..', 'DATABASE_SCHEMA.sql');
   const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+  const txSafeSchemaSql = schemaSql.replace(/^\s*PRAGMA\s+[^;]+;\s*$/gim, '');
 
-  // 1. Előzetes migráció: quiz_folders tábla és quizzes.folder_id, is_deleted meglétének biztosítása
-  targetDb.exec(`
-    CREATE TABLE IF NOT EXISTS quiz_folders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        parent_id INTEGER DEFAULT NULL,
-        name TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (parent_id) REFERENCES quiz_folders(id) ON DELETE CASCADE
-    );
-  `);
+  // Előre felmérjük, szükséges-e idegen kulcs kikapcsolása táblacseréhez (PRAGMA foreign_keys csak tranzakción KÍVÜL váltható!)
+  const partTablePre = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='participants'").get();
+  const needsParticipantsRebuild = Boolean(
+    partTablePre && targetDb.prepare('PRAGMA table_info(participants)').all().some(c => c.name === 'student_id' && c.notnull === 1)
+  );
+  const sessionsDefPre = targetDb.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='sessions'").get();
+  const needsSessionsRebuild = Boolean(sessionsDefPre && sessionsDefPre.sql && !sessionsDefPre.sql.includes('OPEN_NAVIGATION'));
 
-  try {
-    const tableList = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='quizzes'").get();
-    if (tableList) {
-      const quizColumns = targetDb.prepare('PRAGMA table_info(quizzes)').all();
-      const hasFolderId = quizColumns.some(c => c.name === 'folder_id');
-      if (!hasFolderId) {
-        targetDb.prepare('ALTER TABLE quizzes ADD COLUMN folder_id INTEGER DEFAULT NULL REFERENCES quiz_folders(id) ON DELETE SET NULL').run();
-      }
-      const hasIsDeleted = quizColumns.some(c => c.name === 'is_deleted');
-      if (!hasIsDeleted) {
-        targetDb.prepare('ALTER TABLE quizzes ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0').run();
-      }
-      const hasLockedAt = quizColumns.some(c => c.name === 'locked_at');
-      if (!hasLockedAt) {
-        targetDb.prepare('ALTER TABLE quizzes ADD COLUMN locked_at DATETIME DEFAULT NULL').run();
-      }
-      const hasCreatedAt = quizColumns.some(c => c.name === 'created_at');
-      if (!hasCreatedAt) {
-        targetDb.prepare('ALTER TABLE quizzes ADD COLUMN created_at DATETIME DEFAULT NULL').run();
-        targetDb.prepare("UPDATE quizzes SET created_at = datetime('now') WHERE created_at IS NULL").run();
-      }
-      const hasUpdatedAt = quizColumns.some(c => c.name === 'updated_at');
-      if (!hasUpdatedAt) {
-        targetDb.prepare('ALTER TABLE quizzes ADD COLUMN updated_at DATETIME DEFAULT NULL').run();
-        targetDb.prepare("UPDATE quizzes SET updated_at = datetime('now') WHERE updated_at IS NULL").run();
-      }
-    }
-  } catch (err) {
-    console.error('Hiba a quizzes tábla migrációjakor:', err);
-    throw new Error(`Sikertelen sémamigráció (quizzes tábla): ${err.message}`);
+  const prevFk = targetDb.pragma('foreign_keys', { simple: true });
+  if (needsParticipantsRebuild || needsSessionsRebuild) {
+    targetDb.pragma('foreign_keys = OFF');
   }
 
-  // 2. Migráció: sessions.max_points és quiz_snapshot_json a történeti jegymegőrzéshez (Report 14 & Report 15)
-  try {
-    const sessionsTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'").get();
-    if (sessionsTable) {
-      const sessionCols = targetDb.prepare('PRAGMA table_info(sessions)').all();
-      const hasMaxPoints = sessionCols.some(c => c.name === 'max_points');
-      if (!hasMaxPoints) {
-        targetDb.prepare('ALTER TABLE sessions ADD COLUMN max_points REAL DEFAULT NULL').run();
-      }
-      const hasQuizSnapshot = sessionCols.some(c => c.name === 'quiz_snapshot_json');
-      if (!hasQuizSnapshot) {
-        targetDb.prepare('ALTER TABLE sessions ADD COLUMN quiz_snapshot_json TEXT DEFAULT NULL').run();
-      }
+  const readSequenceVal = (tableName) => {
+    const seqTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'").get();
+    if (!seqTable) return 0;
+    const row = targetDb.prepare('SELECT seq FROM sqlite_sequence WHERE name = ?').get(tableName);
+    return row && Number.isFinite(Number(row.seq)) ? Number(row.seq) : 0;
+  };
+
+  const restoreSequenceVal = (tableName, minSeq) => {
+    if (!minSeq || minSeq <= 0) return;
+    const seqTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'").get();
+    if (!seqTable) return;
+    const existingSeq = targetDb.prepare('SELECT seq FROM sqlite_sequence WHERE name = ?').get(tableName);
+    const targetSeq = Math.max(minSeq, existingSeq ? Number(existingSeq.seq) || 0 : 0);
+    if (existingSeq) {
+      targetDb.prepare('UPDATE sqlite_sequence SET seq = ? WHERE name = ?').run(targetSeq, tableName);
+    } else {
+      targetDb.prepare('INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)').run(tableName, targetSeq);
     }
-  } catch (err) {
-    console.error('Hiba a sessions tábla migrációjakor:', err);
-    throw new Error(`Sikertelen sémamigráció (sessions tábla): ${err.message}`);
-  }
+  };
 
-  // 3. Participants tábla migrációja: student_id NULL engedélyezése és ON DELETE SET NULL
   try {
-    const partTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='participants'").get();
-    if (partTable) {
-      const partCols = targetDb.prepare('PRAGMA table_info(participants)').all();
-      const hasPcNumber = partCols.some(c => c.name === 'pc_number');
-      if (!hasPcNumber) {
-        targetDb.prepare('ALTER TABLE participants ADD COLUMN pc_number INTEGER DEFAULT NULL').run();
-      }
-      const hasQuestionOrder = partCols.some(c => c.name === 'question_order_json');
-      if (!hasQuestionOrder) {
-        targetDb.prepare("ALTER TABLE participants ADD COLUMN question_order_json TEXT DEFAULT '[]'").run();
-      }
-      const hasTeamColor = partCols.some(c => c.name === 'team_color');
-      if (!hasTeamColor) {
-        targetDb.prepare('ALTER TABLE participants ADD COLUMN team_color TEXT DEFAULT NULL').run();
-      }
-      const hasFocusLost = partCols.some(c => c.name === 'focus_lost_count');
-      if (!hasFocusLost) {
-        targetDb.prepare('ALTER TABLE participants ADD COLUMN focus_lost_count INTEGER DEFAULT 0').run();
-      }
-      const hasIsFinished = partCols.some(c => c.name === 'is_finished');
-      if (!hasIsFinished) {
-        targetDb.prepare('ALTER TABLE participants ADD COLUMN is_finished INTEGER DEFAULT 0').run();
-      }
-      const hasDeadlineAt = partCols.some(c => c.name === 'deadline_at');
-      if (!hasDeadlineAt) {
-        targetDb.prepare('ALTER TABLE participants ADD COLUMN deadline_at DATETIME DEFAULT NULL').run();
-      }
-      const hasFinishedAt = partCols.some(c => c.name === 'finished_at');
-      if (!hasFinishedAt) {
-        targetDb.prepare('ALTER TABLE participants ADD COLUMN finished_at DATETIME DEFAULT NULL').run();
+    const fullMigrationTx = targetDb.transaction(() => {
+      // 1. Előzetes migráció: quiz_folders tábla és quizzes oszlopainak biztosítása
+      targetDb.exec(`
+        CREATE TABLE IF NOT EXISTS quiz_folders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_id INTEGER DEFAULT NULL,
+            name TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (parent_id) REFERENCES quiz_folders(id) ON DELETE CASCADE
+        );
+      `);
+
+      const quizzesTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='quizzes'").get();
+      if (quizzesTable) {
+        const quizColumns = targetDb.prepare('PRAGMA table_info(quizzes)').all();
+        if (!quizColumns.some(c => c.name === 'folder_id')) {
+          targetDb.prepare('ALTER TABLE quizzes ADD COLUMN folder_id INTEGER DEFAULT NULL REFERENCES quiz_folders(id) ON DELETE SET NULL').run();
+        }
+        if (!quizColumns.some(c => c.name === 'is_deleted')) {
+          targetDb.prepare('ALTER TABLE quizzes ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0').run();
+        }
+        if (!quizColumns.some(c => c.name === 'locked_at')) {
+          targetDb.prepare('ALTER TABLE quizzes ADD COLUMN locked_at DATETIME DEFAULT NULL').run();
+        }
+        if (!quizColumns.some(c => c.name === 'created_at')) {
+          targetDb.prepare('ALTER TABLE quizzes ADD COLUMN created_at DATETIME DEFAULT NULL').run();
+          targetDb.prepare("UPDATE quizzes SET created_at = datetime('now') WHERE created_at IS NULL").run();
+        }
+        if (!quizColumns.some(c => c.name === 'updated_at')) {
+          targetDb.prepare('ALTER TABLE quizzes ADD COLUMN updated_at DATETIME DEFAULT NULL').run();
+          targetDb.prepare("UPDATE quizzes SET updated_at = datetime('now') WHERE updated_at IS NULL").run();
+        }
       }
 
-      const studentIdCol = partCols.find(c => c.name === 'student_id');
-      if (studentIdCol && studentIdCol.notnull === 1) {
-        targetDb.pragma('foreign_keys = OFF');
+      // 2. Sessions oszlopok bővítése (Report 14 & 15)
+      const sessionsTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'").get();
+      if (sessionsTable) {
+        const sessionCols = targetDb.prepare('PRAGMA table_info(sessions)').all();
+        if (!sessionCols.some(c => c.name === 'max_points')) {
+          targetDb.prepare('ALTER TABLE sessions ADD COLUMN max_points REAL DEFAULT NULL').run();
+        }
+        if (!sessionCols.some(c => c.name === 'quiz_snapshot_json')) {
+          targetDb.prepare('ALTER TABLE sessions ADD COLUMN quiz_snapshot_json TEXT DEFAULT NULL').run();
+        }
+      }
+
+      // 3. Participants tábla migrációja (student_id NULL engedélyezése + sqlite_sequence megőrzés)
+      const partTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='participants'").get();
+      if (partTable) {
+        const partCols = targetDb.prepare('PRAGMA table_info(participants)').all();
+        if (!partCols.some(c => c.name === 'pc_number')) {
+          targetDb.prepare('ALTER TABLE participants ADD COLUMN pc_number INTEGER DEFAULT NULL').run();
+        }
+        if (!partCols.some(c => c.name === 'question_order_json')) {
+          targetDb.prepare("ALTER TABLE participants ADD COLUMN question_order_json TEXT DEFAULT '[]'").run();
+        }
+        if (!partCols.some(c => c.name === 'team_color')) {
+          targetDb.prepare('ALTER TABLE participants ADD COLUMN team_color TEXT DEFAULT NULL').run();
+        }
+        if (!partCols.some(c => c.name === 'focus_lost_count')) {
+          targetDb.prepare('ALTER TABLE participants ADD COLUMN focus_lost_count INTEGER DEFAULT 0').run();
+        }
+        if (!partCols.some(c => c.name === 'is_finished')) {
+          targetDb.prepare('ALTER TABLE participants ADD COLUMN is_finished INTEGER DEFAULT 0').run();
+        }
+        if (!partCols.some(c => c.name === 'deadline_at')) {
+          targetDb.prepare('ALTER TABLE participants ADD COLUMN deadline_at DATETIME DEFAULT NULL').run();
+        }
+        if (!partCols.some(c => c.name === 'finished_at')) {
+          targetDb.prepare('ALTER TABLE participants ADD COLUMN finished_at DATETIME DEFAULT NULL').run();
+        }
+
+        if (needsParticipantsRebuild) {
+          const oldPartSeq = readSequenceVal('participants');
+          const maxPartIdRow = targetDb.prepare('SELECT COALESCE(MAX(id), 0) AS max_id FROM participants').get();
+          const minPartSeq = Math.max(oldPartSeq, Number(maxPartIdRow && maxPartIdRow.max_id) || 0);
+
+          targetDb.exec(`
+            DROP TRIGGER IF EXISTS trg_prevent_finished_participant_update;
+
+            CREATE TABLE participants_migrated (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                student_id INTEGER DEFAULT NULL,
+                pc_number INTEGER DEFAULT NULL CHECK(pc_number IS NULL OR (pc_number >= 1 AND pc_number <= 42)),
+                student_name TEXT NOT NULL,
+                session_token TEXT NOT NULL,
+                question_order_json TEXT DEFAULT '[]',
+                team_color TEXT DEFAULT NULL,
+                focus_lost_count INTEGER DEFAULT 0 CHECK(focus_lost_count >= 0),
+                is_finished INTEGER DEFAULT 0 CHECK(is_finished IN (0, 1)),
+                joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                deadline_at DATETIME DEFAULT NULL,
+                finished_at DATETIME DEFAULT NULL,
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+                FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL,
+                UNIQUE(session_id, student_name),
+                UNIQUE(id, session_id)
+            );
+
+            INSERT INTO participants_migrated (
+                id, session_id, student_id, pc_number, student_name, session_token,
+                question_order_json, team_color, focus_lost_count, is_finished,
+                joined_at, deadline_at, finished_at
+            )
+            SELECT 
+                id, session_id, student_id, pc_number, student_name, session_token,
+                question_order_json, team_color, focus_lost_count, is_finished,
+                joined_at, deadline_at, finished_at
+            FROM participants;
+
+            DROP TABLE participants;
+            ALTER TABLE participants_migrated RENAME TO participants;
+
+            CREATE INDEX IF NOT EXISTS idx_participants_session ON participants(session_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_token ON participants(session_token);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_id_session ON participants(id, session_id);
+          `);
+
+          restoreSequenceVal('participants', minPartSeq);
+        }
+      }
+
+      // 4. Korábbi triggerek eldobása tranzakción BELÜL (hiba esetén teljes rollback!)
+      targetDb.exec('DROP TRIGGER IF EXISTS trg_prevent_finished_participant_update;');
+      targetDb.exec('DROP TRIGGER IF EXISTS trg_prevent_finished_session_update;');
+      targetDb.exec('DROP TRIGGER IF EXISTS trg_validate_answer_question;');
+      targetDb.exec('DROP TRIGGER IF EXISTS trg_validate_answer_points_limit;');
+      targetDb.exec('DROP TRIGGER IF EXISTS trg_validate_answer_points_limit_update;');
+
+      // 5. Történeti lezárt dolgozatok osztálynevének (sessions.class_name) beégetése
+      if (sessionsTable) {
+        targetDb.prepare(`
+          UPDATE sessions 
+          SET class_name = (
+            SELECT GROUP_CONCAT(DISTINCT st.class_name) 
+            FROM participants p2 
+            JOIN students st ON st.id = p2.student_id 
+            WHERE p2.session_id = sessions.id
+          )
+          WHERE (class_name IS NULL OR class_name = '') 
+            AND EXISTS (
+              SELECT 1 
+              FROM participants p3 
+              JOIN students st2 ON st2.id = p3.student_id 
+              WHERE p3.session_id = sessions.id
+            )
+        `).run();
+      }
+
+      // 6. Questions tábla migrációja: instructions oszlop
+      const qTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='questions'").get();
+      if (qTable) {
+        const qCols = targetDb.prepare('PRAGMA table_info(questions)').all();
+        if (!qCols.some(c => c.name === 'instructions')) {
+          targetDb.prepare("ALTER TABLE questions ADD COLUMN instructions TEXT DEFAULT ''").run();
+        }
+      }
+
+      // 7. Answers tábla defenzív migrációja régebbi mentésekhez
+      const ansTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='answers'").get();
+      if (ansTable) {
+        const ansCols = targetDb.prepare('PRAGMA table_info(answers)').all();
+        if (!ansCols.some(c => c.name === 'original_points_earned')) {
+          targetDb.prepare('ALTER TABLE answers ADD COLUMN original_points_earned REAL NOT NULL DEFAULT 0.0').run();
+          targetDb.prepare('UPDATE answers SET original_points_earned = points_earned').run();
+        }
+        if (!ansCols.some(c => c.name === 'is_manually_overridden')) {
+          targetDb.prepare('ALTER TABLE answers ADD COLUMN is_manually_overridden INTEGER DEFAULT 0').run();
+        }
+        if (!ansCols.some(c => c.name === 'overridden_at')) {
+          targetDb.prepare('ALTER TABLE answers ADD COLUMN overridden_at DATETIME DEFAULT NULL').run();
+        }
+        if (!ansCols.some(c => c.name === 'time_spent_sec')) {
+          targetDb.prepare('ALTER TABLE answers ADD COLUMN time_spent_sec INTEGER DEFAULT 0').run();
+        }
+        if (!ansCols.some(c => c.name === 'answered_at')) {
+          targetDb.prepare('ALTER TABLE answers ADD COLUMN answered_at DATETIME DEFAULT NULL').run();
+          targetDb.prepare("UPDATE answers SET answered_at = datetime('now') WHERE answered_at IS NULL").run();
+        }
+      }
+
+      // 8. Sessions tábla biztonságos újraépítése az OPEN_NAVIGATION módhoz + sqlite_sequence megőrzése
+      if (needsSessionsRebuild) {
+        const oldSessionsSeq = readSequenceVal('sessions');
+        const maxSessionIdRow = targetDb.prepare('SELECT COALESCE(MAX(id), 0) AS max_id FROM sessions').get();
+        const minSessionsSeq = Math.max(oldSessionsSeq, Number(maxSessionIdRow && maxSessionIdRow.max_id) || 0);
+
+        const depTriggers = targetDb.prepare(`
+          SELECT name FROM sqlite_master
+          WHERE type = 'trigger' AND (tbl_name = 'sessions' OR sql LIKE '%sessions%')
+        `).all();
+        for (const trg of depTriggers) {
+          targetDb.exec(`DROP TRIGGER IF EXISTS "${String(trg.name).replace(/"/g, '""')}";`);
+        }
+
+        const existingCols = new Set(targetDb.prepare('PRAGMA table_info(sessions)').all().map(c => c.name));
+        const colOrDefault = (name, fallbackExpr) => (existingCols.has(name) ? name : `${fallbackExpr} AS ${name}`);
+
         targetDb.exec(`
-          DROP TRIGGER IF EXISTS trg_prevent_finished_participant_update;
-
-          CREATE TABLE participants_migrated (
+          CREATE TABLE sessions_migrated (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
-              session_id INTEGER NOT NULL,
-              student_id INTEGER DEFAULT NULL,
-              pc_number INTEGER DEFAULT NULL CHECK(pc_number IS NULL OR (pc_number >= 1 AND pc_number <= 42)),
-              student_name TEXT NOT NULL,
-              session_token TEXT NOT NULL,
-              question_order_json TEXT DEFAULT '[]',
-              team_color TEXT DEFAULT NULL,
-              focus_lost_count INTEGER DEFAULT 0 CHECK(focus_lost_count >= 0),
-              is_finished INTEGER DEFAULT 0 CHECK(is_finished IN (0, 1)),
-              joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-              deadline_at DATETIME DEFAULT NULL,
-              finished_at DATETIME DEFAULT NULL,
-              FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
-              FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL,
-              UNIQUE(session_id, student_name),
-              UNIQUE(id, session_id)
+              subject_id INTEGER NOT NULL DEFAULT 1,
+              grade_level TEXT NOT NULL DEFAULT '',
+              quiz_id INTEGER NOT NULL,
+              class_name TEXT DEFAULT '',
+              mode TEXT NOT NULL CHECK(mode IN ('STUDENT_PACED', 'TEACHER_PACED', 'SPACE_RACE', 'OPEN_NAVIGATION')),
+              status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE', 'FINISHED')),
+              time_limit_min INTEGER DEFAULT 0 CHECK(time_limit_min >= 0),
+              shuffle_questions INTEGER DEFAULT 0 CHECK(shuffle_questions IN (0, 1)),
+              shuffle_options INTEGER DEFAULT 0 CHECK(shuffle_options IN (0, 1)),
+              show_feedback_on_end INTEGER DEFAULT 1 CHECK(show_feedback_on_end IN (0, 1)),
+              current_question_index INTEGER DEFAULT 0 CHECK(current_question_index >= 0),
+              grade_thresholds_json TEXT NOT NULL DEFAULT '{"2":30,"3":55,"4":75,"5":90}',
+              max_points REAL DEFAULT NULL,
+              quiz_snapshot_json TEXT DEFAULT NULL,
+              started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              ended_at DATETIME DEFAULT NULL,
+              CHECK((status = 'ACTIVE' AND ended_at IS NULL) OR (status = 'FINISHED' AND ended_at IS NOT NULL)),
+              FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE RESTRICT,
+              FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE RESTRICT
           );
-
-          INSERT INTO participants_migrated (
-              id, session_id, student_id, pc_number, student_name, session_token,
-              question_order_json, team_color, focus_lost_count, is_finished,
-              joined_at, deadline_at, finished_at
-          )
-          SELECT 
-              id, session_id, student_id, pc_number, student_name, session_token,
-              question_order_json, team_color, focus_lost_count, is_finished,
-              joined_at, deadline_at, finished_at
-          FROM participants;
-
-          DROP TABLE participants;
-          ALTER TABLE participants_migrated RENAME TO participants;
-
-          CREATE INDEX IF NOT EXISTS idx_participants_session ON participants(session_id);
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_token ON participants(session_token);
         `);
-        targetDb.pragma('foreign_keys = ON');
-      }
-    }
-  } catch (err) {
-    console.error('Hiba a participants tábla migrációjakor:', err);
-    throw new Error(`Sikertelen sémamigráció (participants tábla): ${err.message}`);
-  }
 
-  // 4. Korábbi triggerek eldobása a migrációhoz és frissítéshez (Report 18 / 1. pont)
-  try {
-    targetDb.exec('DROP TRIGGER IF EXISTS trg_prevent_finished_participant_update;');
-    targetDb.exec('DROP TRIGGER IF EXISTS trg_prevent_finished_session_update;');
-    targetDb.exec('DROP TRIGGER IF EXISTS trg_validate_answer_question;');
-    targetDb.exec('DROP TRIGGER IF EXISTS trg_validate_answer_points_limit;');
-    targetDb.exec('DROP TRIGGER IF EXISTS trg_validate_answer_points_limit_update;');
-  } catch (err) {
-    console.error('Hiba a korábbi triggerek eldobásakor:', err);
-    throw new Error(`Sikertelen sémamigráció (triggerek eldobása): ${err.message}`);
-  }
-
-  // 5. Történeti lezárt dolgozatok osztálynevének (sessions.class_name) beégetése és függetlenítése a névsortól
-  try {
-    const sessionTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'").get();
-    if (sessionTable) {
-      targetDb.prepare(`
-        UPDATE sessions 
-        SET class_name = (
-          SELECT GROUP_CONCAT(DISTINCT st.class_name) 
-          FROM participants p2 
-          JOIN students st ON st.id = p2.student_id 
-          WHERE p2.session_id = sessions.id
-        )
-        WHERE (class_name IS NULL OR class_name = '') 
-          AND EXISTS (
-            SELECT 1 
-            FROM participants p3 
-            JOIN students st2 ON st2.id = p3.student_id 
-            WHERE p3.session_id = sessions.id
+        targetDb.exec(`
+          INSERT INTO sessions_migrated (
+              id, subject_id, grade_level, quiz_id, class_name, mode, status,
+              time_limit_min, shuffle_questions, shuffle_options, show_feedback_on_end,
+              current_question_index, grade_thresholds_json, max_points, quiz_snapshot_json,
+              started_at, ended_at
           )
-      `).run();
+          SELECT
+              id,
+              ${colOrDefault('subject_id', '1')},
+              ${colOrDefault('grade_level', "''")},
+              quiz_id,
+              ${colOrDefault('class_name', "''")},
+              mode,
+              status,
+              ${colOrDefault('time_limit_min', '0')},
+              ${colOrDefault('shuffle_questions', '0')},
+              ${colOrDefault('shuffle_options', '0')},
+              ${colOrDefault('show_feedback_on_end', '1')},
+              ${colOrDefault('current_question_index', '0')},
+              ${colOrDefault('grade_thresholds_json', '\'{"2":30,"3":55,"4":75,"5":90}\'')},
+              ${colOrDefault('max_points', 'NULL')},
+              ${colOrDefault('quiz_snapshot_json', 'NULL')},
+              ${colOrDefault('started_at', 'CURRENT_TIMESTAMP')},
+              ${colOrDefault('ended_at', 'NULL')}
+          FROM sessions;
+        `);
+
+        targetDb.exec('DROP TABLE sessions;');
+        targetDb.exec('ALTER TABLE sessions_migrated RENAME TO sessions;');
+
+        // Azonosítószámláló (sqlite_sequence) megőrzése törölt nagyobb ID-k esetén is
+        restoreSequenceVal('sessions', minSessionsSeq);
+      }
+
+      // 9. Alapséma, indexek, triggerek és answer_drafts visszaépítése
+      targetDb.exec(txSafeSchemaSql);
+
+      // 10. Commit előtti idegenkulcs- és kötelező objektumlista-ellenőrzés
+      const fkIssues = targetDb.pragma('foreign_key_check');
+      if (Array.isArray(fkIssues) && fkIssues.length > 0) {
+        throw new Error(`Idegenkulcs-integritási hiba a migráció után (${fkIssues.length} eltérés)!`);
+      }
+
+      const masterRows = targetDb.prepare("SELECT type, name FROM sqlite_master WHERE type IN ('table', 'index', 'trigger')").all();
+      const masterSet = new Set(masterRows.map(r => `${r.type}:${r.name}`));
+      const requiredObjects = [
+        'table:subjects', 'table:students', 'table:quizzes', 'table:questions',
+        'table:sessions', 'table:participants', 'table:answers', 'table:answer_drafts', 'table:system_settings',
+        'index:idx_active_session_channel', 'index:idx_participants_id_session',
+        'index:idx_answer_drafts_session', 'index:idx_answer_drafts_participant',
+        'trigger:trg_prevent_finished_participant_update',
+        'trigger:trg_prevent_finished_session_update',
+        'trigger:trg_validate_answer_question',
+        'trigger:trg_validate_answer_points_limit',
+        'trigger:trg_validate_answer_points_limit_update',
+        'trigger:trg_prevent_answer_update_when_session_finished',
+        'trigger:trg_prevent_answer_core_update',
+        'trigger:trg_prevent_session_quiz_change'
+      ];
+      for (const objKey of requiredObjects) {
+        if (!masterSet.has(objKey)) {
+          throw new Error(`Hiányzó kötelező adatbázis-objektum a migráció után: ${objKey}`);
+        }
+      }
+
+      // 11. Alkalmazás- és sémaverzió rögzítése ugyanabban az atomi tranzakcióban
+      targetDb.pragma(`application_id = ${OKOS_APPLICATION_ID}`);
+      targetDb.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
+    });
+
+    fullMigrationTx();
+  } catch (err) {
+    console.error('Hiba a sémamigráció során (teljes rollback végrehajtva):', err);
+    throw new Error(`Sikertelen sémamigráció: ${err.message}`);
+  } finally {
+    if (needsParticipantsRebuild || needsSessionsRebuild) {
+      targetDb.pragma(`foreign_keys = ${prevFk ? 'ON' : 'OFF'}`);
     }
-  } catch (err) {
-    console.error('Hiba a sessions.class_name migrációjakor:', err);
-    throw new Error(`Sikertelen sémamigráció (sessions.class_name): ${err.message}`);
   }
-
-  // 6. Questions tábla migrációja: instructions oszlop meglétének biztosítása
-  try {
-    const qTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='questions'").get();
-    if (qTable) {
-      const qCols = targetDb.prepare('PRAGMA table_info(questions)').all();
-      const hasInstructions = qCols.some(c => c.name === 'instructions');
-      if (!hasInstructions) {
-        targetDb.prepare("ALTER TABLE questions ADD COLUMN instructions TEXT DEFAULT ''").run();
-      }
-    }
-  } catch (err) {
-    console.error('Hiba a questions.instructions migrációjakor:', err);
-    throw new Error(`Sikertelen sémamigráció (questions.instructions): ${err.message}`);
-  }
-
-  // 7. Answers tábla defenzív migrációja régebbi mentésekhez
-  try {
-    const ansTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='answers'").get();
-    if (ansTable) {
-      const ansCols = targetDb.prepare('PRAGMA table_info(answers)').all();
-      const hasOriginalPoints = ansCols.some(c => c.name === 'original_points_earned');
-      if (!hasOriginalPoints) {
-        targetDb.prepare('ALTER TABLE answers ADD COLUMN original_points_earned REAL NOT NULL DEFAULT 0.0').run();
-        targetDb.prepare('UPDATE answers SET original_points_earned = points_earned').run();
-      }
-      const hasOverridden = ansCols.some(c => c.name === 'is_manually_overridden');
-      if (!hasOverridden) {
-        targetDb.prepare('ALTER TABLE answers ADD COLUMN is_manually_overridden INTEGER DEFAULT 0').run();
-      }
-      const hasOverriddenAt = ansCols.some(c => c.name === 'overridden_at');
-      if (!hasOverriddenAt) {
-        targetDb.prepare('ALTER TABLE answers ADD COLUMN overridden_at DATETIME DEFAULT NULL').run();
-      }
-      const hasTimeSpent = ansCols.some(c => c.name === 'time_spent_sec');
-      if (!hasTimeSpent) {
-        targetDb.prepare('ALTER TABLE answers ADD COLUMN time_spent_sec INTEGER DEFAULT 0').run();
-      }
-      const hasAnsweredAt = ansCols.some(c => c.name === 'answered_at');
-      if (!hasAnsweredAt) {
-        targetDb.prepare('ALTER TABLE answers ADD COLUMN answered_at DATETIME DEFAULT NULL').run();
-        targetDb.prepare("UPDATE answers SET answered_at = datetime('now') WHERE answered_at IS NULL").run();
-      }
-    }
-  } catch (err) {
-    console.error('Hiba az answers tábla migrációjakor:', err);
-    throw new Error(`Sikertelen sémamigráció (answers tábla): ${err.message}`);
-  }
-
-  // 8. Séma és frissített triggerek futtatása (Report 16-18)
-  try {
-    targetDb.exec(schemaSql);
-  } catch (err) {
-    console.error('Hiba az alapséma és triggerek végrehajtásakor:', err);
-    throw new Error(`Sikertelen sémamigráció (schemaSql): ${err.message}`);
-  }
-
-  // 9. Kizárólag a sikeres migráció legvégén rögzítjük az alkalmazás- és sémaverziót (Report 20 & 21)
-  targetDb.pragma(`application_id = ${OKOS_APPLICATION_ID}`);
-  targetDb.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
 }
 
 /**

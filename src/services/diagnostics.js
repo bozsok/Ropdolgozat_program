@@ -18,6 +18,9 @@ const SERVER_ALLOWED_EVENTS = new Set([
   'answer.persisted',
   'answer.rejected',
   'answer.failed',
+  'draft.rejected',
+  'draft.failed',
+  'matrix.broadcast_failed',
   'http.finished',
   'http.closed_early'
 ]);
@@ -78,6 +81,7 @@ const CLIENT_EVENT_SPECS = {
 const ALLOWED_SERVER_OUTCOMES = new Set(['saved', 'duplicate', 'ok', 'error', 'no_ack']);
 const ALLOWED_ROUTES = new Set([
   'student.submit_answer',
+  'student.save_draft',
   'student.join',
   'student.session_data',
   'admin.start_session',

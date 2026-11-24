@@ -4,6 +4,198 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.7] – 2026-11-24
+
+### Open Navigation (Szabad navigáció) – Igazolt végállapot védelme a betöltés közbeni tanári lezárásnál
+
+A `v1.37.6` ellenőrzése (`Source/open_navigation_valasz_08.md`) során azonosított utolsó aszinkron átmenet javítása, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Igazolt végállapot elsőbbsége és korai mód-felismerés (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `joinQuiz()` már a sikeres belépéskor beállítja `isOpenNavigationMode`-ot, alaphelyzetbe állítja `openNavIsFinalized` és `openNavClosurePending` értékét (új munkamenet tiszta indulása), és rögzített kontextussal indítja a `startQuizInterface()`-t.
+  - A `socket.on('session:finished')` az `activeSession.mode` / `currentParticipant.session_mode` alapján még a kezdeti kérdésbetöltés közben is felismeri az Open Navigation módot, beállítja `openNavClosurePending = true`-t, érvényteleníti a függő `quizInterfaceLoadSeq`-et, és elindítja a közös `syncOpenNavServerState({ requireFinal: true })` ellenőrzést.
+  - Minden igazolt végállapot-átmenet növeli `quizInterfaceLoadSeq++`-t (a token és a résztvevő megőrzésével az élő pontfrissítéshez), a `startQuizInterface()` nyitott kitöltési ága pedig `openNavIsFinalized || openNavClosurePending` esetén visszatér, így a lezárás előtt elkészült aktív válasz nem nyithatja vissza a kérdésfelületet a nyugta mellé.
+
+---
+
+## [1.37.6] – 2026-11-24
+
+### Open Navigation (Szabad navigáció) – Késői kérdésbetöltés munkamenet-védelme feloldás után
+
+A `v1.37.5` ellenőrzése (`Source/open_navigation_valasz_07.md`) során feltárt egyetlen fennmaradó aszinkron életciklus-hiba javítása, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Kérdésbetöltés kötése a kezdeményező munkamenethez (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `startQuizInterface()` rögzíti a kiinduló kontextust (`captureOpenNavContext()`) és egy monoton betöltési sorszámot (`quizInterfaceLoadSeq`), és a `fetchJsonWithTimeout()` `await` pontja után – még minden token-kezelés, hibaablak és állapotírás előtt – ellenőrzi `isOpenNavContextValid(ctx)`-et, a sorszámot, valamint a válasz saját `session_id` és `participant.id` azonosítóit.
+  - A `handleInvalidStudentSession()` növeli `quizInterfaceLoadSeq++`-t is, így a tanári feloldás azonnal érvényteleníti a folyamatban lévő kérdésbetöltést, és a késve érkező válasz nem nyithatja vissza a már feloldott résztvevő felületét.
+  - A `tryRestoreSession()`, `syncTeacherPacedState()` és `race:started` hívók szintén rögzített munkamenet-generációval és kontextus-átadással indítják a betöltést; a betöltés közben lezárult munkamenet közvetlenül a jogosult nyugtára vagy összegzőre vált.
+
+---
+
+## [1.37.5] – 2026-11-24
+
+### Open Navigation (Szabad navigáció) kiadási javítások: Második beadás modálgomb-szinkronja, élő pontfrissítés és pontos feloldási címzés
+
+A `v1.37.4` felülvizsgálata (`Source/open_navigation_valasz_06.md`) alapján elvégzett három célzott javítás (plusz a `startQuizInterface()` és `showSummary()` időszámítási önellenőrzés), SQLite-sémamódosítás nélkül (`13700`).
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Második diák beadása ugyanazon a böngészőlapon – egységes modálgomb-vezérlés (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Új `syncOpenNavConfirmModalControls()` függvény vezérli egyetlen forrásból a megerősítő modál gombjainak (`#btn-confirm-open-nav-submit`, `#btn-cancel-open-nav-submit`, `#btn-close-open-nav-modal`) `disabled` állapotát minden modálnyitáskor, frissítéskor, beadás indulásakor, hibaági visszatéréskor, végállapotnál és kilépéskor; nyitáskor és megszakításkor helyreállítja a billentyűzetfókuszt.
+
+* **Tanári pontjavítás már beadott dolgozat nyitott értékelőlapján (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `participant:score_updated` esemény `forceSummaryRefresh: true` módban hívja a `syncOpenNavServerState()`-et (szigorú munkamenet- és résztvevő-egyezéssel, valamint összevont utólekéréssel párhuzamos pontjavítás esetén), így a nyitott értékelőlap teljes oldalfrissítés nélkül frissül, míg kikapcsolt visszajelzésnél változatlanul csak a szűrt nyugta marad.
+
+* **Tanári feloldás (`participant:kicked`) pontos címzése és munkamenet-indítási hibatűrés (`src/routes/api.js`, `public/js/student.js`):**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Mindhárom szerveroldali feloldási kibocsátó (`seat-change`, `reset`, `unlock`) elküldi a `sessionId` mezőt is a `participantId` mellett; a kliens aktív résztvevőnél kizárólag a `participantId` (és ha jelen van, a `sessionId`) egyezése alapján léptet ki, így másik dolgozat feloldása vagy hiányos esemény nem érintheti az aktív munkamenetet.
+  - A `startQuizInterface()` időkorlátos `fetchJsonWithTimeout()`-ot és résztvevőváltáskori állapot-takarítást kapott; a `showSummary()` kitöltési ideje elsősorban a hiteles szerveroldali `joined_at → finished_at` időbélyegekből számolódik.
+
+---
+
+## [1.37.4] – 2026-11-24
+
+### Open Navigation (Szabad navigáció) munkamenet-elkülönítés és függő lezárásellenőrzés finomítása
+
+A `v1.37.3` felülvizsgálata (`Source/open_navigation_valasz_05.md`) alapján elvégzett két kliensoldali folyamatjavítás, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Teljes munkamenet-elkülönítés ugyanazon a böngészőlapon (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `handleInvalidStudentSession()` (és a célzott `participant:kicked` ág) először érvényteleníti a régi kontextust (`openNavSessionEpoch++`, `questionViewSeq++`, `teacherPacedSyncSeq++`), majd alaphelyzetbe állítja az előző diák összes kliensoldali adatát (`studentSubmittedAnswers`, `answeredQuestionIds`, `currentQuiz`, `currentQuestions`, `earnedPoints`, `lastServerResults`, `quizStartTime`, `selectedStudent`, `teacherPaced*`, `openNav*`, időzítők és piszkozatok), párhuzamosság-védett belépési listabetöltéssel (`loginListsLoadPromise`).
+  - A `participant:score_updated` `OPEN_NAVIGATION`-nél a közös `syncOpenNavServerState()`-et hívja, a `syncTeacherPacedState()` pedig `fetchJsonWithTimeout`-ot és szigorú `isOpenNavContextValid()` ellenőrzést használ.
+  - A `showSummary()` értékelőlapja szerveres `data.answers` esetén kizárólag abból épül, így kihagyott kérdéshez nem örökölhető korábbi gyorsítótár-adat.
+
+* **Függő lezárásellenőrzés és elavult figyelmeztetés elválasztása (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A mentési sor (`dispatchOpenNavDraftSave`) és a `flushAllOpenNavDrafts()` külön `closurePending` (`openNavClosurePending`) állapotként kezeli a lezárási kódokat (`SESSION_INACTIVE`, `PARTICIPANT_ALREADY_FINISHED`, `DEADLINE_EXCEEDED`), így átmeneti `503` státuszlekérésnél nem nyit „Mentési hiba” ablakot, hanem *„Lezárás ellenőrzése folyamatban”* jelzést és kézi újraellenőrzést mutat.
+  - A `showCalmAlert()` művelet-címkét (`ownerTag = 'open_nav_submit'`) kapott; a végállapot (`showSummary`) közös átmenete `dismissCalmAlertByOwner('open_nav_submit')` hívással, régi callback futtatása nélkül csendben bezárja a beadáshoz tartozó elavult figyelmeztetést, és a fókuszt a nyugtára helyezi.
+
+---
+
+## [1.37.3] – 2026-11-24
+
+### Open Navigation (Szabad navigáció) éles stabilizálás: Rövid válasz sorszámozás, választest-időkorlát, munkamenet-izoláció és pontos ABCD-véglegesítés
+
+A `v1.37.2` felülvizsgálata (`Source/open_navigation_valasz_04.md`) alapján elvégzett kliens- és szerveroldali stabilizáló javítások, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Rövid válasz helyi szerkesztésének és mentésének szétválasztása (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A közös `recordOpenNavLocalEdit()` már a beírás/kijelölés/ürítés pillanatában növeli a kérdés helyi sorszámát (`localSeq`), a 400 ms-os debounce és a `flushShortDraftForQuestion()` pedig kizárólag a küldést (`dispatchOpenNavDraftSave`) indítja a kérdés saját `entry.localValue` értékéből; a korábbi nyugta nem jelöli idő előtt „mentett”-nek az újabb szöveget.
+
+* **Kézi beadás és nyugta munkamenethez kötése, teljes választest-időkorlát és egységes belépés-visszatérés (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Közös `captureOpenNavContext()` / `isOpenNavContextValid()` ellenőrzés minden `await` után (mentés, `flush`, `POST /finish`, `GET /session-data`, JSON-beolvasás és hibaágak előtt) és végállapot-elsőbbség (`openNavIsFinalized`).
+  - A `fetchJsonWithTimeout()` az `AbortController` időzítőjét a HTTP fejlécek és a teljes választest (`res.text()` + `JSON.parse()`) végéig aktívan tartja; a közös `openNavStatusCheckPromise` takarítása a saját Promise-referenciát ellenőrzi.
+  - Új, egységes `handleInvalidStudentSession()` átmenet: igazolt API `401`/`404` esetén együtt törli a tárolt és memóriabeli tokent, leállítja az időzítőket/kéréseket, visszaállítja a belépési felületet és egyszer betölti a tantárgy- és osztálylistákat (`503 → 404` és aktív `404` esetén is).
+  - A `session:finished` esemény utáni átmeneti hiba is a közös backoffos újrapróbálást használja (`requireFinal: true`), egyéni időkorlát nélküli dolgozatoknál is.
+
+* **Végleges `ABCD` válasz pontos szövegének megőrzése (`src/db/sessionRepo.js`, `scratch/test_open_navigation.js`):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`scratch/test_open_navigation.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_open_navigation.js)
+  - A `finalizeOpenNavigationParticipantInTx()` `ABCD` kérdéseknél a pillanatkép pontos, eredeti opciószövegét (szélső szóközökkel együtt) rögzíti az `answers.submitted_answer` oszlopba; a mátrix-lekérdezés (`draft_answer != ''`) egységes üresség-szemantikát használ; az ON-10 teszt a végleges `submitted_answer` pontos egyezését is ellenőrzi.
+
+---
+
+## [1.37.2] – 2026-11-24
+
+### Open Navigation (Szabad navigáció) záró finomítások: Veszteségmentes opciómentés, 409 egyeztető sáv, hibatűrő helyreállítás és UTC nyugtaidőbélyeg
+
+A `v1.37.1` felülvizsgálata (`Source/open_navigation_valasz_03.md`) alapján elvégzett öt célzott javítás, SQLite-sémaverzió-emelés nélkül (`13700`).
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Veszteségmentes `ABCD` opciómentés és `SHORT` hosszkorlát (`src/db/sessionRepo.js`, `public/js/student.js`):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Az 500 UTF-16 kódegységes korlát és a trim kizárólag a `SHORT` kérdésekre érvényes; a hosszú (>500 karakteres) és szélső szóközös `ABCD` opciók módosítás nélkül, a pillanatkép pontos szövegével mentődnek, töltődnek vissza és értékelődnek ki.
+
+* **Hibatűrő munkamenet-helyreállítás, backoffos határidő-ellenőrzés és tartalék nyugta (`public/student.html`, `public/js/student.js`):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `tryRestoreSession()` kizárólag igazolt `401`/`404` esetén törli a `sessionStorage` tokent; `5xx` (pl. `503`) vagy hálózati hiba esetén megőrzi a tokent és újrapróbálást kínál.
+  - Időkorlátos `fetchWithTimeout()` (10 mp), növekvő késleltetésű + jitteres újrapróbálás (`scheduleOpenNavStatusRetry`) lejárat utáni átmeneti hibáknál is, végállapot-elsőbbség (`openNavIsFinalized`), valamint sikeres `POST /finish` utáni hibás `GET` esetén tartalék nyugta önálló **„Értékelőlap betöltése”** gombbal.
+
+* **Verzióütközés (`409 Conflict`) egyértelmű egyeztetése (`public/student.html`, `public/js/student.js`):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Valódi eltérés esetén a kliens nem írja felül automatikusan a szerveren lévő értéket (sem új helyi szerkesztéssel, sem beadás előtti `flush`-sal), hanem megjeleníti az `#open-nav-conflict-banner` sávot a **„A mentett választ megtartom”** és **„A mostani válaszomat mentem”** gombokkal, és a feloldásig blokkolja a beadást.
+
+* **Háttérmátrix hibatűrése és UTC ISO 8601 nyugtaidőbélyeg (`src/routes/api.js`, `src/services/diagnostics.js`, `public/js/student.js`):**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `scheduleMatrixUpdate()` időzített callbackje saját `try/catch`-et és `matrix.broadcast_failed` diagnosztikai eseményt kapott (válasz és token nélkül), és siker/hiba esetén is takarítja az időzítőt.
+  - Közös `toUtcIsoTimestamp()` formázó az API-határon: a `finished_at` mezők explicit UTC ISO 8601 (`...Z`) formátumban érkeznek, így `Europe/Budapest` téli és nyári időszámításnál is pontos helyi idő jelenik meg a nyugtán.
+
+* **Bővített elfogadási tesztek (`scratch/test_open_navigation.js`):**
+  - **Fájl:** [`scratch/test_open_navigation.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_open_navigation.js)
+  - **ON-10** (530+ karakteres és szélső szóközös `ABCD`, `SHORT` 499/500/501 UTF-16 emoji-próba) és **ON-11** (explicit UTC ISO 8601 + téli/nyári Budapest időbélyeg ellenőrzése).
+
+---
+
+## [1.37.1] – 2026-11-24
+
+### Open Navigation (Szabad navigáció) felülvizsgálati javítások: Adatintegritás, atomi migráció, beadási nyugta és szigorított mentési sor
+
+A `v1.37.0` kiadás szakmai felülvizsgálata (`Source/open_navigation_valasz_02.md`) alapján elvégzett teljes körű megbízhatósági, adatintegritási és kliensoldali javítások, SQLite-sémaverzió-emelés nélkül (`13700`).
+
+#### Javítva és megerősítve (Fixed and Hardened)
+* **Régi válaszbeküldő ág korai üzemmód-védelme (`src/db/sessionRepo.js`):**
+  - **Fájl:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - A `submitAnswer()` közvetlenül a résztvevő betöltése után (és a tranzakció legelején is) elutasítja az `OPEN_NAVIGATION` módot `INVALID_SESSION_MODE` kóddal, minden duplikátumkeresés és határidő miatti állapotmódosítás előtt.
+
+* **Teljesen atomi sémamigráció és `sqlite_sequence` megőrzése (`src/db/init.js`, `src/services/backup.js`):**
+  - **Fájlok:** [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js), [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js)
+  - Az összes migrációs lépés (oszlopbővítések, triggerek eldobása és visszaépítése, táblacserék, `answer_drafts`, indexek, `PRAGMA foreign_key_check`, kötelező objektumlista-ellenőrzés és `user_version`) egyetlen atomi tranzakcióba került, így kényszerített hiba esetén az összes eredeti védőtrigger és verzióbélyeg sértetlen marad.
+  - A `sessions` és `participants` táblacserék megőrzik a korábbi `sqlite_sequence` értéket (`MAX(régi_seq, MAX(id))`), megelőzve a törölt azonosítók újraosztását. A ZIP-visszaállítás ellenőrzi az `answer_drafts` táblát és a zárási védőtriggereket is.
+
+* **Szigorított piszkozatmentési szerződés, egységes beadási nyugta és diagnosztika (`src/db/sessionRepo.js`, `src/routes/api.js`, `src/services/diagnostics.js`):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js)
+  - A `POST /api/student/save-draft` kötelezően megköveteli a pozitív egész `question_id`, a nem negatív egész `base_version` és a szöveges `draft_answer` mezőket; validálja az 500 karakteres `SHORT` hosszkorlátot és az `ABCD`/`TF` opció-egyezést; elkülöníti a `400` / `409` / `500` hibakódokat; a mátrix-értesítés hibája nem rontja el a sikeres adatbázis-mentést.
+  - A `POST /api/student/finish` egységes `receipt` objektumot ad vissza (`is_finished`, `finished_at`, `show_feedback_on_end`); a `GET /api/student/session-data` lejáratkor a friss `finished_at` értékkel tér vissza, véglegesítési hiba esetén `500 AUTO_FINALIZE_FAILED` választ ad.
+  - A `join` recovery kikapcsolt visszajelzésnél üres `answers: []` tömböt ad; a `getProjectorData()` `OPEN_NAVIGATION` módban elrejti a résztvevői pontszámokat és kérdésenkénti helyességet.
+
+* **Külön beadási nyugta, `ReferenceError` javítás, monoton mentési sor és élő előnézet (`public/student.html`, `public/js/student.js`):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Kikapcsolt visszajelzéshez dedikált `#summary-receipt-view` beadási nyugta nézet (a korábbi eredményadatok teljes törlésével), valamint a `showSummary()` `percentage` `ReferenceError` javítása.
+  - Kérdésenkénti monoton módosítási sorszám (`localSeq` / `ackedSeq`) és `openNavSessionEpoch` védelem: késleltetett válasz vagy `409 Conflict` nem írja felül az időközben beírt újabb helyi választ.
+  - Szerverállapothoz kötött `syncOpenNavServerState()` (egyszerre max. 1 kérés), nyers ezredmásodperces időzítő-lejárat (`remainingMs <= 0`), `SESSION_INACTIVE` egységesítés, `connect` / `visibilitychange` szinkron, és élőben frissülő megerősítő modál billentyűzetfókusz-megőrzéssel.
+
+* **Bővített elfogadási próbák (`scratch/test_open_navigation.js`):**
+  - **Fájl:** [`scratch/test_open_navigation.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_open_navigation.js)
+  - Korai `submit-answer` elutasítás aktív/lejárt/beadott állapotban, 2-piszkozatos részleges véglegesítés rollback-próbája, szigorú bemeneti validáció, `join`/kivetítő szűrés, `sqlite_sequence` megőrzés és kényszerített migrációs rollback-próba.
+
+---
+
+## [1.37.0] – 2026-11-24
+
+### Open Navigation (Szabad navigáció) dolgozatmód – kattintható kérdéstérképpel, verziózott piszkozatmentéssel és atomi véglegesítéssel
+
+Bevezetésre került a Socrative *Open Navigation* mintájára működő negyedik dolgozatmód (`OPEN_NAVIGATION`), amelyben a diákok szabadon mozoghatnak előre-hátra a kérdések között, bármikor módosíthatják vagy törölhetik a válaszukat, a kiértékelés pedig csak a dolgozat végleges beadásakor (vagy a tanári lezáráskor / időkorlát lejártakor) történik meg. SQLite-sémaverzió: `13700`.
+
+#### Hozzáadva és módosítva (Added and Changed)
+* **Adatbázis-séma és biztonságos migráció (`DATABASE_SCHEMA.sql`, `src/db/init.js`):**
+  - **Fájlok:** [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql), [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js)
+  - A `sessions.mode` `CHECK`-korlátozás bővült az `'OPEN_NAVIGATION'` móddal; létrejött a különálló `answer_drafts` piszkozattábla (`version`, `draft_answer NOT NULL DEFAULT ''`, `UNIQUE(participant_id, question_id)`), valamint a `participants(id, session_id)` egyedi index (`idx_participants_id_session`) a régebbi mentések összetett idegenkulcs-kompatibilitásához. Az `answers` immutabilitási triggerei változatlanok maradtak.
+  - `CURRENT_SCHEMA_VERSION = 13700`: meglévő adatbázisoknál a `sessions` tábla újraépítése tranzakción kívüli `PRAGMA foreign_keys = OFF` / `finally`-visszaállítással, a függő triggerek eldobásával és visszaépítésével, `PRAGMA foreign_key_check` ellenőrzéssel és atomi verziórögzítéssel fut.
+
+* **Szerveroldali piszkozatmentés, atomi véglegesítés és API (`src/db/sessionRepo.js`, `src/routes/api.js`, `src/services/diagnostics.js`):**
+  - **Fájlok:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`src/services/diagnostics.js`](file:///d:/dev/Röpdolgozat%20program/src/services/diagnostics.js)
+  - Új `POST /api/student/save-draft` végpont (`student.save_draft` diagnosztikai útvonal-támogatással) és ritkított élő mátrix-frissítés (`scheduleMatrixUpdate`, 350 ms).
+  - Optimista verziózás (`base_version` ellenőrzés → `409 DRAFT_VERSION_CONFLICT` a szerver aktuális verziójával és értékével) és verziózott logikai ürítés (`draft_answer = ''`, `version = version + 1`) fizikai sor-törlés helyett.
+  - Atomi véglegesítés (`finalizeOpenNavigationParticipantInTx`) sima `INSERT INTO answers` paranccsal (integritási hiba esetén teljes rollback, a piszkozatok és az `is_finished = 0` állapot megmarad). Lejárt `deadline_at` esetén a `save-draft` előbb szabályosan `COMMIT`-olja a véglegesítést, majd `400 DEADLINE_EXCEEDED` választ ad; a tanári `finishSession()` lezárás előtt minden aktív diák piszkozatát véglegesíti.
+  - A `POST /api/student/submit-answer` elutasítja az `OPEN_NAVIGATION` módot (`400 INVALID_SESSION_MODE`); a `join` és `session-data` végpontok szigorúan maszkolják az értékelési mezőket aktív kitöltés közben, illetve `show_feedback_on_end = 0` esetén beadás után is.
+
+* **Tanári és diák felület (`public/admin.html`, `public/js/admin.js`, `public/student.html`, `public/js/student.js`, `public/css/style.css`):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Tanári indítóablakban választható a *Szabad navigáció (Open Navigation)* mód; az élő mátrix beadás előtt halványkék piszkozat-cellákkal (`edit` ikon) jelzi a haladást, az archívumban türkiz módjelvény jelenik meg.
+  - Diák felületen kattintható kérdéstérkép (`1..N`) külön színnel és ikonnal (*aktuális*, *mentve*, *mentés folyamatban*, *hiba*, *üres*), felső élő eredmény/jegy elrejtése, kérdésenként sorosított mentési lánc, `SHORT` 400 ms debounce + `blur` mentés, `ABCD`/`TF` **Válasz törlése** gomb.
+  - Beadás előtti ellenőrző ablak a szerveren mentett válaszok számával és kattintható kihagyott kérdésgombokkal, függő/hibás mentések kötelező bevárásával és elveszett beadási válasz (`session-data`) visszaellenőrzésével.
+
+* **Automatizált elfogadási tesztcsomag (`scratch/test_open_navigation.js`, `scratch/run_all_tests.js`):**
+  - **Fájlok:** [`scratch/test_open_navigation.js`](file:///d:/dev/Röpdolgozat%20program/scratch/test_open_navigation.js), [`scratch/run_all_tests.js`](file:///d:/dev/Röpdolgozat%20program/scratch/run_all_tests.js)
+  - 9 teljes elfogadási próba (**ON-01 – ON-09**): mód-kényszerítés, verzióütközés és logikai ürítés, élő mátrix, kézi beadás és szimulált DB-hibás rollback-próba, tanári felülbírálás, tanári lezáráskori automatikus véglegesítés, lejárt határidő, kikapcsolt visszajelzés szigorú API-szűrése, valamint valódi `v1.33.0 → v1.37.0` sémamigrációs próba.
+
+---
+
 ## [1.36.0] – 2026-11-24
 
 ### Koordináta-alapú Socrative PDF-importáló, lokális egykérdéses mentés, dinamikus ABCD opciók és munkaállomás-kapszula javítások

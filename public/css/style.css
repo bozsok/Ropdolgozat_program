@@ -7056,3 +7056,242 @@ body.modal-open {
   border-color: #fca5a5;
   color: #991b1b;
 }
+
+/* Open Navigation (Szabad navigáció) – tanári mátrix piszkozat-cella, diák kérdéstérkép és lábléc */
+.matrix-cell.cell-draft {
+  background-color: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.open-nav-map-wrap {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color, #e4e1e5);
+}
+
+.open-nav-map-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.open-nav-map-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted, #5a4138);
+}
+
+.open-nav-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted, #5a4138);
+}
+
+.open-nav-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.open-nav-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.open-nav-dot.dot-current {
+  background-color: #2563eb;
+}
+
+.open-nav-dot.dot-saved {
+  background-color: #93c5fd;
+  border: 1px solid #3b82f6;
+}
+
+.open-nav-dot.dot-saving {
+  background-color: #fde68a;
+  border: 1px solid #d97706;
+}
+
+.open-nav-dot.dot-empty {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+.open-nav-map-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.open-nav-map-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 36px;
+  height: 34px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  border: 1.5px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #475569;
+  font-size: 0.84rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.open-nav-map-btn:hover {
+  border-color: #93c5fd;
+  background-color: #f8fafc;
+}
+
+.open-nav-map-btn:focus-visible {
+  outline: 3px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.open-nav-map-btn.is-saved {
+  background-color: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.open-nav-map-btn.is-saving {
+  background-color: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.open-nav-map-btn.is-error {
+  background-color: #fef2f2;
+  border-color: #ef4444;
+  color: #b91c1c;
+}
+
+.open-nav-map-btn.is-current {
+  background-color: #dbeafe;
+  border: 2px solid #2563eb;
+  color: #1e3a8a;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.22);
+}
+
+.open-nav-map-btn .material-symbols-outlined {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.open-nav-footer-bar {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  row-gap: 8px;
+  column-gap: 10px;
+}
+
+.open-nav-footer-left,
+.open-nav-footer-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.open-nav-btn-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid #fecaca;
+  background-color: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.84rem;
+  font-weight: 700;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.open-nav-btn-clear.is-hidden-slot {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.open-nav-btn-clear:hover {
+  background-color: #fee2e2;
+}
+
+.open-nav-btn-clear .material-symbols-outlined {
+  font-size: 17px;
+}
+
+.open-nav-save-status {
+  order: -1;
+  flex: 1 0 100%;
+  min-height: 20px;
+  line-height: 20px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-muted, #5a4138);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.open-nav-save-status.is-error,
+.open-nav-save-status.status-error {
+  color: #dc2626;
+}
+
+.open-nav-save-status.is-saved,
+.open-nav-save-status.status-saved {
+  color: #15803d;
+}
+
+.open-nav-save-status.status-saving {
+  color: #2563eb;
+}
+
+.open-nav-unanswered-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.open-nav-unanswered-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid #fdba74;
+  background-color: #ffffff;
+  color: #c2410c;
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.open-nav-unanswered-chip:hover {
+  background-color: #ffedd5;
+}
