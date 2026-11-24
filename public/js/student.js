@@ -1726,6 +1726,7 @@
     // 3. Felület visszaállítása tiszta belépési állapotba
     closeModal('modal-confirm-open-nav-submit');
     if (openNavConflictBanner) openNavConflictBanner.style.display = 'none';
+    if (btnOpenNavSubmit) btnOpenNavSubmit.style.display = 'none';
     if (quizContainer) quizContainer.style.display = 'none';
     if (lobbyContainer) lobbyContainer.style.display = 'none';
     if (summaryContainer) summaryContainer.style.display = 'none';
@@ -2888,6 +2889,9 @@
 
     if (quizMetricsWrap) {
       quizMetricsWrap.style.display = isOpenNavigationMode ? 'none' : 'flex';
+    }
+    if (btnOpenNavSubmit) {
+      btnOpenNavSubmit.style.display = isOpenNavigationMode ? 'inline-flex' : 'none';
     }
     if (openNavMapWrap) {
       openNavMapWrap.style.display = isOpenNavigationMode ? 'block' : 'none';

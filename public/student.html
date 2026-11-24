@@ -357,7 +357,7 @@
             <div class="quiz-progress-title-wrap">
               <span id="question-progress" class="quiz-progress-count">1 / 5. kérdés</span>
             </div>
-            <!-- Jobb oldal: Élő eredmény és becsült érdemjegy -->
+            <!-- Jobb oldal: Élő eredmény és becsült érdemjegy (Open Navigation módban helyette a Dolgozat beadása gomb) -->
             <div class="quiz-metrics-wrap">
               <div class="quiz-metric-chip quiz-metric-grade">
                 <span class="quiz-metric-grade-label">Érdemjegy:</span>
@@ -368,6 +368,10 @@
                 </div>
               </div>
             </div>
+            <button id="btn-open-nav-submit" class="open-nav-btn-submit-top" type="button" style="display: none;">
+              <span class="material-symbols-outlined">task_alt</span>
+              <span>Dolgozat beadása</span>
+            </button>
           </div>
 
           <!-- Finom folyamatjelző sáv -->
@@ -512,13 +516,9 @@
                 </div>
                 <span id="open-nav-save-status" class="open-nav-save-status" role="status" aria-live="polite"></span>
                 <div class="open-nav-footer-right">
-                  <button id="btn-open-nav-next" class="btn btn-secondary" type="button">
+                  <button id="btn-open-nav-next" class="quiz-btn-submit" type="button">
                     <span>Következő</span>
                     <span class="material-symbols-outlined">arrow_forward</span>
-                  </button>
-                  <button id="btn-open-nav-submit" class="quiz-btn-submit" type="button">
-                    <span>Dolgozat beadása</span>
-                    <span class="material-symbols-outlined">send</span>
                   </button>
                 </div>
               </div>
@@ -702,8 +702,8 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.37.7"></script>
-  <script src="/js/student.js?v=1.37.7"></script>
+  <script src="/js/utils.js?v=1.37.8"></script>
+  <script src="/js/student.js?v=1.37.8"></script>
 </body>
 
 </html>

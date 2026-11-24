@@ -4,6 +4,24 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.8] – 2026-11-24
+
+### Open Navigation (Szabad navigáció) UX-finomítás: Stabil lábléc görgetősáv-villanás nélkül és átlátható beadás-elhelyezés
+
+Tantermi használhatósági és vizuális javítások az Open Navigation diákfelületen, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Javítva és módosítva (Fixed and Changed)
+* **Ábrás kérdéseknél jelentkező függőleges görgetősáv-villanás megszüntetése (`public/css/style.css`, `public/js/student.js`):**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A `#open-nav-save-status` mentési állapotjelző külön, fix magasságú (`20px`) felső mikro-sorba került (`order: -1; flex: 1 0 100%; white-space: nowrap;`), a gombcsoportok `flex-wrap: nowrap`-ot kaptak, a **„Válasz törlése”** gomb pedig `display: none` helyett az `.is-hidden-slot` (`visibility: hidden; opacity: 0;`) osztállyal tartja meg a helyét — így kattintáskor és mentés közben egyetlen pixelt sem ugrik a felület.
+
+* **Következetes gombszínek és a *Dolgozat beadása* gomb áthelyezése (`public/student.html`, `public/css/style.css`, `public/js/student.js`):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Az alsó `#open-nav-footer-bar` jobb oldalán kizárólag a **„Következő”** gomb maradt a többi dolgozatmóddal egységes, kiemelt **narancs** stílusban (`.quiz-btn-submit`), megelőzve a diákok reflexszerű, korai beadását.
+  - A **„Dolgozat beadása”** gomb (`#btn-open-nav-submit`) átkerült a felső haladási kártya (`.quiz-progress-header`) jobb felső sarkába, közvetlenül a kérdéstérkép fölé, visszafogott **pasztell halványpiros** stílusban (`.open-nav-btn-submit-top`), egyértelműen jelezve a végleges lezárás jellegét.
+
+---
+
 ## [1.37.7] – 2026-11-24
 
 ### Open Navigation (Szabad navigáció) – Igazolt végállapot védelme a betöltés közbeni tanári lezárásnál
