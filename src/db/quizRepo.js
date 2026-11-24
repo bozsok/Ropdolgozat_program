@@ -835,6 +835,78 @@ function moveQuiz(quizId, targetFolderId) {
   return getQuizById(qId);
 }
 
+/**
+ * Egyetlen kérdés célzott mentése (frissítése vagy beszúrása) egy meglévő feladatsorban
+ * A teszt többi, esetleg még félkész/importált kérdését érintetlenül hagyja.
+ */
+function saveSingleQuestion(quizId, questionData = {}) {
+  const qzId = Number(quizId);
+  const quiz = db.prepare('SELECT id FROM quizzes WHERE id = ?').get(qzId);
+  if (!quiz) throw new Error('A megadott feladatsor nem található!');
+
+  const existingQuestionId = questionData.id ? Number(questionData.id) : null;
+  const qType = questionData.question_type || 'ABCD';
+  const qText = String(questionData.question_text || '').trim();
+  if (!qText) throw new Error('A kérdés szövegének megadása kötelező!');
+
+  const instructions = String(questionData.instructions || '').trim();
+  const imagePath = questionData.image_path ? String(questionData.image_path).trim() : null;
+  const optionsJson = Array.isArray(questionData.options)
+    ? JSON.stringify(questionData.options)
+    : (questionData.options_json || '[]');
+  const correctAnswer = String(questionData.correct_answer || '').trim();
+  const explanation = String(questionData.explanation || '').trim();
+  const points = Number(questionData.points) || 1.0;
+
+  let savedId = existingQuestionId;
+
+  const tx = db.transaction(() => {
+    if (existingQuestionId) {
+      const existing = db.prepare('SELECT id FROM questions WHERE id = ? AND quiz_id = ?').get(existingQuestionId, qzId);
+      if (existing) {
+        db.prepare(`
+          UPDATE questions
+          SET question_type = ?, question_text = ?, instructions = ?,
+              image_path = ?, options_json = ?, correct_answer = ?,
+              explanation = ?, points = ?
+          WHERE id = ? AND quiz_id = ?
+        `).run(qType, qText, instructions, imagePath, optionsJson, correctAnswer, explanation, points, existingQuestionId, qzId);
+      } else {
+        savedId = null;
+      }
+    }
+
+    if (!savedId) {
+      const maxRow = db.prepare('SELECT COALESCE(MAX(question_order), 0) AS max_ord FROM questions WHERE quiz_id = ? AND question_order < 100000').get(qzId);
+      const nextOrder = (maxRow ? Number(maxRow.max_ord) : 0) + 1;
+      const ins = db.prepare(`
+        INSERT INTO questions (
+          quiz_id, question_order, question_type, question_text, instructions,
+          image_path, options_json, correct_answer, explanation, points
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(qzId, nextOrder, qType, qText, instructions, imagePath, optionsJson, correctAnswer, explanation, points);
+      savedId = ins.lastInsertRowid;
+    }
+
+    db.prepare('UPDATE quizzes SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(qzId);
+  });
+
+  tx();
+  finalizeQuizTempImages(qzId);
+
+  const savedRow = db.prepare(`
+    SELECT id, quiz_id, question_order, question_type, question_text, instructions,
+           image_path, options_json, correct_answer, explanation, points
+    FROM questions
+    WHERE id = ?
+  `).get(savedId);
+
+  return savedRow ? {
+    ...savedRow,
+    options: (() => { try { return JSON.parse(savedRow.options_json || '[]'); } catch { return []; } })()
+  } : null;
+}
+
 module.exports = {
   getSubjects,
   getQuizzes,
@@ -842,6 +914,7 @@ module.exports = {
   isQuizLocked,
   createQuiz,
   updateQuiz,
+  saveSingleQuestion,
   duplicateQuiz,
   mergeQuizzes,
   deleteQuiz,

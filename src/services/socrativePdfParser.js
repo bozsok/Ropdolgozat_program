@@ -191,9 +191,26 @@ function parseSocrativePdf(pdfBuffer) {
     return cmap;
   }
 
-  // 3. Szövegek és képek kinyerése oldalanként
+  // 3. Szövegelemek, zöld megoldókulcs-pipák és képek kinyerése valódi PDF CTM (X, Y) koordinátákkal
+  function multiplyMatrix(m1, m2) {
+    return [
+      m1[0] * m2[0] + m1[2] * m2[1],
+      m1[1] * m2[0] + m1[3] * m2[1],
+      m1[0] * m2[2] + m1[2] * m2[3],
+      m1[1] * m2[2] + m1[3] * m2[3],
+      m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+      m1[1] * m2[4] + m1[3] * m2[5] + m1[5]
+    ];
+  }
+
+  function applyMatrix(m, x, y) {
+    return {
+      x: m[0] * x + m[2] * y + m[4],
+      y: m[1] * x + m[3] * y + m[5]
+    };
+  }
+
   const pagesData = [];
-  let quizTitle = 'Socrative Teszt';
 
   for (let pageIdx = 0; pageIdx < pageObjs.length; pageIdx++) {
     const page = pageObjs[pageIdx];
@@ -213,24 +230,77 @@ function parseSocrativePdf(pdfBuffer) {
     }
 
     const lines = txt.split(/\r?\n/);
+    const ctmStack = [];
+    let ctm = [1, 0, 0, 1, 0, 0];
     let curFont = null;
-    let curCm = [1, 0, 0, 1, 0, 0];
+    let curColorGreen = false;
+    let inText = false;
+    let textX = 0;
+    let textY = 0;
+    let textAbsX = 0;
+    let textAbsY = 0;
+    let curText = '';
+    let curTextStartX = 0;
+    let curTextStartY = 0;
+    let curTextHasContent = false;
 
-    let pageFullText = '';
+    const textItems = [];
+    const greenMarks = [];
     const pageImages = [];
+
+    const flushText = () => {
+      if (curTextHasContent && curText.trim()) {
+        textItems.push({
+          x: curTextStartX,
+          y: curTextStartY,
+          text: curText.replace(/\0/g, '').trim(),
+          pageIdx
+        });
+      }
+      curText = '';
+      curTextHasContent = false;
+    };
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
+      if (!line) continue;
+
+      if (line === 'q') {
+        ctmStack.push([...ctm]);
+        continue;
+      }
+      if (line === 'Q') {
+        if (ctmStack.length > 0) ctm = ctmStack.pop();
+        curColorGreen = false;
+        continue;
+      }
+
       const cmMatch = line.match(/^([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+cm$/);
       if (cmMatch) {
-        curCm = [
+        const m = [
           parseFloat(cmMatch[1]), parseFloat(cmMatch[2]),
           parseFloat(cmMatch[3]), parseFloat(cmMatch[4]),
           parseFloat(cmMatch[5]), parseFloat(cmMatch[6])
         ];
+        ctm = multiplyMatrix(ctm, m);
+        continue;
       }
-      const fm = line.match(/\/([Ff]\d+)\s+[\d\.]+\s+Tf/);
-      if (fm) curFont = fm[1];
+
+      // Socrative megoldókulcs zöld színének felismerése (pl. .365 .745 .431 rg / RG)
+      const rgbMatch = line.match(/([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+(?:rg|RG)/);
+      if (rgbMatch) {
+        const r = parseFloat(rgbMatch[1]);
+        const g = parseFloat(rgbMatch[2]);
+        const b = parseFloat(rgbMatch[3]);
+        curColorGreen = (g > 0.55 && g > r + 0.18 && g > b + 0.15);
+      }
+
+      // Zöld pipa (stroke/fill) középpontjának rögzítése (fentről lefelé növekvő oldalkoordinátában)
+      if (curColorGreen && (line === 'S' || line === 'f' || line === 'f*' || line === 'B')) {
+        const markPt = applyMatrix(ctm, 9, 9);
+        greenMarks.push({ x: markPt.x, y: 793 - markPt.y, pageIdx });
+        continue;
+      }
 
       const doMatch = line.match(/^\/([Xx]\d+)\s+Do$/);
       if (doMatch) {
@@ -238,10 +308,60 @@ function parseSocrativePdf(pdfBuffer) {
         const objId = page.xobjects[xAlias];
         if (objId && imageBuffersByObjId.has(objId)) {
           pageImages.push({
-            objId: objId,
-            y: curCm[5],
+            objId,
+            x: ctm[4],
+            y: 793 - ctm[5],
+            pageIdx,
             pngBuffer: imageBuffersByObjId.get(objId)
           });
+        }
+        continue;
+      }
+
+      if (line === 'BT') {
+        inText = true;
+        flushText();
+        continue;
+      }
+      if (line === 'ET') {
+        flushText();
+        inText = false;
+        continue;
+      }
+
+      const fm = line.match(/\/([Ff]\d+)\s+[\d\.]+\s+Tf/);
+      if (fm) {
+        curFont = fm[1];
+      }
+
+      const tmMatch = line.match(/([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+Tm$/);
+      if (tmMatch) {
+        flushText();
+        textX = parseFloat(tmMatch[5]);
+        textY = parseFloat(tmMatch[6]);
+        const abs = applyMatrix(ctm, textX, textY);
+        textAbsX = abs.x;
+        textAbsY = 793 - abs.y;
+        curTextStartX = textAbsX;
+        curTextStartY = textAbsY;
+        continue;
+      }
+
+      const tdMatch = line.match(/^([\d\.\-]+)\s+([\d\.\-]+)\s+T[dD]\s*(.*)$/);
+      if (tdMatch) {
+        const dx = parseFloat(tdMatch[1]);
+        const dy = parseFloat(tdMatch[2]);
+        if (Math.abs(dy) > 2) {
+          flushText();
+          textX += dx;
+          textY += dy;
+          const abs = applyMatrix(ctm, textX, textY);
+          textAbsX = abs.x;
+          textAbsY = 793 - abs.y;
+          curTextStartX = textAbsX;
+          curTextStartY = textAbsY;
+        } else {
+          textX += dx;
         }
       }
 
@@ -255,171 +375,333 @@ function parseSocrativePdf(pdfBuffer) {
           const code = parseInt(hex.slice(j, j + 4), 16);
           decoded += cmap.has(code) ? cmap.get(code) : '';
         }
-        pageFullText += decoded;
+        if (decoded) {
+          if (!curTextHasContent) {
+            curTextStartX = textAbsX;
+            curTextStartY = textAbsY;
+            curTextHasContent = true;
+          }
+          curText += decoded;
+        }
       }
-      if (line.includes('Tm') || line.includes('ET')) {
-        pageFullText += '\n';
+    }
+    flushText();
+
+    pagesData.push({ pageIdx, textItems, greenMarks, pageImages });
+  }
+
+  // 4. Vizuális sorok összeállítása oldalanként (X, Y alapján) és globális Y-tengely képzése
+  const PAGE_STRIDE = 10000;
+  const allRows = [];
+  const allGreenMarks = [];
+  const allImages = [];
+
+  for (const pd of pagesData) {
+    const baseOffset = pd.pageIdx * PAGE_STRIDE;
+
+    // Zöld pipák és képek globális Y-koordinátával
+    for (const gm of pd.greenMarks) {
+      allGreenMarks.push({ x: gm.x, y: gm.y, globalY: baseOffset + gm.y, pageIdx: pd.pageIdx });
+    }
+    for (const img of pd.pageImages) {
+      allImages.push({ ...img, globalY: baseOffset + img.y });
+    }
+
+    // Szövegelemek csoportosítása vizuális sorokba (|y1 - y2| <= 4.5pt)
+    const sorted = [...pd.textItems].sort((a, b) => (Math.abs(a.y - b.y) > 4.5 ? a.y - b.y : a.x - b.x));
+    const pageRows = [];
+    for (const item of sorted) {
+      let row = pageRows.find(r => Math.abs(r.y - item.y) <= 4.5);
+      if (!row) {
+        row = { y: item.y, globalY: baseOffset + item.y, pageIdx: pd.pageIdx, items: [] };
+        pageRows.push(row);
+      }
+      row.items.push(item);
+    }
+
+    pageRows.sort((a, b) => a.y - b.y);
+    for (const row of pageRows) {
+      row.items.sort((a, b) => a.x - b.x);
+      // Bal margó jelölő (x < 94) és tartalom (x >= 94) szétválasztása
+      const leftItems = row.items.filter(it => it.x < 94);
+      const rightItems = row.items.filter(it => it.x >= 94);
+      const leftText = leftItems.map(it => it.text).join('').trim();
+      const rightText = rightItems.map(it => it.text).join(' ').replace(/\s+/g, ' ').trim();
+      const fullText = row.items.map(it => it.text).join(' ').replace(/\s+/g, ' ').trim();
+
+      // Oldalszám / lábléc kiszűrése
+      if (/^Page\s+\d+\s+of\s+\d+$/i.test(fullText) || /^\d+\s*\/\s*\d+$/.test(fullText)) {
+        continue;
+      }
+
+      allRows.push({
+        y: row.y,
+        globalY: row.globalY,
+        pageIdx: row.pageIdx,
+        leftText,
+        rightText,
+        fullText,
+        minX: row.items.length > 0 ? row.items[0].x : 0
+      });
+    }
+  }
+
+  // 5. Kvíz címének kiolvasása az első kérdés (1.) fölötti sorokból
+  let quizTitle = 'Socrative Teszt';
+  const firstQRowIdx = allRows.findIndex(r => /^1\.$/.test(r.leftText));
+  const headerRows = firstQRowIdx > 0 ? allRows.slice(0, firstQRowIdx) : [];
+  const titleCandidates = headerRows
+    .map(r => r.fullText)
+    .filter(t => t && !/^(Answer Key|Score|Name|Date|Quiz)$/i.test(t)
+      && !/^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d+/i.test(t)
+      && !/^\d{4}\./.test(t)
+      && !/^Name:/i.test(t)
+      && !/^Date:/i.test(t)
+      && !/^Score:/i.test(t));
+  if (titleCandidates.length > 0) {
+    quizTitle = titleCandidates.join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  // 6. Kérdések felépítése a vizuális sorokból
+  const rawQuestions = [];
+  let currentQ = null;
+  let currentSection = null; // 'question' | 'option' | 'explanation' | 'short_answer'
+  let currentOption = null;
+  let lastQNum = 0;
+
+  const startIdx = firstQRowIdx >= 0 ? firstQRowIdx : 0;
+  for (let i = startIdx; i < allRows.length; i++) {
+    const row = allRows[i];
+    const qNumMatch = row.leftText.match(/^(\d+)\.$/);
+
+    // Új kérdés kezdete: bal margón szereplő sorszám (szigorúan nagyobb az előzőnél, vagy az első kérdés)
+    if (qNumMatch) {
+      const num = parseInt(qNumMatch[1], 10);
+      if (num === lastQNum + 1 || (num > lastQNum && num <= lastQNum + 5)) {
+        lastQNum = num;
+        currentQ = {
+          qNum: num,
+          globalY: row.globalY,
+          endGlobalY: Infinity,
+          pageIdx: row.pageIdx,
+          questionLines: row.rightText ? [row.rightText] : [],
+          options: [],
+          explanationLines: [],
+          shortAnswerLines: []
+        };
+        if (rawQuestions.length > 0) {
+          rawQuestions[rawQuestions.length - 1].endGlobalY = row.globalY;
+        }
+        rawQuestions.push(currentQ);
+        currentSection = 'question';
+        currentOption = null;
+        continue;
       }
     }
 
-    pageFullText = pageFullText.replace(/\0/g, '');
+    if (!currentQ) continue;
 
-    // Kvíz címének felismerése az 1. oldal fejlécéből
-    if (pageIdx === 0) {
-      const tMatch = pageFullText.match(/(?:Answer Key|Score)[\s\S]*?\d{4}\s*\n+([\s\S]*?)\n+1\./);
-      if (tMatch) {
-        quizTitle = tMatch[1].trim().replace(/\s+/g, ' ');
+    // Magyarázat kezdete: bal margón 'i' jelölő
+    if (row.leftText === 'i') {
+      currentSection = 'explanation';
+      currentOption = null;
+      if (row.rightText) currentQ.explanationLines.push(row.rightText);
+      continue;
+    }
+
+    // Feleletválasztós (A-F) vagy Igaz/Hamis (T/F) opció kezdete
+    if (/^[A-F]$/.test(row.leftText) || /^[TF]$/.test(row.leftText)) {
+      const letter = row.leftText;
+      const isTfLetter = (letter === 'T' || letter === 'F')
+        && (/^(True|Tue|False|Igaz|Hamis)$/i.test(row.rightText) || currentQ.options.some(o => o.isTfLetter));
+
+      currentOption = {
+        letter,
+        isTfLetter,
+        y: row.y,
+        globalY: row.globalY,
+        pageIdx: row.pageIdx,
+        textLines: row.rightText ? [row.rightText] : [],
+        isCorrectMarked: false
+      };
+      currentQ.options.push(currentOption);
+      currentSection = 'option';
+      continue;
+    }
+
+    // Folytatósorok kezelése (nincs bal margós jelölő)
+    const contentText = row.rightText || row.fullText;
+    if (!contentText) continue;
+
+    if (currentSection === 'explanation') {
+      currentQ.explanationLines.push(contentText);
+    } else if (currentSection === 'option' && currentOption) {
+      currentOption.textLines.push(contentText);
+    } else if (currentSection === 'question') {
+      // Ha még nem volt opció, nézzük meg: beírós (SHORT) válaszsor-e?
+      // A Socrative SHORT Answer Key a kérdés után külön sorokban listázza az elfogadott válaszokat
+      // (a kérdés szövege általában nagyobb Y-hézaggal válik el az elfogadott válaszoktól, >= 22pt)
+      const prevRow = i > startIdx ? allRows[i - 1] : null;
+      const yGap = (prevRow && prevRow.pageIdx === row.pageIdx) ? (row.y - prevRow.y) : 0;
+      const qSoFar = currentQ.questionLines.join(' ').trim();
+      const endsLikeQuestion = /[?:.…]$/.test(qSoFar);
+
+      if (currentQ.questionLines.length > 0 && (yGap >= 20 || (endsLikeQuestion && yGap >= 15))) {
+        currentSection = 'short_answer';
+        currentQ.shortAnswerLines.push(contentText);
       } else {
-        const altMatch = pageFullText.match(/\n([0-9]{1,3}\s*-\s*[^\n\r]+)\n/);
-        if (altMatch) quizTitle = altMatch[1].trim().replace(/\s+/g, ' ');
+        currentQ.questionLines.push(contentText);
       }
+    } else if (currentSection === 'short_answer') {
+      currentQ.shortAnswerLines.push(contentText);
     }
-
-    pagesData.push({ pageFullText, pageImages });
   }
 
-  // 4. Kérdések összeállítása és feldolgozása
-  const parsedQuestions = [];
-
-  for (let pIdx = 0; pIdx < pagesData.length; pIdx++) {
-    const { pageFullText, pageImages } = pagesData[pIdx];
-
-    // Megoldókulcsos (Answer Key) formátum vizsgálata:
-    const qKeyMatches = [...pageFullText.matchAll(/(\d+)\.\s*([\s\S]*?)i\s*(?:A helyes válasz:|A helyes megoldás:)\s*([^\n\r]+)/g)];
-
-    if (qKeyMatches.length > 0) {
-      // Megoldókulcsos feldolgozás
-      const optionsSectionStart = qKeyMatches[qKeyMatches.length - 1].index + qKeyMatches[qKeyMatches.length - 1][0].length;
-      const optionsText = pageFullText.slice(optionsSectionStart);
-      const optionMatches = [...optionsText.matchAll(/([\s\S]*?)\n([A-D])(?:\n|$)/g)];
-
-      const questionOptions = [];
-      let currentQOptions = [];
-      for (const om of optionMatches) {
-        const optText = om[1].trim().replace(/\s+/g, ' ');
-        const optLetter = om[2].trim();
-        if (optLetter === 'A' && currentQOptions.length > 0) {
-          questionOptions.push(currentQOptions);
-          currentQOptions = [];
+  // 7. Zöld megoldókulcs-pipák és képek pontos Y-alapú hozzárendelése
+  for (const gm of allGreenMarks) {
+    let bestOpt = null;
+    let bestDist = Infinity;
+    for (const q of rawQuestions) {
+      for (const opt of q.options) {
+        if (opt.pageIdx !== gm.pageIdx) continue;
+        // Az opció szövegének közepe kb. 3.5pt-tal a baseline fölött van
+        const dist = Math.abs(gm.y - (opt.y - 3.5));
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestOpt = opt;
         }
-        currentQOptions.push({ letter: optLetter, text: optText });
       }
-      if (currentQOptions.length > 0) {
-        questionOptions.push(currentQOptions);
-      }
+    }
+    if (bestOpt && bestDist <= 10) {
+      bestOpt.isCorrectMarked = true;
+    }
+  }
 
-      for (let i = 0; i < qKeyMatches.length; i++) {
-        const qm = qKeyMatches[i];
-        const qNum = parseInt(qm[1], 10);
-        let qBody = qm[2].trim().replace(/\s+/g, ' ');
-        const correctAnswerRaw = qm[3].trim().replace(/\.$/, '');
-        const opts = questionOptions[i] || [];
-        const isTF = opts.length === 2 && opts[0].text === 'Igaz' && opts[1].text === 'Hamis';
-
-        let correctText = '';
-        if (isTF) {
-          correctText = correctAnswerRaw.toLowerCase().includes('hamis') ? 'Hamis' : 'Igaz';
-        } else {
-          for (const o of opts) {
-            if (o.text.toLowerCase().trim() === correctAnswerRaw.toLowerCase().trim() ||
-              correctAnswerRaw.toLowerCase().trim().startsWith(o.text.toLowerCase().trim().slice(0, 20))) {
-              correctText = o.text;
-              break;
-            }
-          }
-          if (!correctText && opts.length > 0) {
-            // Ha a megoldókulcs betűjelként szerepel (pl. "A" vagy "B")
-            const m = correctAnswerRaw.match(/^([A-D])/i);
-            if (m) {
-              const letterIndex = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 }[m[1].toUpperCase()];
-              if (letterIndex !== undefined && opts[letterIndex]) {
-                correctText = opts[letterIndex].text;
-              }
-            }
-            if (!correctText) {
-              // Bizonytalan vagy hiányzó kulcs: ne válasszon ki önkényesen opciót, tanári ellenőrzést igényel (Report 15 / 3. fejezet)
-              correctText = '';
-            }
-          }
-        }
-
-        const needsReview = !correctText;
-
-        let matchedImage = null;
-        if (pageImages.length === qKeyMatches.length) {
-          matchedImage = pageImages[i];
-        } else if (pageImages.length > 0) {
-          const imgIdx = i - (qKeyMatches.length - pageImages.length);
-          if (imgIdx >= 0 && imgIdx < pageImages.length) {
-            matchedImage = pageImages[imgIdx];
-          }
-        }
-
-        parsedQuestions.push({
-          question_order: qNum,
-          question_text: qBody,
-          instructions: isTF ? 'Döntsd el, hogy az állítás igaz vagy hamis!' : 'Válaszd ki az egyetlen helyes megoldást!',
-          question_type: isTF ? 'TF' : 'ABCD',
-          points: 1,
-          options: isTF ? ['Igaz', 'Hamis'] : opts.map(o => o.text),
-          correct_answer: correctText,
-          needs_review: needsReview,
-          imageBuffer: matchedImage ? matchedImage.pngBuffer : null
-        });
-      }
+  const usedImages = new Set();
+  for (const q of rawQuestions) {
+    const matched = allImages.find((img, idx) =>
+      !usedImages.has(idx) && img.globalY >= q.globalY - 10 && img.globalY < q.endGlobalY - 5
+    );
+    if (matched) {
+      usedImages.add(allImages.indexOf(matched));
+      q.imageBuffer = matched.pngBuffer;
     } else {
-      // Megoldókulcs nélküli diák PDF feldolgozása:
-      // Kérdésszámok: (\d+)\.
-      const qNums = [...pageFullText.matchAll(/(?:^|\n)(\d+)\.\s*/g)];
-      // Opciók kinyerése
-      const optionMatches = [...pageFullText.matchAll(/([\s\S]*?)\n([A-D])(?:\n|$)/g)];
-      const questionOptions = [];
-      let currentQOptions = [];
-      for (const om of optionMatches) {
-        const optText = om[1].trim().replace(/\s+/g, ' ');
-        const optLetter = om[2].trim();
-        if (optLetter === 'A' && currentQOptions.length > 0) {
-          questionOptions.push(currentQOptions);
-          currentQOptions = [];
-        }
-        currentQOptions.push({ letter: optLetter, text: optText });
-      }
-      if (currentQOptions.length > 0) {
-        questionOptions.push(currentQOptions);
-      }
-
-      for (let i = 0; i < qNums.length; i++) {
-        const qNum = parseInt(qNums[i][1], 10);
-        const startPos = qNums[i].index + qNums[i][0].length;
-        const endPos = (i + 1 < qNums.length) ? qNums[i + 1].index : pageFullText.indexOf(optionMatches[0] ? optionMatches[0][0] : pageFullText.length);
-        const qBody = pageFullText.slice(startPos, endPos > startPos ? endPos : pageFullText.length).trim().replace(/\s+/g, ' ');
-        const opts = questionOptions[i] || [];
-        const isTF = opts.length === 2 && opts[0].text === 'Igaz' && opts[1].text === 'Hamis';
-
-        let matchedImage = null;
-        if (pageImages.length === qNums.length) {
-          matchedImage = pageImages[i];
-        } else if (pageImages.length > 0) {
-          const imgIdx = i - (qNums.length - pageImages.length);
-          if (imgIdx >= 0 && imgIdx < pageImages.length) {
-            matchedImage = pageImages[imgIdx];
-          }
-        }
-
-        parsedQuestions.push({
-          question_order: qNum,
-          question_text: qBody,
-          instructions: isTF ? 'Döntsd el, hogy az állítás igaz vagy hamis!' : 'Válaszd ki az egyetlen helyes megoldást!',
-          question_type: isTF ? 'TF' : 'ABCD',
-          points: 1,
-          options: isTF ? ['Igaz', 'Hamis'] : opts.map(o => o.text),
-          correct_answer: '', // Kulcs nélküli diák PDF esetén nincs megoldókulcs, tanári kitöltést igényel (Report 16 / 5. fejezet)
-          needs_review: true,
-          imageBuffer: matchedImage ? matchedImage.pngBuffer : null
-        });
-      }
+      q.imageBuffer = null;
     }
   }
+
+  // 8. Végső kérdésobjektumok összeállítása (ABCD, TF, SHORT felismerés + egyedi question_order)
+  const parsedQuestions = rawQuestions.map((q, idx) => {
+    const qBody = q.questionLines.join(' ').replace(/\s+/g, ' ').trim();
+    const explanationRaw = q.explanationLines.join(' ').replace(/\s+/g, ' ').trim();
+
+    // Opcionális régi magyar megoldókulcs-szöveg a magyarázatban ("A helyes válasz: ...")
+    let keyFromExplanation = '';
+    const expKeyMatch = explanationRaw.match(/(?:A helyes válasz:|A helyes megoldás:)\s*([^\n\r]+)/i);
+    if (expKeyMatch) {
+      keyFromExplanation = expKeyMatch[1].trim().replace(/\.$/, '');
+    }
+
+    const optTexts = q.options.map(o => ({
+      letter: o.letter,
+      isTfLetter: o.isTfLetter,
+      text: o.textLines.join(' ').replace(/\s+/g, ' ').trim(),
+      isCorrectMarked: o.isCorrectMarked
+    }));
+
+    // Típus meghatározása: TF, ABCD vagy SHORT
+    const isTF = optTexts.length === 2 && (
+      (optTexts[0].letter === 'T' && optTexts[1].letter === 'F') ||
+      (optTexts[0].isTfLetter && optTexts[1].isTfLetter) ||
+      (/^(igaz|true|tue)$/i.test(optTexts[0].text) && /^(hamis|false)$/i.test(optTexts[1].text))
+    );
+    const isShort = optTexts.length === 0;
+
+    if (isTF) {
+      let correctText = '';
+      const marked = optTexts.find(o => o.isCorrectMarked);
+      if (marked) {
+        correctText = (/^(hamis|false|f)$/i.test(marked.text) || marked.letter === 'F') ? 'Hamis' : 'Igaz';
+      } else if (keyFromExplanation) {
+        correctText = keyFromExplanation.toLowerCase().includes('hamis') ? 'Hamis' : 'Igaz';
+      }
+
+      return {
+        question_order: idx + 1,
+        question_text: qBody,
+        instructions: 'Döntsd el, hogy az állítás igaz vagy hamis!',
+        question_type: 'TF',
+        points: 1,
+        options: ['Igaz', 'Hamis'],
+        correct_answer: correctText,
+        explanation: explanationRaw,
+        needs_review: !correctText,
+        imageBuffer: q.imageBuffer
+      };
+    }
+
+    if (isShort) {
+      const cleanedShortAnswers = q.shortAnswerLines
+        .map(s => s.trim())
+        .filter(Boolean);
+      let correctText = '';
+      if (cleanedShortAnswers.length === 1) {
+        correctText = cleanedShortAnswers[0];
+      } else if (cleanedShortAnswers.length > 1) {
+        correctText = JSON.stringify(cleanedShortAnswers);
+      } else if (keyFromExplanation) {
+        correctText = keyFromExplanation;
+      }
+
+      return {
+        question_order: idx + 1,
+        question_text: qBody,
+        instructions: 'Írd be a helyes választ a szövegmezőbe!',
+        question_type: 'SHORT',
+        points: 1,
+        options: [],
+        correct_answer: correctText,
+        explanation: explanationRaw,
+        needs_review: !correctText,
+        imageBuffer: q.imageBuffer
+      };
+    }
+
+    // ABCD (feleletválasztós)
+    let correctText = '';
+    const markedOpt = optTexts.find(o => o.isCorrectMarked);
+    if (markedOpt) {
+      correctText = markedOpt.text;
+    } else if (keyFromExplanation) {
+      for (const o of optTexts) {
+        if (o.text.toLowerCase() === keyFromExplanation.toLowerCase()
+          || (o.text.length >= 6 && keyFromExplanation.toLowerCase().startsWith(o.text.toLowerCase().slice(0, 20)))) {
+          correctText = o.text;
+          break;
+        }
+      }
+      if (!correctText) {
+        const lm = keyFromExplanation.match(/^([A-F])\b/i);
+        if (lm) {
+          const found = optTexts.find(o => o.letter.toUpperCase() === lm[1].toUpperCase());
+          if (found) correctText = found.text;
+        }
+      }
+    }
+
+    return {
+      question_order: idx + 1,
+      question_text: qBody,
+      instructions: 'Válaszd ki az egyetlen helyes megoldást!',
+      question_type: 'ABCD',
+      points: 1,
+      options: optTexts.map(o => o.text),
+      correct_answer: correctText,
+      explanation: explanationRaw,
+      needs_review: !correctText,
+      imageBuffer: q.imageBuffer
+    };
+  });
 
   return { quizTitle, questions: parsedQuestions };
 }

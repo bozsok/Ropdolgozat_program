@@ -4,6 +4,35 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.36.0] – 2026-11-24
+
+### Koordináta-alapú Socrative PDF-importáló, lokális egykérdéses mentés, dinamikus ABCD opciók és munkaállomás-kapszula javítások
+
+Az első éles tantermi tapasztalatok (`Source/Kell.txt`) alapján elkészült teljes funkcionális és UX-javító kiadás, SQLite-sémamódosítás nélkül.
+
+#### Hozzáadva és módosítva (Added and Changed)
+* **Valódi koordináta-alapú Socrative PDF-importáló (`src/services/socrativePdfParser.js`):**
+  - **Fájl:** [`src/services/socrativePdfParser.js`](file:///d:/dev/Röpdolgozat%20program/src/services/socrativePdfParser.js)
+  - Teljes PDF CTM (`q`/`Q`/`cm`) mátrixveremre épülő `(X, Y)` oldalkoordinátás feldolgozás: megszűnt az opciók elcsúszása és a több kérdés egyetlen válaszba ömlesztése, oldalhatárokon átívelő kérdéseknél is.
+  - Mindhárom kérdéstípus felismerése: **`ABCD`** (akár 5–6 opcióval is), **`TF`** (magyar `Igaz / Hamis` és angol Socrative `T / F`, `True / False` formátumok), valamint **`SHORT`** (beírós kérdések az összes elfogadott szinonimával).
+  - A Socrative Answer Key zöld pipáinak (`.365 .745 .431`) pontos Y-párosítása a legközelebbi opcióhoz, így a helyes válaszok automatikusan bejelölődnek.
+  - Garantáltan egyedi, folyamatos `1..N` `question_order` kiosztás: véglegesen megszűnt a `UNIQUE constraint failed: questions.quiz_id, questions.question_order` importálási hiba.
+
+* **Lokális, egyetlen kérdést mentő *Mentés* gomb a tesztszerkesztőben (`src/db/quizRepo.js`, `src/routes/api.js`, `public/js/admin.js`):**
+  - **Fájlok:** [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Új `PUT /api/admin/quizzes/:id/questions/:questionId` és `POST /api/admin/quizzes/:id/questions` végpontok (`quizRepo.saveSingleQuestion()`): a kérdéskártyán lévő pasztell zöld **Mentés** gomb kizárólag az adott kérdést validálja és menti le az adatbázisba, így az importált vagy még félkész többi kérdés nem blokkolja a javítást.
+
+* **Tetszőleges számú feleletválasztós (`ABCD`) válaszlehetőség (`public/js/admin.js`):**
+  - **Fájl:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A tesztszerkesztő alapértelmezetten 4 opciósort jelenít meg (meglévő vagy importált 5+ opciós kérdéseknél automatikusan az összeset), alatta a **„+ További válaszlehetőség hozzáadása”** gombbal bővíthető, a 2-nél több sor pedig a jobb oldali `×` gombbal eltávolítható.
+
+* **„Tanári munkaállomás” kapszula és diák fejléc finomítása (`public/admin.html`, `public/js/admin.js`, `public/js/student.js`):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Bejelentkezés után is látható a **🖥️ Tanári munkaállomás** kapszula a tanári fejlécben a *Kilépés* gomb mellett; kijelentkezéskor a rendszer megőrzi a `?gep=tanar` jelölést (`/?gep=tanar&logout=1`), így a kapszula nem tűnik el, de a PIN-ablak nem ugrik fel azonnal újra.
+  - A diák tesztfelület jobb oldali névkapszulájából kikerült a megduplázott gépszám – a gépszám kizárólag a bal oldali kapszulában jelenik meg.
+
+---
+
 ## [1.35.3] – 2026-11-22
 
 ### Tesztszerkesztő UX-finomítás: Helyben mentés minden kérdéskártyán és pasztell fejlécgombok

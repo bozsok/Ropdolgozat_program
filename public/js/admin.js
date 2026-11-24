@@ -274,14 +274,15 @@
     }
   });
 
-  // Kijelentkezés
+  // Kijelentkezés (a Tanári munkaállomás URL-jelölésének megőrzésével)
   btnLogout.addEventListener('click', async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch {
       // ignore
     }
-    window.location.href = '/';
+    const isTeacherWs = sessionStorage.getItem('ropdolgozat_workstation') === 'tanar';
+    window.location.href = isTeacherWs ? '/?gep=tanar&logout=1' : '/';
   });
 
   // Logóra kattintás: mindig a 'Jelenleg nincs folyamatban lévő dolgozat' kezdőképernyőt jeleníti meg
@@ -2928,14 +2929,21 @@
     }
     if (initialShortAnswers.length === 0) initialShortAnswers = [''];
 
+    // ABCD opciók előkészítése (alapból legalább 4 sor, de meglévő 5+ opciót is megtart)
+    const initialAbcdOptions = Array.isArray(qOptions) ? [...qOptions] : [];
+    while (initialAbcdOptions.length < 4) initialAbcdOptions.push('');
+
     // Meglévő helyes válasz indexének azonosítása ABCD esetén
     let correctOptionIndex = -1;
     if (qType === 'ABCD' && qCorrect) {
-      const letterIndexMap = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 };
-      if (letterIndexMap[qCorrect.toUpperCase()] !== undefined) {
-        correctOptionIndex = letterIndexMap[qCorrect.toUpperCase()];
-      } else {
-        correctOptionIndex = qOptions.findIndex(opt => String(opt).trim().toLowerCase() === qCorrect.toLowerCase());
+      if (/^[A-Z]$/i.test(qCorrect)) {
+        const idxByLetter = qCorrect.toUpperCase().charCodeAt(0) - 65;
+        if (idxByLetter >= 0 && idxByLetter < initialAbcdOptions.length) {
+          correctOptionIndex = idxByLetter;
+        }
+      }
+      if (correctOptionIndex === -1) {
+        correctOptionIndex = initialAbcdOptions.findIndex(opt => String(opt).trim().toLowerCase() === qCorrect.toLowerCase());
       }
     }
 
@@ -3042,15 +3050,24 @@
             <span style="font-size: 0.82rem; font-weight: normal; color: var(--text-muted);">🟢 1 kötelezően kijelölendő</span>
           </label>
           <div class="q-opt-grid">
-            ${[0, 1, 2, 3].map(i => `
+            ${initialAbcdOptions.map((optVal, i) => `
               <div class="q-opt-row ${correctOptionIndex === i ? 'is-correct' : ''}">
                 <button type="button" class="q-opt-correct-toggle ${correctOptionIndex === i ? 'is-correct' : ''}" data-opt-index="${i}" title="Kattints ide a helyes válasz kizöldítéséhez!">
                   <span class="q-opt-num">${i + 1}</span>
                   <span class="material-symbols-outlined q-opt-check">check</span>
                 </button>
-                <input type="text" class="form-control q-opt-input q-opt-${i}" placeholder="${i + 1}. válaszlehetőség" value="${escapeHtml(qOptions[i] || '')}">
+                <input type="text" class="form-control q-opt-input q-opt-${i}" placeholder="${i + 1}. válaszlehetőség" value="${escapeHtml(optVal || '')}">
+                <button type="button" class="btn btn-secondary btn-remove-abcd-opt" title="Válaszlehetőség eltávolítása" style="padding: 6px 8px; font-size: 0.85rem; ${initialAbcdOptions.length > 2 ? '' : 'display: none;'}">
+                  <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
+                </button>
               </div>
             `).join('')}
+          </div>
+          <div style="margin-top: 8px;">
+            <button type="button" class="btn btn-secondary btn-add-abcd-opt" style="padding: 5px 12px; font-size: 0.84rem;">
+              <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 4px;">add</span>
+              <span>További válaszlehetőség hozzáadása</span>
+            </button>
           </div>
         </div>
 
@@ -3134,20 +3151,73 @@
       }
     });
 
-    // ABCD opciók kizöldítése számozott gombra kattintva
-    const optRows = item.querySelectorAll('.q-opt-row');
-    const optToggles = item.querySelectorAll('.q-opt-correct-toggle');
-    optToggles.forEach(toggle => {
-      toggle.addEventListener('click', () => {
-        const isAlreadyCorrect = toggle.classList.contains('is-correct');
-        optRows.forEach(r => r.classList.remove('is-correct'));
-        optToggles.forEach(t => t.classList.remove('is-correct'));
-        if (!isAlreadyCorrect) {
-          toggle.classList.add('is-correct');
-          toggle.closest('.q-opt-row').classList.add('is-correct');
+    // ABCD opciók dinamikus kezelése (kizöldítés, hozzáadás, eltávolítás)
+    const abcdGrid = item.querySelector('.q-opt-grid');
+    const btnAddAbcdOpt = item.querySelector('.btn-add-abcd-opt');
+
+    function refreshAbcdOptionRows() {
+      if (!abcdGrid) return;
+      const rows = abcdGrid.querySelectorAll('.q-opt-row');
+      rows.forEach((row, idx) => {
+        const toggle = row.querySelector('.q-opt-correct-toggle');
+        const numSpan = row.querySelector('.q-opt-num');
+        const input = row.querySelector('.q-opt-input');
+        const btnDel = row.querySelector('.btn-remove-abcd-opt');
+        if (toggle) toggle.dataset.optIndex = String(idx);
+        if (numSpan) numSpan.textContent = String(idx + 1);
+        if (input) input.placeholder = `${idx + 1}. válaszlehetőség`;
+        if (btnDel) btnDel.style.display = rows.length > 2 ? 'inline-flex' : 'none';
+      });
+    }
+
+    if (abcdGrid) {
+      abcdGrid.addEventListener('click', (e) => {
+        const toggle = e.target.closest('.q-opt-correct-toggle');
+        if (toggle) {
+          const isAlreadyCorrect = toggle.classList.contains('is-correct');
+          abcdGrid.querySelectorAll('.q-opt-row').forEach(r => r.classList.remove('is-correct'));
+          abcdGrid.querySelectorAll('.q-opt-correct-toggle').forEach(t => t.classList.remove('is-correct'));
+          if (!isAlreadyCorrect) {
+            toggle.classList.add('is-correct');
+            const parentRow = toggle.closest('.q-opt-row');
+            if (parentRow) parentRow.classList.add('is-correct');
+          }
+          return;
+        }
+        const btnDel = e.target.closest('.btn-remove-abcd-opt');
+        if (btnDel) {
+          const rows = abcdGrid.querySelectorAll('.q-opt-row');
+          if (rows.length <= 2) return;
+          const row = btnDel.closest('.q-opt-row');
+          if (row) {
+            row.remove();
+            refreshAbcdOptionRows();
+          }
         }
       });
-    });
+    }
+
+    if (btnAddAbcdOpt && abcdGrid) {
+      btnAddAbcdOpt.addEventListener('click', () => {
+        const idx = abcdGrid.querySelectorAll('.q-opt-row').length;
+        const row = document.createElement('div');
+        row.className = 'q-opt-row';
+        row.innerHTML = `
+          <button type="button" class="q-opt-correct-toggle" data-opt-index="${idx}" title="Kattints ide a helyes válasz kizöldítéséhez!">
+            <span class="q-opt-num">${idx + 1}</span>
+            <span class="material-symbols-outlined q-opt-check">check</span>
+          </button>
+          <input type="text" class="form-control q-opt-input" placeholder="${idx + 1}. válaszlehetőség" value="">
+          <button type="button" class="btn btn-secondary btn-remove-abcd-opt" title="Válaszlehetőség eltávolítása" style="padding: 6px 8px; font-size: 0.85rem;">
+            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
+          </button>
+        `;
+        abcdGrid.appendChild(row);
+        refreshAbcdOptionRows();
+        const input = row.querySelector('.q-opt-input');
+        if (input) input.focus();
+      });
+    }
 
     // TF gombok kizöldítése kattintásra
     const tfButtons = item.querySelectorAll('.btn-tf-pick');
@@ -3212,11 +3282,11 @@
       });
     }
 
-    // Helyben mentés a kérdéskártyáról (a szerkesztő nyitva marad)
+    // Lokális mentés a kérdéskártyáról (csak ezt az 1 kérdést validálja és menti, a többi félkész kérdést nem blokkolja)
     const btnSaveQ = item.querySelector('.btn-save-q');
     if (btnSaveQ) {
       btnSaveQ.addEventListener('click', () => {
-        saveQuizEditor({ closeAfterSave: false, triggerBtn: btnSaveQ });
+        saveSingleQuestionCard(item, btnSaveQ);
       });
     }
 
@@ -3339,6 +3409,124 @@
     return item;
   }
 
+  // Egyetlen kérdéskártya validálása és lokális mentése (a feladatsor többi kérdésétől függetlenül)
+  async function saveSingleQuestionCard(cardEl, triggerBtn = null) {
+    if (isSavingQuiz || !cardEl) return;
+
+    const quizId = editQuizId.value;
+    if (!quizId) {
+      // Még nem létező, új feladatsornál az egész feladatsort hozzuk létre nyitva maradva
+      await saveQuizEditor({ closeAfterSave: false, triggerBtn });
+      return;
+    }
+
+    const items = Array.from(editorQuestionsList.querySelectorAll('.q-editor-item'));
+    const qNum = Math.max(1, items.indexOf(cardEl) + 1);
+    const type = cardEl.querySelector('.q-type-select').value;
+    const text = cardEl.querySelector('.q-text').value.trim();
+    const points = parseFloat(cardEl.querySelector('.q-points').value) || 1.0;
+    const explanation = cardEl.querySelector('.q-explanation').value.trim();
+
+    if (!text) {
+      showAdminAlert('⚠️ Hiányzó kérdésszöveg', `A(z) ${qNum}. kérdés szövegének megadása kötelező!`);
+      return;
+    }
+
+    let correct = '';
+    let options = [];
+
+    if (type === 'ABCD') {
+      const selectedToggle = cardEl.querySelector('.q-opt-correct-toggle.is-correct');
+      if (!selectedToggle) {
+        showAdminAlert('⚠️ Helyes válasz nincs kijelölve', `A(z) ${qNum}. feleletválasztós kérdésnél nem jelölted meg a helyes választ!\n\nKérlek, kattints a helyes válasz számozott körére!`);
+        return;
+      }
+      const selRow = selectedToggle.closest('.q-opt-row');
+      const selIdx = parseInt(selectedToggle.dataset.optIndex, 10) || 0;
+      const selInput = selRow ? selRow.querySelector('.q-opt-input') : null;
+      const correctVal = selInput ? selInput.value.trim() : '';
+      if (!correctVal) {
+        showAdminAlert('⚠️ Üres a helyes válasz', `A(z) ${qNum}. kérdésnél a helyesnek jelölt (${selIdx + 1}.) válaszlehetőség szövege nem lehet üres!`);
+        return;
+      }
+      const filledOpts = Array.from(cardEl.querySelectorAll('.q-opt-input'))
+        .map(inp => inp.value.trim())
+        .filter(Boolean);
+      if (filledOpts.length < 2) {
+        showAdminAlert('⚠️ Kevés válaszlehetőség', `A(z) ${qNum}. feleletválasztós kérdésnél legalább 2 válaszlehetőség kitöltése kötelező!`);
+        return;
+      }
+      options = filledOpts;
+      correct = correctVal;
+    } else if (type === 'TF') {
+      const selectedTf = cardEl.querySelector('.btn-tf-pick.is-correct');
+      if (!selectedTf) {
+        showAdminAlert('⚠️ Helyes válasz nincs kijelölve', `A(z) ${qNum}. Igaz / Hamis kérdésnél nem választottad ki a helyes állítást!\n\nKérlek, kattints az IGAZ vagy a HAMIS gombra a kizöldítéshez.`);
+        return;
+      }
+      correct = selectedTf.dataset.value;
+      options = ['Igaz', 'Hamis'];
+    } else if (type === 'SHORT') {
+      const shortInputs = cardEl.querySelectorAll('.q-short-input-val');
+      const shortValues = Array.from(shortInputs).map(inp => inp.value.trim()).filter(Boolean);
+      if (shortValues.length === 0) {
+        showAdminAlert('⚠️ Helyes válasz hiányzik', `A(z) ${qNum}. rövid válaszos kérdésnél legalább 1 elfogadott helyes válasz megadása kötelező!`);
+        return;
+      }
+      correct = (shortValues.length === 1) ? shortValues[0] : JSON.stringify(shortValues);
+      options = [];
+    }
+
+    const imagePathInput = cardEl.querySelector('.q-image-path');
+    const image_path = imagePathInput && imagePathInput.value.trim() ? imagePathInput.value.trim() : null;
+    const instructionsInput = cardEl.querySelector('.q-instructions');
+    const instructions = instructionsInput ? instructionsInput.value.trim() : '';
+    const existingQId = cardEl.dataset.questionId ? parseInt(cardEl.dataset.questionId, 10) : null;
+
+    const payload = {
+      question_type: type,
+      question_text: text,
+      instructions,
+      image_path,
+      points,
+      options,
+      correct_answer: correct,
+      explanation
+    };
+
+    isSavingQuiz = true;
+    if (triggerBtn) triggerBtn.disabled = true;
+
+    try {
+      const url = existingQId
+        ? `/api/admin/quizzes/${quizId}/questions/${existingQId}`
+        : `/api/admin/quizzes/${quizId}/questions`;
+      const method = existingQId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success && data.question) {
+        cardEl.dataset.questionId = String(data.question.id);
+        if (imagePathInput && data.question.image_path) {
+          imagePathInput.value = data.question.image_path;
+        }
+        showToast(`A(z) ${qNum}. kérdés sikeresen elmentve!`, 'success');
+      } else {
+        showAdminAlert('⚠️ Mentési hiba', (data && data.error) || 'Hiba a kérdés mentése során!');
+      }
+    } catch (err) {
+      showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a kérdés mentésekor!');
+    } finally {
+      isSavingQuiz = false;
+      if (triggerBtn) triggerBtn.disabled = false;
+    }
+  }
+
   // Teszt mentése validációval (közös logika az alsó „Feladatsor mentése” és a kártyán lévő „Mentés” gombhoz)
   let isSavingQuiz = false;
 
@@ -3379,12 +3567,13 @@
       if (type === 'ABCD') {
         const selectedToggle = b.querySelector('.q-opt-correct-toggle.is-correct');
         if (!selectedToggle) {
-          showAdminAlert('⚠️ Helyes válasz nincs kijelölve', `A(z) ${qNum}. feleletválasztós kérdésnél nem jelölted meg a helyes választ!\n\nKérlek, kattints a helyes válasz számozott körére (1–4).`);
+          showAdminAlert('⚠️ Helyes válasz nincs kijelölve', `A(z) ${qNum}. feleletválasztós kérdésnél nem jelölted meg a helyes választ!\n\nKérlek, kattints a helyes válasz számozott körére!`);
           return;
         }
 
-        const selIdx = parseInt(selectedToggle.dataset.optIndex, 10);
-        const selInput = b.querySelector(`.q-opt-${selIdx}`);
+        const selRow = selectedToggle.closest('.q-opt-row');
+        const selIdx = parseInt(selectedToggle.dataset.optIndex, 10) || 0;
+        const selInput = selRow ? selRow.querySelector('.q-opt-input') : null;
         const correctVal = selInput ? selInput.value.trim() : '';
 
         if (!correctVal) {
@@ -3392,18 +3581,16 @@
           return;
         }
 
-        const opt0 = b.querySelector('.q-opt-0').value.trim();
-        const opt1 = b.querySelector('.q-opt-1').value.trim();
-        const opt2 = b.querySelector('.q-opt-2').value.trim();
-        const opt3 = b.querySelector('.q-opt-3').value.trim();
-        const filledOpts = [opt0, opt1, opt2, opt3].filter(Boolean);
+        const filledOpts = Array.from(b.querySelectorAll('.q-opt-input'))
+          .map(inp => inp.value.trim())
+          .filter(Boolean);
 
         if (filledOpts.length < 2) {
           showAdminAlert('⚠️ Kevés válaszlehetőség', `A(z) ${qNum}. feleletválasztós kérdésnél legalább 2 válaszlehetőség kitöltése kötelező!`);
           return;
         }
 
-        options = [opt0, opt1, opt2, opt3].filter(Boolean);
+        options = filledOpts;
         correct = correctVal;
 
       } else if (type === 'TF') {

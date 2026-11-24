@@ -559,11 +559,13 @@
   async function init() {
     // 1. Gépszám és Tanári munkaállomás felismerése az URL-ből (?gep=X vagy ?pc=X vagy ?gep=tanar)
     const gepParam = getUrlParam('gep') || getUrlParam('pc');
+    const isAfterLogout = getUrlParam('logout') === '1';
     let isTeacherWorkstation = false;
     if (gepParam) {
       const gepLower = gepParam.trim().toLowerCase();
       if (gepLower === 'tanar' || gepLower === 'tanari') {
         isTeacherWorkstation = true;
+        sessionStorage.setItem('ropdolgozat_workstation', 'tanar');
         if (pcNumberText) pcNumberText.textContent = 'Tanári munkaállomás';
         if (entryPcNumberText) entryPcNumberText.textContent = 'Tanári munkaállomás';
         if (entryPcBadge) entryPcBadge.style.display = 'inline-flex';
@@ -575,14 +577,19 @@
           if (entryPcBadge) entryPcBadge.style.display = 'inline-flex';
         }
       }
+    } else if (sessionStorage.getItem('ropdolgozat_workstation') === 'tanar') {
+      isTeacherWorkstation = true;
+      if (pcNumberText) pcNumberText.textContent = 'Tanári munkaállomás';
+      if (entryPcNumberText) entryPcNumberText.textContent = 'Tanári munkaállomás';
+      if (entryPcBadge) entryPcBadge.style.display = 'inline-flex';
     }
 
     // 2. Felületi eseménykezelők azonnali regisztrálása (Modalok, Kilépés gomb, stb.)
     setupCommonUIListeners();
 
     // 3. Tanári munkaállomás kényelmi automatizmus (?gep=tanar):
-    // Ha a tanári gépről nyitották meg a felületet és nincs folyamatban lévő diák token
-    if (isTeacherWorkstation && !sessionStorage.getItem('ropdolgozat_token')) {
+    // Ha a tanári gépről nyitották meg a felületet és nincs folyamatban lévő diák token (kijelentkezés után nem nyitja meg újra automatikusan)
+    if (isTeacherWorkstation && !isAfterLogout && !sessionStorage.getItem('ropdolgozat_token')) {
       try {
         const authRes = await fetch('/api/auth/check');
         const authData = await authRes.json();
@@ -1697,7 +1704,7 @@
     }
 
     if (quizHeaderUsername) {
-      quizHeaderUsername.textContent = `${data.participant.student_name}${data.participant.pc_number ? ' (' + data.participant.pc_number + '. gép)' : ''}`;
+      quizHeaderUsername.textContent = data.participant.student_name;
     }
 
     quizTitle.textContent = currentQuiz.title;

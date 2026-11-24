@@ -447,6 +447,28 @@ router.put('/admin/quizzes/:id', requireAdminAuth, (req, res) => {
   }
 });
 
+// Egyetlen kérdés lokális mentése egy meglévő feladatsorban (a többi kérdés validálása nélkül)
+router.put('/admin/quizzes/:id/questions/:questionId', requireAdminAuth, (req, res) => {
+  try {
+    const saved = quizRepo.saveSingleQuestion(req.params.id, {
+      ...req.body,
+      id: Number(req.params.questionId)
+    });
+    res.json({ success: true, question: saved });
+  } catch (err) {
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+  }
+});
+
+router.post('/admin/quizzes/:id/questions', requireAdminAuth, (req, res) => {
+  try {
+    const saved = quizRepo.saveSingleQuestion(req.params.id, req.body || {});
+    res.json({ success: true, question: saved });
+  } catch (err) {
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+  }
+});
+
 router.post('/admin/quizzes/:id/duplicate', requireAdminAuth, (req, res) => {
   try {
     const duplicated = quizRepo.duplicateQuiz(req.params.id, req.body.title || null);
