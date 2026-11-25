@@ -3002,21 +3002,22 @@
             <div class="q-text-label-row">
               <label class="form-label" style="display: inline-flex; align-items: center; gap: 5px;">
                 <span>Kérdés szövege:</span>
-                <span class="material-symbols-outlined help-tooltip-icon" title="Formázás (a kérdésre és a válaszokra is működik): **félkövér** (Ctrl+B), *dőlt* (Ctrl+I), __aláhúzott__ (Ctrl+U), \`kód\`, ^felső index^, ~alsó index~, Enter = sortörés.">help</span>
+                <span class="material-symbols-outlined help-tooltip-icon" title="Vizuális szövegformázás (a kérdésre és a válaszokra is működik): Félkövér (Ctrl+B), Dőlt (Ctrl+I), Aláhúzott (Ctrl+U), Kód, Felső/Alsó index, Formázás törlése, Visszavonás (Ctrl+Z).">help</span>
               </label>
               <div class="q-format-toolbar" role="toolbar" aria-label="Szövegformázás (kérdés és válaszok)">
-                <button type="button" class="q-fmt-btn" data-fmt="bold" title="Félkövér (**szöveg**, Ctrl+B)"><strong>B</strong></button>
-                <button type="button" class="q-fmt-btn" data-fmt="italic" title="Dőlt (*szöveg*, Ctrl+I)"><em>I</em></button>
-                <button type="button" class="q-fmt-btn" data-fmt="underline" title="Aláhúzott (__szöveg__, Ctrl+U)"><u>U</u></button>
+                <button type="button" class="q-fmt-btn" data-fmt="bold" aria-pressed="false" title="Félkövér (Ctrl+B)"><strong>B</strong></button>
+                <button type="button" class="q-fmt-btn" data-fmt="italic" aria-pressed="false" title="Dőlt (Ctrl+I)"><em>I</em></button>
+                <button type="button" class="q-fmt-btn" data-fmt="underline" aria-pressed="false" title="Aláhúzott (Ctrl+U)"><u>U</u></button>
                 <span class="q-fmt-sep" aria-hidden="true"></span>
-                <button type="button" class="q-fmt-btn" data-fmt="code" title="Kód / képlet (\`kód\`)">&lt;/&gt;</button>
-                <button type="button" class="q-fmt-btn" data-fmt="sup" title="Felső index (^szöveg^)">x<sup>2</sup></button>
-                <button type="button" class="q-fmt-btn" data-fmt="sub" title="Alsó index (~szöveg~)">x<sub>2</sub></button>
+                <button type="button" class="q-fmt-btn" data-fmt="code" aria-pressed="false" title="Kód / képlet">&lt;/&gt;</button>
+                <button type="button" class="q-fmt-btn" data-fmt="sup" aria-pressed="false" title="Felső index">x<sup>2</sup></button>
+                <button type="button" class="q-fmt-btn" data-fmt="sub" aria-pressed="false" title="Alsó index">x<sub>2</sub></button>
                 <span class="q-fmt-sep" aria-hidden="true"></span>
+                <button type="button" class="q-fmt-btn" data-fmt="clear" title="Formázás törlése">T<sub>x</sub></button>
                 <button type="button" class="q-fmt-btn" data-fmt="br" title="Sortörés beszúrása (Enter)">↵</button>
               </div>
             </div>
-            <textarea class="form-control q-text q-auto-textarea" rows="2" placeholder="pl. Melyik képlet számol összeget?">${escapeHtml(qText)}</textarea>
+            <div class="form-control q-rich-editor q-text" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="pl. Melyik képlet számol összeget?">${formatCode(qText)}</div>
           </div>
         </div>
 
@@ -3078,7 +3079,7 @@
                   <span class="q-opt-num">${i + 1}</span>
                   <span class="material-symbols-outlined q-opt-check">check</span>
                 </button>
-                <textarea class="form-control q-opt-input q-auto-textarea q-opt-${i}" rows="1" placeholder="${i + 1}. válaszlehetőség">${escapeHtml(optVal || '')}</textarea>
+                <div class="form-control q-rich-editor q-opt-input q-opt-${i}" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="${i + 1}. válaszlehetőség">${formatCode(optVal || '')}</div>
                 <button type="button" class="btn btn-secondary btn-remove-abcd-opt" title="Válaszlehetőség eltávolítása" style="padding: 6px 8px; font-size: 0.85rem; ${initialAbcdOptions.length > 2 ? '' : 'display: none;'}">
                   <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
                 </button>
@@ -3187,7 +3188,7 @@
         const btnDel = row.querySelector('.btn-remove-abcd-opt');
         if (toggle) toggle.dataset.optIndex = String(idx);
         if (numSpan) numSpan.textContent = String(idx + 1);
-        if (input) input.placeholder = `${idx + 1}. válaszlehetőség`;
+        if (input) input.setAttribute('data-placeholder', `${idx + 1}. válaszlehetőség`);
         if (btnDel) btnDel.style.display = rows.length > 2 ? 'inline-flex' : 'none';
       });
     }
@@ -3229,7 +3230,7 @@
             <span class="q-opt-num">${idx + 1}</span>
             <span class="material-symbols-outlined q-opt-check">check</span>
           </button>
-          <textarea class="form-control q-opt-input q-auto-textarea" rows="1" placeholder="${idx + 1}. válaszlehetőség"></textarea>
+          <div class="form-control q-rich-editor q-opt-input" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="${idx + 1}. válaszlehetőség"></div>
           <button type="button" class="btn btn-secondary btn-remove-abcd-opt" title="Válaszlehetőség eltávolítása" style="padding: 6px 8px; font-size: 0.85rem;">
             <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
           </button>
@@ -3387,121 +3388,342 @@
       }
     });
 
-    // Dinamikus magasságállítás (auto-resize) és szövegformázó eszköztár a kérdés- és válaszmezőkhöz
-    const autoResizeTextarea = (el) => {
-      if (!el || el.tagName !== 'TEXTAREA') return;
-      const maxH = el.classList.contains('q-text') ? 240 : 160;
-      el.style.height = 'auto';
-      const targetH = Math.min(el.scrollHeight + 2, maxH);
-      el.style.height = `${targetH}px`;
-      el.style.overflowY = (el.scrollHeight + 2 > maxH) ? 'auto' : 'hidden';
+    // Valódi WYSIWYG (contenteditable) szövegformázás, aktív gombállapot, natív Ctrl+Z/Ctrl+Y és tiszta beillesztés
+    const formatToolbar = item.querySelector('.q-format-toolbar');
+    let lastFocusedEditor = item.querySelector('.q-text');
+
+    const findAncestorTag = (node, tagNames, boundary) => {
+      let cur = node;
+      while (cur && cur !== boundary) {
+        if (cur.nodeType === 1 && tagNames.includes(cur.tagName.toUpperCase())) {
+          return cur;
+        }
+        cur = cur.parentNode;
+      }
+      return null;
     };
 
-    const FORMAT_SPECS = {
-      bold: { prefix: '**', suffix: '**' },
-      italic: { prefix: '*', suffix: '*' },
-      underline: { prefix: '__', suffix: '__' },
-      code: { prefix: '`', suffix: '`' },
-      sup: { prefix: '^', suffix: '^' },
-      sub: { prefix: '~', suffix: '~' }
+    // Ha a kurzor kijelölés nélkül egy szó belsejében áll, automatikusan kijelöli a teljes szót (Word-szerű működés)
+    const expandSelectionToWordIfCollapsed = (editor) => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false;
+      const range = sel.getRangeAt(0);
+      if (range.startContainer.nodeType !== 3) return false;
+      const text = range.startContainer.nodeValue || '';
+      const pos = range.startOffset;
+      const isWordChar = (ch) => Boolean(ch) && /[\p{L}\p{N}_]/u.test(ch);
+
+      // Csak akkor jelöljük ki a szót, ha a kurzor ténylegesen betű/szám közvetlen közelében áll
+      if (!isWordChar(text[pos]) && !isWordChar(text[pos - 1])) return false;
+
+      let start = pos;
+      let end = pos;
+      while (start > 0 && isWordChar(text[start - 1])) start--;
+      while (end < text.length && isWordChar(text[end])) end++;
+      if (end <= start) return false;
+
+      const wordRange = document.createRange();
+      wordRange.setStart(range.startContainer, start);
+      wordRange.setEnd(range.startContainer, end);
+      sel.removeAllRanges();
+      sel.addRange(wordRange);
+      return true;
     };
 
-    let lastFocusedFormatField = item.querySelector('.q-text');
+    // Megkeresi a kijelölésben vagy kurzornál lévő <code> elemet (akkor is, ha a kijelölés kívülről fogja közre)
+    const findSelectedCodeElement = (sel, editor) => {
+      if (!sel || sel.rangeCount === 0) return null;
+      const byAnchor = findAncestorTag(sel.anchorNode, ['CODE'], editor);
+      if (byAnchor) return byAnchor;
+      const byFocus = findAncestorTag(sel.focusNode, ['CODE'], editor);
+      if (byFocus) return byFocus;
+      if (!sel.isCollapsed) {
+        const range = sel.getRangeAt(0);
+        const codes = editor.querySelectorAll('code');
+        for (const c of codes) {
+          try {
+            if (range.intersectsNode(c)) return c;
+          } catch { }
+        }
+      }
+      return null;
+    };
 
-    const applyFormatToField = (field, fmtKey) => {
-      if (!field || field.tagName !== 'TEXTAREA') return;
-      const start = field.selectionStart ?? field.value.length;
-      const end = field.selectionEnd ?? field.value.length;
-      const val = field.value;
+    const getActiveCardEditor = () => {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const node = sel.anchorNode;
+        const el = node && node.nodeType === 1 ? node : (node ? node.parentElement : null);
+        const ed = el ? el.closest('.q-rich-editor') : null;
+        if (ed && item.contains(ed)) return ed;
+      }
+      return null;
+    };
 
-      if (fmtKey === 'br') {
-        field.value = val.slice(0, start) + '\n' + val.slice(end);
-        const caret = start + 1;
-        field.focus();
-        field.setSelectionRange(caret, caret);
-        autoResizeTextarea(field);
+    const setToolbarBtnActive = (fmtKey, isActive) => {
+      if (!formatToolbar) return;
+      const btn = formatToolbar.querySelector(`.q-fmt-btn[data-fmt="${fmtKey}"]`);
+      if (!btn) return;
+      btn.classList.toggle('is-active', Boolean(isActive));
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    };
+
+    const updateToolbarState = () => {
+      if (!formatToolbar) return;
+      const activeEd = getActiveCardEditor();
+      if (!activeEd) {
+        ['bold', 'italic', 'underline', 'code', 'sup', 'sub'].forEach(k => setToolbarBtnActive(k, false));
+        return;
+      }
+      const sel = window.getSelection();
+      const anchor = sel ? sel.anchorNode : null;
+
+      let isBold = false;
+      let isItalic = false;
+      let isUnderline = false;
+      let isSup = false;
+      let isSub = false;
+      try {
+        isBold = document.queryCommandState('bold') || Boolean(findAncestorTag(anchor, ['STRONG', 'B'], activeEd));
+        isItalic = document.queryCommandState('italic') || Boolean(findAncestorTag(anchor, ['EM', 'I'], activeEd));
+        isUnderline = document.queryCommandState('underline') || Boolean(findAncestorTag(anchor, ['U'], activeEd));
+        isSup = document.queryCommandState('superscript') || Boolean(findAncestorTag(anchor, ['SUP'], activeEd));
+        isSub = document.queryCommandState('subscript') || Boolean(findAncestorTag(anchor, ['SUB'], activeEd));
+      } catch { }
+      const isCode = Boolean(findSelectedCodeElement(sel, activeEd));
+
+      setToolbarBtnActive('bold', isBold);
+      setToolbarBtnActive('italic', isItalic);
+      setToolbarBtnActive('underline', isUnderline);
+      setToolbarBtnActive('code', isCode);
+      setToolbarBtnActive('sup', isSup);
+      setToolbarBtnActive('sub', isSub);
+    };
+
+    const unwrapElementToText = (el, sel) => {
+      if (!el || !el.parentNode) return null;
+      const plain = el.textContent || '';
+      const textNode = document.createTextNode(plain);
+      el.parentNode.replaceChild(textNode, el);
+      if (sel) {
+        const range = document.createRange();
+        range.selectNodeContents(textNode);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      return textNode;
+    };
+
+    const toggleInlineCode = (editor) => {
+      editor.focus();
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+
+      const existingCode = findSelectedCodeElement(sel, editor);
+      if (existingCode) {
+        // Tiszta DOM-kibontás: elkerüli a Chrome insertText miatti szürke <span style="background-color"> maradékot
+        unwrapElementToText(existingCode, sel);
         return;
       }
 
-      const spec = FORMAT_SPECS[fmtKey];
-      if (!spec) return;
-      const { prefix, suffix } = spec;
-      const selected = val.slice(start, end);
-
-      // Ha a kijelölés már pontosan az adott jelöléssel van körbevéve, levesszük (toggle)
-      if (selected && selected.startsWith(prefix) && selected.endsWith(suffix) && selected.length >= prefix.length + suffix.length) {
-        const unwrapped = selected.slice(prefix.length, selected.length - suffix.length);
-        field.value = val.slice(0, start) + unwrapped + val.slice(end);
-        field.focus();
-        field.setSelectionRange(start, start + unwrapped.length);
-      } else if (
-        start >= prefix.length &&
-        val.slice(start - prefix.length, start) === prefix &&
-        val.slice(end, end + suffix.length) === suffix
-      ) {
-        field.value = val.slice(0, start - prefix.length) + selected + val.slice(end + suffix.length);
-        field.focus();
-        field.setSelectionRange(start - prefix.length, end - prefix.length);
+      expandSelectionToWordIfCollapsed(editor);
+      const selectedText = sel.toString();
+      if (selectedText) {
+        document.execCommand(
+          'insertHTML',
+          false,
+          `<code class="inline-code" data-just-inserted="1">${escapeHtml(selectedText)}</code>`
+        );
+        const inserted = editor.querySelector('code[data-just-inserted="1"]');
+        if (inserted) {
+          inserted.removeAttribute('data-just-inserted');
+          const r = document.createRange();
+          r.selectNodeContents(inserted);
+          sel.removeAllRanges();
+          sel.addRange(r);
+        }
       } else {
-        field.value = val.slice(0, start) + prefix + selected + suffix + val.slice(end);
-        field.focus();
-        if (selected) {
-          field.setSelectionRange(start + prefix.length, end + prefix.length);
-        } else {
-          const caret = start + prefix.length;
-          field.setSelectionRange(caret, caret);
+        document.execCommand('insertHTML', false, '<code class="inline-code" data-just-inserted="1">&#8203;</code>');
+        const inserted = editor.querySelector('code[data-just-inserted="1"]');
+        if (inserted) {
+          inserted.removeAttribute('data-just-inserted');
+          if (inserted.firstChild) {
+            const r = document.createRange();
+            r.setStart(inserted.firstChild, inserted.firstChild.length);
+            r.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(r);
+          }
         }
       }
-      autoResizeTextarea(field);
+    };
+
+    const clearRichFormatting = (editor) => {
+      editor.focus();
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+
+      // Ha nincs kijelölés, előbb a kurzor alatti <code>-ot vagy a teljes aktuális szót jelöljük ki
+      if (sel.isCollapsed) {
+        const codeUnderCaret = findSelectedCodeElement(sel, editor);
+        if (codeUnderCaret) {
+          const r = document.createRange();
+          r.selectNode(codeUnderCaret);
+          sel.removeAllRanges();
+          sel.addRange(r);
+        } else {
+          expandSelectionToWordIfCollapsed(editor);
+        }
+      }
+
+      if (!sel.isCollapsed) {
+        const range = sel.getRangeAt(0);
+        // 1. A kijelölést érintő összes <code> és böngésző-generált <span style> kibontása
+        const styledNodes = Array.from(editor.querySelectorAll('code, span[style]'));
+        for (const node of styledNodes) {
+          try {
+            if (range.intersectsNode(node)) {
+              const parent = node.parentNode;
+              if (parent) {
+                while (node.firstChild) parent.insertBefore(node.firstChild, node);
+                parent.removeChild(node);
+              }
+            }
+          } catch { }
+        }
+        // 2. Natív formázások (b/strong, i/em, u, sup, sub) eltávolítása
+        document.execCommand('removeFormat', false, null);
+        try {
+          if (document.queryCommandState('superscript')) document.execCommand('superscript', false, null);
+          if (document.queryCommandState('subscript')) document.execCommand('subscript', false, null);
+        } catch { }
+      } else {
+        document.execCommand('removeFormat', false, null);
+      }
+    };
+
+    const applyWysiwygFormat = (editor, fmtKey) => {
+      if (!editor) return;
+      editor.focus();
+
+      if (fmtKey === 'bold' || fmtKey === 'italic' || fmtKey === 'underline') {
+        expandSelectionToWordIfCollapsed(editor);
+        document.execCommand(fmtKey, false, null);
+      } else if (fmtKey === 'sup') {
+        expandSelectionToWordIfCollapsed(editor);
+        try {
+          if (document.queryCommandState('subscript')) {
+            document.execCommand('subscript', false, null);
+          }
+        } catch { }
+        document.execCommand('superscript', false, null);
+      } else if (fmtKey === 'sub') {
+        expandSelectionToWordIfCollapsed(editor);
+        try {
+          if (document.queryCommandState('superscript')) {
+            document.execCommand('superscript', false, null);
+          }
+        } catch { }
+        document.execCommand('subscript', false, null);
+      } else if (fmtKey === 'code') {
+        toggleInlineCode(editor);
+      } else if (fmtKey === 'clear') {
+        clearRichFormatting(editor);
+      } else if (fmtKey === 'br') {
+        if (!document.execCommand('insertLineBreak', false, null)) {
+          document.execCommand('insertHTML', false, '<br>');
+        }
+      }
+      updateToolbarState();
     };
 
     item.addEventListener('focusin', (e) => {
-      const ta = e.target.closest('.q-text, .q-opt-input');
-      if (ta) lastFocusedFormatField = ta;
-    });
-
-    item.addEventListener('input', (e) => {
-      const ta = e.target.closest('.q-auto-textarea');
-      if (ta) autoResizeTextarea(ta);
-    });
-
-    item.addEventListener('keydown', (e) => {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-      const ta = e.target.closest('.q-text, .q-opt-input');
-      if (!ta) return;
-      const key = e.key.toLowerCase();
-      if (key === 'b') {
-        e.preventDefault();
-        applyFormatToField(ta, 'bold');
-      } else if (key === 'i') {
-        e.preventDefault();
-        applyFormatToField(ta, 'italic');
-      } else if (key === 'u') {
-        e.preventDefault();
-        applyFormatToField(ta, 'underline');
+      const ed = e.target.closest('.q-rich-editor');
+      if (ed) {
+        lastFocusedEditor = ed;
+        updateToolbarState();
       }
     });
 
-    const formatToolbar = item.querySelector('.q-format-toolbar');
+    item.addEventListener('focusout', () => {
+      setTimeout(() => {
+        if (!item.contains(document.activeElement)) {
+          updateToolbarState();
+        }
+      }, 0);
+    });
+
+    item.addEventListener('keyup', (e) => {
+      if (e.target.closest('.q-rich-editor')) updateToolbarState();
+    });
+
+    item.addEventListener('mouseup', (e) => {
+      if (e.target.closest('.q-rich-editor')) updateToolbarState();
+    });
+
+    // Tiszta beillesztés (Word / web stílusok eldobása, Ctrl+Z-vel visszavonható módon)
+    item.addEventListener('paste', (e) => {
+      const ed = e.target.closest('.q-rich-editor');
+      if (!ed) return;
+      e.preventDefault();
+      const plain = (e.clipboardData || window.clipboardData)?.getData('text/plain') || '';
+      document.execCommand('insertText', false, plain);
+      updateToolbarState();
+    });
+
+    // Üres állapot normalizálása, hogy a placeholder szépen megjelenjen
+    item.addEventListener('input', (e) => {
+      const ed = e.target.closest('.q-rich-editor');
+      if (!ed) return;
+      if (ed.innerHTML === '<br>' || ed.innerHTML === '<div><br></div>') {
+        ed.innerHTML = '';
+      }
+      updateToolbarState();
+    });
+
+    // Ctrl+B / Ctrl+I / Ctrl+U gyorsbillentyűk natív undo-val és aktív gombállapottal
+    item.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const ed = e.target.closest('.q-rich-editor');
+      if (!ed) return;
+      const key = e.key.toLowerCase();
+      if (key === 'b') {
+        e.preventDefault();
+        applyWysiwygFormat(ed, 'bold');
+      } else if (key === 'i') {
+        e.preventDefault();
+        applyWysiwygFormat(ed, 'italic');
+      } else if (key === 'u') {
+        e.preventDefault();
+        applyWysiwygFormat(ed, 'underline');
+      }
+    });
+
     if (formatToolbar) {
       formatToolbar.addEventListener('mousedown', (e) => {
         if (e.target.closest('.q-fmt-btn')) {
-          e.preventDefault(); // Megőrzi a szövegkijelölést és fókuszt a textarea-ban
+          e.preventDefault(); // Megőrzi a szövegkijelölést és a fókuszt
         }
       });
       formatToolbar.addEventListener('click', (e) => {
         const btn = e.target.closest('.q-fmt-btn');
         if (!btn) return;
-        const targetField = (lastFocusedFormatField && item.contains(lastFocusedFormatField))
-          ? lastFocusedFormatField
-          : item.querySelector('.q-text');
-        applyFormatToField(targetField, btn.dataset.fmt);
+        const targetEd = getActiveCardEditor()
+          || (lastFocusedEditor && item.contains(lastFocusedEditor) ? lastFocusedEditor : item.querySelector('.q-text'));
+        applyWysiwygFormat(targetEd, btn.dataset.fmt);
       });
     }
 
-    requestAnimationFrame(() => {
-      item.querySelectorAll('.q-auto-textarea').forEach(autoResizeTextarea);
-    });
+    const onSelectionChange = () => {
+      if (!item.isConnected) {
+        document.removeEventListener('selectionchange', onSelectionChange);
+        return;
+      }
+      if (getActiveCardEditor()) {
+        updateToolbarState();
+      }
+    };
+    document.addEventListener('selectionchange', onSelectionChange);
 
     // In-line beszúró gomb (ez az elem mögé = a következő elé szúr be)
     item.querySelector('.q-insert-btn').addEventListener('click', () => {
@@ -3561,7 +3783,7 @@
     const items = Array.from(editorQuestionsList.querySelectorAll('.q-editor-item'));
     const qNum = Math.max(1, items.indexOf(cardEl) + 1);
     const type = cardEl.querySelector('.q-type-select').value;
-    const text = cardEl.querySelector('.q-text').value.trim();
+    const text = serializeRichEditorToMarkdown(cardEl.querySelector('.q-text'));
     const points = parseFloat(cardEl.querySelector('.q-points').value) || 1.0;
     const explanation = cardEl.querySelector('.q-explanation').value.trim();
 
@@ -3582,13 +3804,13 @@
       const selRow = selectedToggle.closest('.q-opt-row');
       const selIdx = parseInt(selectedToggle.dataset.optIndex, 10) || 0;
       const selInput = selRow ? selRow.querySelector('.q-opt-input') : null;
-      const correctVal = selInput ? selInput.value.trim() : '';
+      const correctVal = selInput ? serializeRichEditorToMarkdown(selInput) : '';
       if (!correctVal) {
         showAdminAlert('⚠️ Üres a helyes válasz', `A(z) ${qNum}. kérdésnél a helyesnek jelölt (${selIdx + 1}.) válaszlehetőség szövege nem lehet üres!`);
         return;
       }
       const filledOpts = Array.from(cardEl.querySelectorAll('.q-opt-input'))
-        .map(inp => inp.value.trim())
+        .map(inp => serializeRichEditorToMarkdown(inp))
         .filter(Boolean);
       if (filledOpts.length < 2) {
         showAdminAlert('⚠️ Kevés válaszlehetőség', `A(z) ${qNum}. feleletválasztós kérdésnél legalább 2 válaszlehetőség kitöltése kötelező!`);
@@ -3690,7 +3912,7 @@
       const b = items[i];
       const qNum = i + 1;
       const type = b.querySelector('.q-type-select').value;
-      const text = b.querySelector('.q-text').value.trim();
+      const text = serializeRichEditorToMarkdown(b.querySelector('.q-text'));
       const points = parseFloat(b.querySelector('.q-points').value) || 1.0;
       const explanation = b.querySelector('.q-explanation').value.trim();
 
@@ -3712,7 +3934,7 @@
         const selRow = selectedToggle.closest('.q-opt-row');
         const selIdx = parseInt(selectedToggle.dataset.optIndex, 10) || 0;
         const selInput = selRow ? selRow.querySelector('.q-opt-input') : null;
-        const correctVal = selInput ? selInput.value.trim() : '';
+        const correctVal = selInput ? serializeRichEditorToMarkdown(selInput) : '';
 
         if (!correctVal) {
           showAdminAlert('⚠️ Üres a helyes válasz', `A(z) ${qNum}. kérdésnél a helyesnek jelölt (${selIdx + 1}.) válaszlehetőség szövege nem lehet üres!`);
@@ -3720,7 +3942,7 @@
         }
 
         const filledOpts = Array.from(b.querySelectorAll('.q-opt-input'))
-          .map(inp => inp.value.trim())
+          .map(inp => serializeRichEditorToMarkdown(inp))
           .filter(Boolean);
 
         if (filledOpts.length < 2) {

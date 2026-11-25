@@ -66,6 +66,92 @@ function stripFormatting(text) {
 }
 
 /**
+ * Kontrollált WYSIWYG (contenteditable) DOM-fa szerializálása a rendszer
+ * XSS-biztos, kompakt jelölésébe (**félkövér**, *dőlt*, __aláhúzott__, `kód`, ^felső^, ~alsó~, \n).
+ */
+function serializeRichEditorToMarkdown(rootEl) {
+  if (!rootEl) return '';
+  if (!rootEl.isContentEditable && typeof rootEl.value === 'string') {
+    return rootEl.value.trim();
+  }
+
+  function wrapLines(text, prefix, suffix) {
+    if (!text) return '';
+    return text
+      .split('\n')
+      .map((line) => {
+        const m = line.match(/^(\s*)(.*?)(\s*)$/);
+        if (!m || !m[2]) return line;
+        return `${m[1]}${prefix}${m[2]}${suffix}${m[3]}`;
+      })
+      .join('\n');
+  }
+
+  function walk(node, inCode = false) {
+    if (node.nodeType === 3) {
+      return (node.nodeValue || '').replace(/\u00A0/g, ' ').replace(/\u200B/g, '');
+    }
+    if (node.nodeType !== 1) return '';
+
+    const tag = node.tagName.toUpperCase();
+    if (tag === 'BR') return '\n';
+
+    const isBlock = tag === 'DIV' || tag === 'P';
+    const nextInCode = inCode || tag === 'CODE';
+
+    let inner = '';
+    const children = Array.from(node.childNodes);
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      // A böngészők gyakran tesznek egy záró <br>-t egy blokk/editor végére, ezt nem duplázzuk sortöréssé
+      if (
+        child.nodeType === 1 &&
+        child.tagName.toUpperCase() === 'BR' &&
+        i === children.length - 1 &&
+        (isBlock || node === rootEl)
+      ) {
+        continue;
+      }
+      const childIsBlock = child.nodeType === 1 && (child.tagName.toUpperCase() === 'DIV' || child.tagName.toUpperCase() === 'P');
+      if (childIsBlock && inner && !inner.endsWith('\n')) {
+        inner += '\n';
+      }
+      inner += walk(child, nextInCode);
+      if (childIsBlock && i < children.length - 1 && !inner.endsWith('\n')) {
+        inner += '\n';
+      }
+    }
+
+    if (tag === 'CODE') {
+      const cleanCode = inner.replace(/`/g, '').replace(/\n/g, ' ');
+      return cleanCode ? `\`${cleanCode}\`` : '';
+    }
+    if (inCode) return inner;
+
+    let res = inner;
+    const style = node.style || {};
+    const isBold = tag === 'STRONG' || tag === 'B' || (style.fontWeight && (style.fontWeight === 'bold' || parseInt(style.fontWeight, 10) >= 600));
+    const isItalic = tag === 'EM' || tag === 'I' || style.fontStyle === 'italic';
+    const isUnderline = tag === 'U' || (style.textDecoration && style.textDecoration.includes('underline')) || (style.textDecorationLine && style.textDecorationLine.includes('underline'));
+    const isSup = tag === 'SUP' || style.verticalAlign === 'super';
+    const isSub = tag === 'SUB' || style.verticalAlign === 'sub';
+
+    if (isSup) res = wrapLines(res, '^', '^');
+    if (isSub) res = wrapLines(res, '~', '~');
+    if (isUnderline) res = wrapLines(res, '__', '__');
+    if (isItalic) res = wrapLines(res, '*', '*');
+    if (isBold) res = wrapLines(res, '**', '**');
+
+    return res;
+  }
+
+  return walk(rootEl)
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
  * Másodpercek formázása PP:MM (MM:SS) alakban
  */
 function formatTime(totalSeconds) {

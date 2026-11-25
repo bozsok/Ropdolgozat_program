@@ -11,13 +11,16 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 Célzott hibajavítások, új szerkesztői szövegformázás és UX-finomítások a napi tantermi munka gyorsításához, SQLite-sémamódosítás nélkül (`13700`).
 
 #### Hozzáadva (Added)
-* **Szövegformázási lehetőségek és dinamikus magasságú beviteli mezők a Tesztszerkesztőben (`public/js/utils.js`, `public/js/admin.js`, `public/js/student.js`, `public/css/style.css`):**
+* **Valódi WYSIWYG szövegformázás és dinamikus magasságú beviteli mezők a Tesztszerkesztőben (`public/js/utils.js`, `public/js/admin.js`, `public/js/student.js`, `public/css/style.css`):**
   - **Fájlok:** [`public/js/utils.js`](file:///d:/dev/Röpdolgozat%20program/public/js/utils.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
-  - A központi, XSS-biztos `formatCode()` kibővült a **félkövér** (`**szöveg**`), *dőlt* (`*szöveg*`), aláhúzott (`__szöveg__`), `kód` (`` `kód` ``), felső index (`^szöveg^`), alsó index (`~szöveg~`) és sortörés (`\n` → `<br>`) támogatásával, védett inline kódblokkokkal és új `stripFormatting()` segédfüggvénnyel.
-  - A Tesztszerkesztőben a **Kérdés szövege** (`.q-text`, alapból 2 soros) és a **Válaszlehetőségek** (`.q-opt-input`, alapból 1 soros) automatikusan méreteződő (`auto-resize`) `<textarea>` mezők lettek.
-  - Minden kérdéskártyán kompakt formázó eszköztár (`B`, `I`, `U`, `</>`,`x²`, `x₂`, `↵`) és gyorsbillentyű-támogatás (`Ctrl+B`, `Ctrl+I`, `Ctrl+U`) segíti a kérdések és válaszok formázását a kijelölés elvesztése nélkül; a formázott szövegek a diák felületen és az összegző kártyán is helyesen jelennek meg.
+  - A Tesztszerkesztőben a **Kérdés szövege** (`.q-text`, min. 2 soros) és a **Válaszlehetőségek** (`.q-opt-input`, min. 1 soros) kontrollált WYSIWYG (`contenteditable`) mezők lettek, amelyek automatikusan nőnek a szöveg magasságával, és nyers jelölések helyett azonnal vizuálisan jelenítik meg a formázást.
+  - Minden kérdéskártyán kompakt formázó eszköztár (`B`, `I`, `U`, `</>`, `x²`, `x₂`, `Tₓ`, `↵`) működik aktív (benyomva maradó) gombállapottal, gyorsbillentyűkkel (`Ctrl+B`, `Ctrl+I`, `Ctrl+U`), natív `Ctrl+Z` / `Ctrl+Y` visszavonással, Word-szerű szókijelöléssel (elég belekattintani a szóba), kölcsönösen kizáró felső/alsó indexszel, tiszta beillesztéssel (`paste` stílus-szűrés) és egykattintásos formázástörléssel (`Tₓ`).
+  - A központi, XSS-biztos `formatCode()`, `stripFormatting()` és `serializeRichEditorToMarkdown()` függvények biztosítják a tiszta DOM ↔ kompakt jelölés átalakítást (**félkövér**, *dőlt*, aláhúzott, `kód`, felső/alsó index, sortörés) a diák felületen és az összegző kártyán is, adatbázis-sémamódosítás nélkül.
 
 #### Javítva (Fixed)
+* **Statikus `Nunito Sans` betűtípus félkövér megjelenítésének javítása (`public/css/style.css`):**
+  - **Fájl:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A helyi, statikus 400-as súlyú `Nunito Sans` `@font-face` szabályokban a `font-weight: 400 800;` érték `font-weight: 400;`-ra lett javítva, így a böngésző immár megfelelően kirajzolja a félkövér (`<b>` / `<strong>`) szövegeket a Tesztszerkesztőben és a teljes felületen.
 * **Socrative PDF-importnál kimaradó `r` betűk és írásjelek javítása (`src/services/socrativePdfParser.js`):**
   - **Fájl:** [`src/services/socrativePdfParser.js`](file:///d:/dev/Röpdolgozat%20program/src/services/socrativePdfParser.js)
   - A Socrative PDF-ekben használt `Inter` betűtípus OpenType kontextuális (`calt`/`case`) glifáihoz a PDF-exportáló `<0000>` (`ToUnicode`) értéket rendel, ami miatt bizonyos betűkapcsolatokban (pl. `interneten`, `pendrive`, `történik`, `True`) kiesett az `r` betű és néhány írásjel/operátor.
