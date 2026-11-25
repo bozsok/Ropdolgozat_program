@@ -1633,35 +1633,86 @@
     startMode.addEventListener('change', syncStartModeConstraints);
   }
 
+  function isDevelopmentalSubjectSelect(subjectSelectEl) {
+    if (!subjectSelectEl || subjectSelectEl.selectedIndex < 0) return false;
+    const opt = subjectSelectEl.options[subjectSelectEl.selectedIndex];
+    return opt ? /fejlesztő/i.test(opt.textContent || '') : false;
+  }
+
+  function populateGradeSelectForSubject(gradeSelectEl, subjectSelectEl, preferredGrade = '') {
+    if (!gradeSelectEl) return;
+    const isDev = isDevelopmentalSubjectSelect(subjectSelectEl);
+    const minGrade = isDev ? 1 : 3;
+    const maxGrade = 8;
+    const rawPreferred = String(preferredGrade || gradeSelectEl.value || '').replace(/\D/g, '');
+    const prefNum = parseInt(rawPreferred, 10);
+
+    gradeSelectEl.innerHTML = '';
+    for (let g = minGrade; g <= maxGrade; g++) {
+      const opt = document.createElement('option');
+      opt.value = String(g);
+      opt.textContent = `${g}. évfolyam`;
+      gradeSelectEl.appendChild(opt);
+    }
+
+    if (!Number.isNaN(prefNum) && prefNum >= minGrade && prefNum <= maxGrade) {
+      gradeSelectEl.value = String(prefNum);
+    } else {
+      gradeSelectEl.value = String(minGrade);
+    }
+  }
+
   btnOpenStartModal.addEventListener('click', async () => {
+    populateGradeSelectForSubject(startGradeLevel, startSubjectId, startGradeLevel ? startGradeLevel.value : '');
     await updateStartSessionQuizOptions(true);
     syncStartQuizTimeLimit();
     initStartModalFeedbackDefault();
     openModal('modal-start-session');
   });
   btnOpenStartModalAlt.addEventListener('click', async () => {
+    populateGradeSelectForSubject(startGradeLevel, startSubjectId, startGradeLevel ? startGradeLevel.value : '');
     await updateStartSessionQuizOptions(true);
     syncStartQuizTimeLimit();
     initStartModalFeedbackDefault();
     openModal('modal-start-session');
   });
 
+  if (startSubjectId) {
+    startSubjectId.addEventListener('change', () => {
+      populateGradeSelectForSubject(startGradeLevel, startSubjectId, startGradeLevel ? startGradeLevel.value : '');
+      updateStartSessionQuizOptions(false);
+    });
+  }
+
   if (startQuizId) {
     startQuizId.addEventListener('change', () => {
       syncStartQuizTimeLimit();
-      const selOpt = startQuizId.options[startQuizId.selectedIndex];
-      if (selOpt && selOpt.dataset && selOpt.dataset.grade && startGradeLevel) {
-        const optGrade = selOpt.dataset.grade.trim();
-        if (optGrade && startGradeLevel.value.trim() !== optGrade) {
-          startGradeLevel.value = optGrade;
+      // A tanár által kiválasztott cél-évfolyamot NEM írjuk felül (pl. 7.-es diáknak 3. évfolyamos fejlesztő teszt is indítható)
+      if (startGradeLevel && !startGradeLevel.value) {
+        const selOpt = startQuizId.options[startQuizId.selectedIndex];
+        if (selOpt && selOpt.dataset && selOpt.dataset.grade) {
+          populateGradeSelectForSubject(startGradeLevel, startSubjectId, selOpt.dataset.grade.trim());
         }
       }
     });
   }
 
   if (startGradeLevel) {
-    startGradeLevel.addEventListener('input', () => {
+    startGradeLevel.addEventListener('change', () => {
       updateStartSessionQuizOptions(false);
+    });
+  }
+
+  if (editSubjectId) {
+    editSubjectId.addEventListener('change', () => {
+      populateGradeSelectForSubject(editGradeLevel, editSubjectId, editGradeLevel ? editGradeLevel.value : '');
+    });
+  }
+
+  if (importPdfSubjectId) {
+    importPdfSubjectId.addEventListener('change', () => {
+      const isDev = isDevelopmentalSubjectSelect(importPdfSubjectId);
+      populateGradeSelectForSubject(importPdfGrade, importPdfSubjectId, importPdfGrade ? importPdfGrade.value : detectGradeFromCurrentFolder(isDev));
     });
   }
 
@@ -1794,20 +1845,18 @@
 
       const allQuizzes = Array.isArray(cachedQuizzesForStart) ? cachedQuizzesForStart : [];
       const currentSelectedId = startQuizId.value ? parseInt(startQuizId.value, 10) : null;
+      const selectedSubjectId = startSubjectId && startSubjectId.value ? parseInt(startSubjectId.value, 10) : null;
+      const selectedSubjectLabel = (startSubjectId && startSubjectId.selectedIndex >= 0)
+        ? startSubjectId.options[startSubjectId.selectedIndex].textContent
+        : '';
       const rawGradeFilter = startGradeLevel ? startGradeLevel.value.trim() : '';
       const numGradeFilter = rawGradeFilter.replace(/\D/g, '');
+      const btnConfirmStart = document.getElementById('btn-confirm-start');
 
-      // Szűrés évfolyamra, ha a tanár beírt egy évfolyamot
-      let matchingQuizzes = allQuizzes;
-      if (numGradeFilter) {
-        const filtered = allQuizzes.filter(q => {
-          const qGradeNum = String(q.subject_grade || '').replace(/\D/g, '');
-          return qGradeNum === numGradeFilter;
-        });
-        if (filtered.length > 0) {
-          matchingQuizzes = filtered;
-        }
-      }
+      // 1. Szigorú szűrés a kiválasztott tantárgyra (subject_id)
+      const matchingQuizzes = selectedSubjectId
+        ? allQuizzes.filter(q => Number(q.subject_id) === selectedSubjectId)
+        : allQuizzes;
 
       startQuizId.innerHTML = '';
 
@@ -1816,37 +1865,50 @@
         emptyOpt.value = '';
         emptyOpt.disabled = true;
         emptyOpt.selected = true;
-        emptyOpt.textContent = 'Nincs elérhető teszt';
+        emptyOpt.textContent = selectedSubjectLabel
+          ? `Nincs elérhető teszt (${selectedSubjectLabel})`
+          : 'Nincs elérhető teszt';
         startQuizId.appendChild(emptyOpt);
+        if (btnConfirmStart) btnConfirmStart.disabled = true;
         syncStartQuizTimeLimit();
         return;
       }
 
-      // Kvízek csoportosítása évfolyamok szerint
+      if (btnConfirmStart) btnConfirmStart.disabled = false;
+
+      // 2. Kvízek csoportosítása évfolyamok szerint (a tantárgy összes évfolyama választható marad,
+      // de a kiválasztott cél-évfolyam csoportja kiemelve legfelülre kerül)
       const gradeGroups = {};
       matchingQuizzes.forEach(q => {
-        const gradeKey = q.subject_grade ? `${q.subject_grade}. évfolyam` : 'Egyéb évfolyam';
-        if (!gradeGroups[gradeKey]) gradeGroups[gradeKey] = [];
-        gradeGroups[gradeKey].push(q);
+        const qGradeNum = String(q.subject_grade || '').replace(/\D/g, '');
+        const gradeKey = qGradeNum ? `${qGradeNum}. évfolyam` : 'Egyéb évfolyam';
+        if (!gradeGroups[gradeKey]) gradeGroups[gradeKey] = { num: qGradeNum ? parseInt(qGradeNum, 10) : 999, items: [] };
+        gradeGroups[gradeKey].items.push(q);
       });
 
-      // Évfolyam kulcsok rendezése növekvő sorrendbe
+      const targetGradeNum = numGradeFilter ? parseInt(numGradeFilter, 10) : null;
       const sortedGradeKeys = Object.keys(gradeGroups).sort((a, b) => {
-        const numA = parseInt(a.replace(/\D/g, ''), 10) || 999;
-        const numB = parseInt(b.replace(/\D/g, ''), 10) || 999;
+        const numA = gradeGroups[a].num;
+        const numB = gradeGroups[b].num;
+        if (targetGradeNum !== null) {
+          if (numA === targetGradeNum && numB !== targetGradeNum) return -1;
+          if (numB === targetGradeNum && numA !== targetGradeNum) return 1;
+        }
         return numA - numB;
       });
 
       let foundPreviousSelection = false;
 
       sortedGradeKeys.forEach(gradeKey => {
+        const groupData = gradeGroups[gradeKey];
+        const isPreferredGroup = targetGradeNum !== null && groupData.num === targetGradeNum;
         const groupEl = document.createElement('optgroup');
-        groupEl.label = `▼ ${gradeKey}`;
+        groupEl.label = isPreferredGroup ? `★ ${gradeKey} (kiválasztott évfolyam)` : `▼ ${gradeKey}`;
 
         // Csoporton belül cím szerint rendezve
-        gradeGroups[gradeKey].sort((a, b) => (a.title || '').localeCompare(b.title || '', 'hu'));
+        groupData.items.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'hu'));
 
-        gradeGroups[gradeKey].forEach(q => {
+        groupData.items.forEach(q => {
           const opt = document.createElement('option');
           opt.value = q.id;
           opt.dataset.timeLimit = (q.default_time_limit_min !== null && q.default_time_limit_min !== undefined) ? q.default_time_limit_min : 0;
@@ -2743,7 +2805,7 @@
       // Új teszt
       editQuizId.value = '';
       editQuizTitle.value = '';
-      editGradeLevel.value = '6';
+      populateGradeSelectForSubject(editGradeLevel, editSubjectId, '3');
       editTimeLimit.value = '10';
       editorQuestionsList.innerHTML = '';
       await loadFolderSelectOptions(currentFolderId);
@@ -2763,7 +2825,7 @@
       editQuizId.value = quiz.id;
       editQuizTitle.value = quiz.title;
       editSubjectId.value = quiz.subject_id;
-      editGradeLevel.value = quiz.subject_grade;
+      populateGradeSelectForSubject(editGradeLevel, editSubjectId, quiz.subject_grade);
       editTimeLimit.value = quiz.default_time_limit_min;
       await loadFolderSelectOptions(quiz.folder_id);
       if (editQuizFolderId) {
@@ -4422,13 +4484,16 @@
   // Socrative PDF Teszt Importálása Kezelő
   // ==========================================================================
   /**
-   * Évfolyam (3–8) kiolvasása az aktuális mappa útvonalából (belülről kifelé haladva)
+   * Évfolyam (Fejlesztő foglalkozásnál 1–8, egyébként 3–8) kiolvasása az aktuális mappa útvonalából
    */
-  function detectGradeFromCurrentFolder() {
+  function detectGradeFromCurrentFolder(allowLowerGrades = false) {
+    const defaultGrade = allowLowerGrades ? '1' : '3';
     if (!Array.isArray(currentBreadcrumbs) || currentBreadcrumbs.length === 0) {
-      return '3';
+      return defaultGrade;
     }
-    const gradeRegex = /(?:^|[^\d])([3-8])\s*(?:\.\s*(?:évfolyam|évf\.?|osztály|oszt\.?|o\.?)|\s+(?:évfolyam|évf\.?|osztály|oszt\.?))(?:\s|$|[^a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ])/i;
+    const gradeRegex = allowLowerGrades
+      ? /(?:^|[^\d])([1-8])\s*(?:\.\s*(?:évfolyam|évf\.?|osztály|oszt\.?|o\.?)|\s+(?:évfolyam|évf\.?|osztály|oszt\.?))(?:\s|$|[^a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ])/i
+      : /(?:^|[^\d])([3-8])\s*(?:\.\s*(?:évfolyam|évf\.?|osztály|oszt\.?|o\.?)|\s+(?:évfolyam|évf\.?|osztály|oszt\.?))(?:\s|$|[^a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ])/i;
     for (let i = currentBreadcrumbs.length - 1; i >= 0; i--) {
       const folderName = String(currentBreadcrumbs[i] && currentBreadcrumbs[i].name || '');
       const match = folderName.match(gradeRegex);
@@ -4436,7 +4501,7 @@
         return match[1];
       }
     }
-    return '3';
+    return defaultGrade;
   }
 
   function resetQuizPdfImportModal() {
@@ -4452,7 +4517,10 @@
       btnSubmitImportQuizPdf.disabled = true;
       btnSubmitImportQuizPdf.innerHTML = '<span class="material-symbols-outlined" style="font-size: 19px;">upload_file</span><span>Teszt importálása</span>';
     }
-    if (importPdfGrade) importPdfGrade.value = detectGradeFromCurrentFolder();
+    if (importPdfGrade) {
+      const isDev = isDevelopmentalSubjectSelect(importPdfSubjectId);
+      populateGradeSelectForSubject(importPdfGrade, importPdfSubjectId, detectGradeFromCurrentFolder(isDev));
+    }
   }
 
   function handleQuizPdfFileSelect(file) {

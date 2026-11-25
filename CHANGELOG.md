@@ -4,6 +4,22 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.11] – 2026-11-25
+
+### Tantárgyfüggő évfolyam-tartomány (1–8. / 3–8.) és tantárgyalapú (`subject_id`) tesztszűrés dolgozatindításkor
+
+Tantermi dolgozatindítási és szerkesztői fejlesztés a több tantárgy (Digitális kultúra, Technika, Fejlesztő foglalkozás) tiszta elkülönítéséhez, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Hozzáadva és módosítva (Added and Changed)
+* **Tantárgyfüggő évfolyam-választó és `subject_id` alapú kaszkád tesztszűrés (`public/admin.html`, `public/js/admin.js`):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Az *Új dolgozat indítása* modálban az **Évfolyam** mező (`#start-grade-level`) dinamikus `<select>` legördülő lista lett, amely **Fejlesztő foglalkozás** esetén **`1–8. évfolyam`**, **Digitális kultúra** és **Technika** esetén **`3–8. évfolyam`** tartományt kínál fel (`populateGradeSelectForSubject()`).
+  - A **Teszt kiválasztása** lista (`#start-quiz-id`) szigorúan a kiválasztott tantárgyhoz (`subject_id`) tartozó teszteket tölti be; ha egy tantárgyhoz még nincs teszt, egyértelmű jelzést ad és inaktiválja az indítás gombot.
+  - A tesztlistában a kiválasztott cél-évfolyam csoportja kiemelve legfelülre kerül (`★`), alatta viszont a tantárgy többi évfolyamának tesztjei is szabadon választhatók maradnak — a kiválasztott cél-évfolyam felülírása nélkül (így pl. 7. osztályos tanulónak is indítható 3. évfolyamos fejlesztő feladatsor).
+  - A **Tesztszerkesztő** (`#edit-grade-level`) és a **PDF importálása** (`#import-pdf-grade`) évfolyam-választója (beleértve a mappaalapú `detectGradeFromCurrentFolder()` felismerést is) szintén tantárgyfüggően támogatja az `1–8.` évfolyamot Fejlesztő foglalkozásnál.
+
+---
+
 ## [1.37.10] – 2026-11-25
 
 ### PDF-import helyesírási/tipográfiai egységesítés, állandó kétoszlopos diák felület és letisztult tipográfia
