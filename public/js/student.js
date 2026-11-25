@@ -456,6 +456,10 @@
   // Tanulók gyorsítótára az osztályhoz (id -> student object)
   const studentsMap = new Map();
   let currentOccupiedStudentIds = new Set();
+  const LOWER_CLASSES = [
+    '1.a', '1.b', '1.c',
+    '2.a', '2.b', '2.c'
+  ];
   const DEFAULT_CLASSES = [
     '3.a', '3.b', '3.c',
     '4.a', '4.b', '4.c',
@@ -464,6 +468,7 @@
     '7.a', '7.b', '7.c',
     '8.a', '8.b', '8.c'
   ];
+  let cachedDbClasses = [];
 
   const quizContainer = document.getElementById('quiz-container');
   const lobbyContainer = document.getElementById('lobby-container');
@@ -987,6 +992,7 @@
     if (selectSubject) {
       selectSubject.addEventListener('change', () => {
         selectedSubjectId = parseInt(selectSubject.value, 10);
+        renderClassOptions();
         if (loginStep2 && loginStep2.style.display !== 'none') {
           checkActiveSession();
         }
@@ -1137,23 +1143,12 @@
       });
     }
 
-    // Lightbox képnagyító kezelése
-    function openImageLightbox() {
-      if (!questionImage || !questionImage.src || !modalImageLightbox) return;
-      if (lightboxFullImage) lightboxFullImage.src = questionImage.src;
-      openModal('modal-image-lightbox');
-    }
-
-    function closeImageLightbox() {
-      closeModal('modal-image-lightbox');
-      if (lightboxFullImage) lightboxFullImage.src = '';
-    }
-
+    // Lightbox képnagyító eseménykezelői (kérdéshez csatolt ábra és bezárás)
     if (questionImage) {
-      questionImage.addEventListener('click', openImageLightbox);
+      questionImage.addEventListener('click', () => openImageLightbox());
     }
     if (btnZoomImage) {
-      btnZoomImage.addEventListener('click', openImageLightbox);
+      btnZoomImage.addEventListener('click', () => openImageLightbox());
     }
     if (btnCloseLightbox) {
       btnCloseLightbox.addEventListener('click', closeImageLightbox);
@@ -1228,6 +1223,27 @@
         resolveOpenNavConflictSaveLocal();
       });
     }
+  }
+
+  /**
+   * Lightbox képnagyító megnyitása / bezárása (kérdéshez csatolt ábra és válaszképek egyaránt)
+   */
+  function openImageLightbox(customSrc = null, customTitle = 'Kérdéshez kapcsolódó ábra') {
+    const targetSrc = (typeof customSrc === 'string' && customSrc.trim())
+      ? customSrc.trim()
+      : (questionImage && questionImage.src ? questionImage.src : '');
+    if (!targetSrc || !modalImageLightbox) return;
+    if (lightboxFullImage) lightboxFullImage.src = targetSrc;
+    const lightboxTitleEl = modalImageLightbox.querySelector('.calm-lightbox-title');
+    if (lightboxTitleEl) {
+      lightboxTitleEl.textContent = customTitle || 'Kép nagyított nézete';
+    }
+    openModal('modal-image-lightbox');
+  }
+
+  function closeImageLightbox() {
+    closeModal('modal-image-lightbox');
+    if (lightboxFullImage) lightboxFullImage.src = '';
   }
 
   /**
@@ -1384,46 +1400,73 @@
     }
   }
 
+  function isDevelopmentalSubjectSelected() {
+    if (!selectSubject || selectSubject.selectedIndex < 0) return false;
+    const opt = selectSubject.options[selectSubject.selectedIndex];
+    return opt ? /fejlesztő/i.test(opt.textContent || '') : false;
+  }
+
+  function renderClassOptions() {
+    if (!selectClass) return;
+    const isDev = isDevelopmentalSubjectSelected();
+    const minGrade = isDev ? 1 : 3;
+    const baseClasses = isDev ? [...LOWER_CLASSES, ...DEFAULT_CLASSES] : [...DEFAULT_CLASSES];
+    const rawClasses = Array.from(new Set([...baseClasses, ...(Array.isArray(cachedDbClasses) ? cachedDbClasses : [])]));
+
+    const allClasses = rawClasses
+      .filter((cls) => {
+        const m = String(cls).match(/^(\d+)/);
+        return !m || parseInt(m[1], 10) >= minGrade;
+      })
+      .sort((a, b) => {
+        const ma = String(a).match(/^(\d+)(.*)$/);
+        const mb = String(b).match(/^(\d+)(.*)$/);
+        const na = ma ? parseInt(ma[1], 10) : 999;
+        const nb = mb ? parseInt(mb[1], 10) : 999;
+        if (na !== nb) return na - nb;
+        return (ma ? ma[2] : String(a)).localeCompare(mb ? mb[2] : String(b), 'hu');
+      });
+
+    const prevClass = selectedClass || selectClass.value || '';
+    selectClass.innerHTML = '';
+
+    allClasses.forEach((cls) => {
+      const opt = document.createElement('option');
+      opt.value = cls;
+      opt.textContent = `${cls} osztály`;
+      selectClass.appendChild(opt);
+    });
+
+    if (prevClass && allClasses.includes(prevClass)) {
+      selectClass.value = prevClass;
+      selectedClass = prevClass;
+    } else if (!isDev && allClasses.includes('3.a')) {
+      selectClass.value = '3.a';
+      selectedClass = '3.a';
+    } else if (isDev && allClasses.includes('1.a')) {
+      selectClass.value = '1.a';
+      selectedClass = '1.a';
+    } else if (allClasses.length > 0) {
+      selectClass.value = allClasses[0];
+      selectedClass = allClasses[0];
+    }
+  }
+
   /**
-   * Osztályok betöltése a lenyíló listába (3.a–7.c alapértelmezetten)
+   * Osztályok betöltése a lenyíló listába (Fejlesztő foglalkozás: 1–8., egyébként 3–8.)
    */
   async function loadClasses() {
     if (!selectClass) return;
     try {
-      let dbClasses = [];
       try {
         const res = await fetch('/api/classes');
         if (res.ok) {
-          dbClasses = await res.json();
+          cachedDbClasses = await res.json();
         }
       } catch {
         // fallback az alapértelmezett standard osztályokra
       }
-
-      // 3–8. évfolyamos osztályok (az 1–2. évfolyam még nem tanul digitális kultúrát)
-      const rawClasses = Array.from(new Set([...DEFAULT_CLASSES, ...(Array.isArray(dbClasses) ? dbClasses : [])]));
-      const allClasses = rawClasses.filter(cls => {
-        const m = String(cls).match(/^(\d+)/);
-        return !m || parseInt(m[1], 10) >= 3;
-      });
-      selectClass.innerHTML = '';
-
-      allClasses.forEach((cls) => {
-        const opt = document.createElement('option');
-        opt.value = cls;
-        opt.textContent = `${cls} osztály`;
-
-        if (cls === '3.a') {
-          opt.selected = true;
-          selectedClass = cls;
-        }
-
-        selectClass.appendChild(opt);
-      });
-
-      if (!selectedClass && allClasses.length > 0) {
-        selectedClass = allClasses[0];
-      }
+      renderClassOptions();
     } catch (err) {
       console.error('Hiba az osztályok betöltésekor:', err);
     }
@@ -3098,15 +3141,17 @@
     questionProgress.textContent = `${displayIndex + 1} / ${displayTotal}. kérdés`;
     if (quizQnumText) quizQnumText.textContent = String(displayIndex + 1);
 
+    const isMultiAbcd = (q.question_type === 'ABCD' && Boolean(q.allow_multiple));
+
     const typeBadgeMap = {
-      'ABCD': 'Feleletválasztó',
+      'ABCD': isMultiAbcd ? 'Többválasztós' : 'Feleletválasztó',
       'TF': 'Igaz / Hamis',
       'SHORT': 'Rövid válasz'
     };
     if (questionTypeBadge) questionTypeBadge.textContent = typeBadgeMap[q.question_type] || 'Kérdés';
 
     const hintMap = {
-      'ABCD': 'Válaszd ki az egyetlen helyes megoldást!',
+      'ABCD': isMultiAbcd ? 'Jelöld meg az összes helyes megoldást!' : 'Válaszd ki az egyetlen helyes megoldást!',
       'TF': 'Döntsd el, hogy az állítás igaz vagy hamis!',
       'SHORT': 'Írd be a helyes választ a szövegmezőbe!'
     };
@@ -3184,14 +3229,28 @@
       shortAnswerEvalIcon.classList.remove('eval-correct', 'eval-wrong');
     }
 
-    // Segédfüggvény rádió-csempék billentyűzetes és egér alapú kiválasztásához
-    const bindRadioTile = (tile, selector) => {
+    // Segédfüggvény rádió- és jelölőnégyzet-csempék billentyűzetes és egér alapú kiválasztásához
+    const bindRadioTile = (tile, selector, allowMultiple = false) => {
       tile.setAttribute('tabindex', '0');
-      tile.setAttribute('role', 'radio');
+      tile.setAttribute('role', allowMultiple ? 'checkbox' : 'radio');
       tile.setAttribute('aria-checked', 'false');
 
       const selectTile = () => {
         if (tile.style.pointerEvents === 'none' || openNavIsSubmitting) return;
+        if (allowMultiple) {
+          const nextSelected = !tile.classList.contains('selected');
+          tile.classList.toggle('selected', nextSelected);
+          tile.setAttribute('aria-checked', nextSelected ? 'true' : 'false');
+          const selectedVals = Array.from(document.querySelectorAll(`${selector}.selected`))
+            .map(b => b.dataset.value)
+            .filter(v => v !== undefined && v !== null && String(v).trim() !== '');
+          if (isOpenNavigationMode) {
+            queueOpenNavDraftSave(q.id, selectedVals.length > 0 ? JSON.stringify(selectedVals) : '');
+          } else {
+            btnSubmitAnswer.disabled = (selectedVals.length === 0);
+          }
+          return;
+        }
         document.querySelectorAll(selector).forEach(b => {
           b.classList.remove('selected');
           b.setAttribute('aria-checked', 'false');
@@ -3221,7 +3280,9 @@
           const nextTile = allTiles[(currIdx + step + allTiles.length) % allTiles.length];
           if (nextTile) {
             nextTile.focus();
-            nextTile.click();
+            if (!allowMultiple) {
+              nextTile.click();
+            }
           }
         }
       });
@@ -3229,27 +3290,74 @@
 
     // 5. Kérdéstípus szerinti megjelenítés
     if (q.question_type === 'ABCD') {
-      optionsContainer.className = 'quiz-options-group';
-      optionsContainer.setAttribute('role', 'radiogroup');
+      optionsContainer.setAttribute('role', isMultiAbcd ? 'group' : 'radiogroup');
       const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
-      const opts = (Array.isArray(q.options) && q.options.length > 0) ? q.options : ['A', 'B', 'C', 'D'];
-      opts.forEach((optText, optIdx) => {
+      const rawOpts = (Array.isArray(q.options) && q.options.length > 0) ? q.options : ['A', 'B', 'C', 'D'];
+      const opts = rawOpts.map(normalizeOptionItem);
+      const hasAnyImage = opts.some(o => Boolean(o.image_path));
+
+      if (hasAnyImage) {
+        const colsClass = opts.length >= 5 ? 'cols-3' : 'cols-2';
+        optionsContainer.className = `quiz-options-image-grid ${colsClass}`;
+      } else {
+        optionsContainer.className = 'quiz-options-group';
+      }
+
+      opts.forEach((optObj, optIdx) => {
         const tile = document.createElement('div');
-        tile.className = 'quiz-option-tile';
-        tile.dataset.value = optText;
+        const tileClasses = ['quiz-option-tile'];
+        if (hasAnyImage) tileClasses.push('is-image-tile');
+        if (isMultiAbcd) tileClasses.push('is-multi-select');
+        tile.className = tileClasses.join(' ');
+        tile.dataset.value = optObj.value;
 
         const letter = letters[optIdx] || String(optIdx + 1);
-        tile.innerHTML = `
-          <div class="quiz-option-left">
-            <span class="quiz-option-badge">${letter}</span>
-            <span class="quiz-option-text">${formatCode(optText)}</span>
-          </div>
-          <div class="quiz-option-radio">
-            <span class="material-symbols-outlined quiz-option-check">check</span>
-          </div>
-        `;
+        if (hasAnyImage) {
+          tile.innerHTML = `
+            <div class="quiz-option-img-top-row">
+              <span class="quiz-option-badge">${letter}</span>
+              <div class="quiz-option-radio">
+                <span class="material-symbols-outlined quiz-option-check">check</span>
+              </div>
+            </div>
+            ${optObj.image_path ? `
+              <div class="quiz-option-image-wrap">
+                <img src="${escapeHtml(optObj.image_path)}" alt="${escapeHtml(optObj.text || `${letter} válasz képe`)}" class="quiz-option-image">
+                <button type="button" class="quiz-option-zoom-btn" title="Kép nagyítása" aria-label="${escapeHtml(letter)} válasz képének nagyítása">
+                  <span class="material-symbols-outlined">zoom_in</span>
+                </button>
+              </div>
+            ` : ''}
+            ${optObj.text ? `<span class="quiz-option-text quiz-option-img-caption">${formatCode(optObj.text)}</span>` : ''}
+          `;
+        } else {
+          tile.innerHTML = `
+            <div class="quiz-option-left">
+              <span class="quiz-option-badge">${letter}</span>
+              <span class="quiz-option-text">${formatCode(optObj.text)}</span>
+            </div>
+            <div class="quiz-option-radio">
+              <span class="material-symbols-outlined quiz-option-check">check</span>
+            </div>
+          `;
+        }
 
-        bindRadioTile(tile, '.quiz-option-tile');
+        const zoomBtn = tile.querySelector('.quiz-option-zoom-btn');
+        if (zoomBtn && optObj.image_path) {
+          const openOptZoom = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openImageLightbox(optObj.image_path, `${letter} válasz képe`);
+          };
+          zoomBtn.addEventListener('click', openOptZoom);
+          zoomBtn.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              openOptZoom(e);
+            }
+          });
+        }
+
+        bindRadioTile(tile, '.quiz-option-tile', isMultiAbcd);
         optionsContainer.appendChild(tile);
       });
 
@@ -3327,15 +3435,18 @@
       if (restoredVal !== '') {
         if (q.question_type === 'ABCD') {
           const tiles = Array.from(document.querySelectorAll('.quiz-option-tile'));
-          let matchedTile = tiles.find(t => t.dataset.value === restoredVal) || null;
-          if (!matchedTile) {
-            const trimmedMatches = tiles.filter(t => String(t.dataset.value || '').trim() === restoredVal.trim());
-            if (trimmedMatches.length === 1) matchedTile = trimmedMatches[0];
-          }
-          if (matchedTile) {
-            matchedTile.classList.add('selected');
-            matchedTile.setAttribute('aria-checked', 'true');
-          }
+          const restoredValues = parseMultiAnswerValues(restoredVal);
+          restoredValues.forEach(rv => {
+            let matchedTile = tiles.find(t => t.dataset.value === rv) || null;
+            if (!matchedTile) {
+              const trimmedMatches = tiles.filter(t => String(t.dataset.value || '').trim() === rv.trim());
+              if (trimmedMatches.length === 1) matchedTile = trimmedMatches[0];
+            }
+            if (matchedTile) {
+              matchedTile.classList.add('selected');
+              matchedTile.setAttribute('aria-checked', 'true');
+            }
+          });
         } else if (q.question_type === 'TF') {
           document.querySelectorAll('.quiz-tf-tile').forEach((tile) => {
             if (tile.dataset.value === restoredVal) {
@@ -3358,8 +3469,9 @@
     if (isTeacherPacedMode && teacherPacedCurrentAnswer && Number(teacherPacedCurrentAnswer.question_id) === Number(q.id)) {
       const savedVal = String(teacherPacedCurrentAnswer.submitted_answer || '');
       if (q.question_type === 'ABCD') {
+        const savedValues = parseMultiAnswerValues(savedVal);
         document.querySelectorAll('.quiz-option-tile').forEach(tile => {
-          if (tile.dataset.value === savedVal) {
+          if (savedValues.includes(tile.dataset.value)) {
             tile.classList.add('selected');
             tile.setAttribute('aria-checked', 'true');
           }
@@ -3413,9 +3525,15 @@
     let submittedValue = '';
 
     if (q.question_type === 'ABCD') {
-      const selected = document.querySelector('.quiz-option-tile.selected');
-      if (!selected) return;
-      submittedValue = selected.dataset.value;
+      if (q.allow_multiple) {
+        const selectedTiles = Array.from(document.querySelectorAll('.quiz-option-tile.selected'));
+        if (selectedTiles.length === 0) return;
+        submittedValue = JSON.stringify(selectedTiles.map(t => t.dataset.value));
+      } else {
+        const selected = document.querySelector('.quiz-option-tile.selected');
+        if (!selected) return;
+        submittedValue = selected.dataset.value;
+      }
     } else if (q.question_type === 'TF') {
       const selected = document.querySelector('.quiz-tf-tile.selected');
       if (!selected) return;
@@ -3609,8 +3727,9 @@
 
     // Ha a szerver által mentett válasz eltér a helyben kijelölttől (idempotens ismétlés), szinkronizáljuk a kijelölést / szövegmezőt
     if (q.question_type === 'ABCD') {
+      const persistedValues = parseMultiAnswerValues(persistedValue);
       document.querySelectorAll('.quiz-option-tile').forEach(tile => {
-        const isPersisted = tile.dataset.value === persistedValue;
+        const isPersisted = persistedValues.includes(tile.dataset.value);
         tile.classList.toggle('selected', isPersisted);
         tile.setAttribute('aria-checked', isPersisted ? 'true' : 'false');
         tile.style.pointerEvents = 'none';
@@ -3663,17 +3782,7 @@
 
     // 1. Csempék megjelölése (ABCD és TF)
     if (q && q.question_type === 'ABCD') {
-      let accepted = [];
-      try {
-        const parsed = JSON.parse(result.correctAnswer);
-        if (Array.isArray(parsed)) {
-          accepted = parsed.map(s => String(s).trim().toLowerCase());
-        } else {
-          accepted = [String(result.correctAnswer).trim().toLowerCase()];
-        }
-      } catch {
-        accepted = [String(result.correctAnswer).trim().toLowerCase()];
-      }
+      const accepted = parseMultiAnswerValues(result.correctAnswer).map(s => s.toLowerCase());
 
       document.querySelectorAll('.quiz-option-tile').forEach(tile => {
         const val = (tile.dataset.value || '').trim().toLowerCase();
@@ -3768,7 +3877,7 @@
     } else {
       feedbackCard.className = 'quiz-feedback-strip quiz-feedback-strip-wrong';
       if (feedbackIcon) feedbackIcon.textContent = 'cancel';
-      feedbackTitle.innerHTML = `Helyes megoldás: <strong>${formatCode(displayCorrectAnswer)}</strong>`;
+      feedbackTitle.innerHTML = `Helyes megoldás: <strong>${renderAnswerDisplayHtml(displayCorrectAnswer, q ? q.options : [])}</strong>`;
     }
 
     // Teacher Paced módban (bekapcsolt visszajelzés mellett) a magyarázat megjeleníthető; más módokban elrejtve marad
@@ -4249,7 +4358,7 @@
                   </button>
                 </span>
               ` : ''}</span>
-              <span class="calm-summary-q-ans">Válaszod: <span class="calm-summary-q-ans-val">${formatCode(submittedText)}</span></span>
+              <span class="calm-summary-q-ans">Válaszod: <span class="calm-summary-q-ans-val">${renderAnswerDisplayHtml(submittedText, q.options)}</span></span>
             </div>
           </div>
           <div class="calm-summary-q-badge ${badgeClass}">

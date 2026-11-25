@@ -4,6 +4,48 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.12] – 2026-11-25
+
+### Képes ABCD válaszok, többválasztós (szigorú pontozású) kérdések, válaszkép-nagyítás és diák/szerkesztői javítások
+
+Első osztályos és fejlesztő foglalkozási felmérők, valamint összetettebb feladatok támogatása SQLite-sémamódosítás nélkül (`13700`), teljes visszafelé kompatibilitással.
+
+#### Hozzáadva (Added)
+* **Képes feleletválasztós (ABCD) válaszlehetőségek görgetésmentes 2×2 és 3×2 rácsban (`src/services/grader.js`, `src/db/sessionRepo.js`, `public/js/utils.js`, `public/js/admin.js`, `public/js/student.js`, `public/css/style.css`):**
+  - **Fájlok:** [`src/services/grader.js`](file:///d:/dev/Röpdolgozat%20program/src/services/grader.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`public/js/utils.js`](file:///d:/dev/Röpdolgozat%20program/public/js/utils.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A Tesztszerkesztőben minden ABCD válaszlehetőséghez kép is csatolható (fájlfeltöltéssel vagy közvetlen `Ctrl+V` vágólapos beillesztéssel), opcionális szöveg mellett vagy önálló képként (`{ text, image_path }` formátumban, a régi szöveges opciókkal 100%-ban visszafelé kompatibilisen).
+  - A diákfelületen a képes válaszok 2–4 opció esetén `2×2`-es, 5–6 opció esetén kompakt `3×2`-es rácsban jelennek meg, így akár 6 kép is egyszerre, görgetés nélkül áttekinthető.
+  - Az összegzőben és visszajelzésekben a képes válaszok bélyegképpel jelennek meg (`renderAnswerDisplayHtml`).
+
+* **Több helyes válasz (többválasztós ABCD) szigorú (minden vagy semmi) pontozással (`src/services/grader.js`, `src/db/quizRepo.js`, `src/routes/api.js`, `src/db/sessionRepo.js`, `public/js/utils.js`, `public/js/admin.js`, `public/js/student.js`, `public/css/style.css`):**
+  - **Fájlok:** [`src/services/grader.js`](file:///d:/dev/Röpdolgozat%20program/src/services/grader.js), [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js), [`public/js/utils.js`](file:///d:/dev/Röpdolgozat%20program/public/js/utils.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A Tesztszerkesztőben az ABCD válaszok sorszámgombjai külön-külön be- és kikapcsolhatók; 1 helyes válasz továbbra is sima szövegként, 2 vagy több helyes válasz JSON tömbként mentődik, és az alapértelmezett instrukció automatikusan átvált *„Jelöld meg az összes helyes megoldást!”* szövegre.
+  - A puskázásgátló szűrés a `correct_answer` kitakarása mellett csak az `allow_multiple` jelzőt küldi le a diáknak; a diákfelületen többválasztós kérdésnél a csempék jelölőnégyzetként (`role="checkbox"`) működnek szöveges és képes elrendezésben, valamint Student Paced, Open Navigation (piszkozatmentéssel és véglegesítéssel), Teacher Paced és Space Race módban is.
+  - A kiértékelés (`evaluateAnswer`) szigorú, sorrendfüggetlen halmazegyezést alkalmaz: akkor és csak akkor jár teljes pont (`CORRECT`), ha a diák az összes helyes választ bejelölte, és egyetlen hibásat sem.
+
+* **Válaszképek nagyítása a feladatmegoldó felületen (`public/js/student.js`, `public/css/style.css`):**
+  - **Fájlok:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Minden képes ABCD válasz jobb alsó sarkában megjelent egy kompakt, kontrasztos nagyító gomb (`.quiz-option-zoom-btn`, `zoom_in` ikon), amelyre kattintva (és kizárólag arra, `stopPropagation()` védelemmel, a válasz kijelölésének megváltoztatása nélkül) a meglévő Lightbox ablakban megnyílik a kép teljes méretű nézete (beküldés/visszajelzés közben is).
+
+#### Javítva (Fixed)
+* **Diák belépőképernyő 1–8. évfolyamos osztályválasztó Fejlesztő foglalkozásnál (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - A diák belépési varázslóban a *Fejlesztő foglalkozás* tantárgy kiválasztásakor mostantól az `1.a`–`8.c` (1–8. évfolyam) osztályok jelennek meg, míg *Digitális kultúra* és *Technika* esetén továbbra is a `3.a`–`8.c` tartomány (`renderClassOptions`, `LOWER_CLASSES`).
+
+* **Dupla Enteres üres sorok megőrzése a Tesztszerkesztőben (`public/js/utils.js`):**
+  - **Fájl:** [`public/js/utils.js`](file:///d:/dev/Röpdolgozat%20program/public/js/utils.js)
+  - A `serializeRichEditorToMarkdown` helyesen megőrzi a Chrome `contenteditable` által létrehozott üres sorokat (`<div><br></div>`), így mentés után sem törlődnek a szándékosan beszúrt üres sorok.
+
+* **Szorzásjelet (`*`) és aláhúzást (`_`) tartalmazó félkövér / aláhúzott szövegek helyes visszatöltése (`public/js/utils.js`):**
+  - **Fájl:** [`public/js/utils.js`](file:///d:/dev/Röpdolgozat%20program/public/js/utils.js)
+  - A `formatCode()` és `stripFormatting()` függvényekben a `**...**` és `__...__` minták negatív előretekintéssel (`(?!\*\*)`, `(?!__)`) működnek, így a félkövéren formázott képletek (pl. `**280 * 50 = ...**`) újranyitáskor és a diákfelületen is helyesen, félkövéren jelennek meg nyers `**` jelölések nélkül.
+
+* **Veszteségmentes ABCD opciókezelés Open Navigation véglegesítéskor (`src/db/sessionRepo.js`):**
+  - **Fájl:** [`src/db/sessionRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/sessionRepo.js)
+  - A `finalizeParticipantDrafts` a képes és többválasztós válaszok mellett is megőrzi a sima szöveges opciók szélső szóközeit.
+
+---
+
 ## [1.37.11] – 2026-11-25
 
 ### Tantárgyfüggő évfolyam-tartomány (1–8. / 3–8.) és tantárgyalapú (`subject_id`) tesztszűrés dolgozatindításkor

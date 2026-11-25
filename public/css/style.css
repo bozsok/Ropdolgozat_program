@@ -6309,6 +6309,178 @@ body.modal-open {
   gap: 8px;
 }
 
+.q-opt-content-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.q-opt-img-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background-color: var(--surface-low);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  width: fit-content;
+}
+
+.q-opt-img-thumb {
+  max-width: 96px;
+  max-height: 54px;
+  object-fit: contain;
+  border-radius: 6px;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+.btn-remove-abcd-opt-img {
+  padding: 4px 6px;
+  height: auto;
+  color: var(--danger);
+}
+
+/* Összegző és tanári részletek képes válasz bélyegkép */
+.summary-answer-with-img {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  vertical-align: middle;
+}
+
+.summary-answer-thumb {
+  max-width: 72px;
+  max-height: 44px;
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background-color: #ffffff;
+  padding: 2px;
+}
+
+/* Diák felület: Képes ABCD válaszlehetőségek (2x2 és 3x2 görgetésmentes rács) */
+.quiz-options-image-grid {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.quiz-options-image-grid.cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quiz-options-image-grid.cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quiz-option-tile.is-image-tile {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 10px 12px;
+  gap: 8px;
+  min-height: 0;
+}
+
+.quiz-option-img-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.quiz-options-image-grid.cols-3 .quiz-option-badge {
+  width: 30px;
+  height: 30px;
+  font-size: 0.95rem;
+}
+
+.quiz-option-image-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex: 1;
+  min-height: 82px;
+  background-color: #ffffff;
+  border-radius: 8px;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.quiz-option-zoom-btn {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background-color: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-main);
+  cursor: zoom-in;
+  pointer-events: auto;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(4px);
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  z-index: 2;
+}
+
+.quiz-option-zoom-btn:hover {
+  background-color: #ffffff;
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: scale(1.06);
+}
+
+.quiz-option-zoom-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.quiz-option-zoom-btn .material-symbols-outlined {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.quiz-option-image {
+  max-width: 100%;
+  max-height: 124px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.quiz-options-image-grid.cols-3 .quiz-option-image-wrap {
+  min-height: 70px;
+}
+
+.quiz-options-image-grid.cols-3 .quiz-option-image {
+  max-height: 94px;
+}
+
+.quiz-option-img-caption {
+  font-size: 0.95rem;
+  text-align: center;
+  line-height: 1.3;
+}
+
+@media (max-width: 640px) {
+  .quiz-options-image-grid.cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* Valódi WYSIWYG (contenteditable) mezők a Tesztszerkesztő kérdés- és válaszmezőihez */
 .q-rich-editor {
   line-height: 1.5;
@@ -7537,4 +7709,26 @@ body.modal-open {
 
 .open-nav-unanswered-chip:hover {
   background-color: #ffedd5;
+}
+
+/* Többválasztós ABCD: jelölőnégyzet (checkbox) jelző a rádió-kör helyett */
+.quiz-option-tile.is-multi-select .quiz-option-radio {
+  border-radius: 6px;
+}
+
+/* Többválasztós válasz megjelenítése összegzőben / eredménytáblában */
+.summary-answer-multi {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.summary-answer-multi-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background-color: rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(15, 23, 42, 0.1);
 }

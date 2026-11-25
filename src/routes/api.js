@@ -1169,6 +1169,7 @@ router.get('/student/session-data', (req, res) => {
               instructions: q.instructions || '',
               image_path: q.image_path || null,
               options: Array.isArray(q.options) ? q.options : [],
+              allow_multiple: grader.isMultipleChoiceCorrectAnswer(q.question_type, q.correct_answer),
               points: Number(q.points) || 1.0
             }))
           };

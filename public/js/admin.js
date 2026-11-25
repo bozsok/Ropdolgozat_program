@@ -1208,19 +1208,26 @@
           }
         }
 
-        opts.forEach((optText, optIdx) => {
+        opts.forEach((optRaw, optIdx) => {
+          const optObj = normalizeOptionItem(optRaw);
           const letter = letters[optIdx] || String(optIdx + 1);
           const optRow = document.createElement('div');
 
           const isCorrectOpt = acceptedAnswers.some(ans =>
             ans.toLowerCase() === letter.toLowerCase() ||
-            ans.toLowerCase() === String(optText).trim().toLowerCase()
+            (optObj.value && ans.toLowerCase() === optObj.value.toLowerCase()) ||
+            (optObj.text && ans.toLowerCase() === optObj.text.toLowerCase()) ||
+            (optObj.image_path && ans.toLowerCase() === optObj.image_path.toLowerCase())
           );
+
+          const contentHtml = optObj.image_path
+            ? `<span class="summary-answer-with-img"><img src="${escapeHtml(optObj.image_path)}" alt="Opció képe" class="summary-answer-thumb">${optObj.text ? `<span>${formatCode(optObj.text)}</span>` : ''}</span>`
+            : formatCode(optObj.text);
 
           optRow.className = `qd-option-row ${isCorrectOpt ? 'is-correct' : ''}`;
           optRow.innerHTML = `
             <span class="qd-option-badge">${letter}</span>
-            <span class="qd-option-text">${formatCode(optText)}</span>
+            <span class="qd-option-text">${contentHtml}</span>
             ${isCorrectOpt ? '<span class="qd-option-tag"><span class="material-symbols-outlined" style="font-size: 14px;">check</span> Helyes megoldás</span>' : ''}
           `;
           optionsWrap.appendChild(optRow);
@@ -3000,22 +3007,32 @@
     }
     if (initialShortAnswers.length === 0) initialShortAnswers = [''];
 
-    // ABCD opciók előkészítése (alapból legalább 4 sor, de meglévő 5+ opciót is megtart)
-    const initialAbcdOptions = Array.isArray(qOptions) ? [...qOptions] : [];
-    while (initialAbcdOptions.length < 4) initialAbcdOptions.push('');
+    // ABCD opciók előkészítése (alapból legalább 4 sor, de meglévő 5+ opciót is megtart; támogatja a string és { text, image_path } formátumot)
+    const initialAbcdOptions = Array.isArray(qOptions) ? qOptions.map(normalizeOptionItem) : [];
+    while (initialAbcdOptions.length < 4) initialAbcdOptions.push({ text: '', image_path: '', value: '' });
 
-    // Meglévő helyes válasz indexének azonosítása ABCD esetén
-    let correctOptionIndex = -1;
+    // Meglévő helyes válasz(ok) indexeinek azonosítása ABCD esetén (1 vagy több helyes válasz is támogatott)
+    const correctOptionIndices = new Set();
     if (qType === 'ABCD' && qCorrect) {
-      if (/^[A-Z]$/i.test(qCorrect)) {
-        const idxByLetter = qCorrect.toUpperCase().charCodeAt(0) - 65;
-        if (idxByLetter >= 0 && idxByLetter < initialAbcdOptions.length) {
-          correctOptionIndex = idxByLetter;
+      const correctList = parseMultiAnswerValues(qCorrect);
+      correctList.forEach(corItem => {
+        let foundIdx = -1;
+        if (/^[A-Z]$/i.test(corItem)) {
+          const idxByLetter = corItem.toUpperCase().charCodeAt(0) - 65;
+          if (idxByLetter >= 0 && idxByLetter < initialAbcdOptions.length) {
+            foundIdx = idxByLetter;
+          }
         }
-      }
-      if (correctOptionIndex === -1) {
-        correctOptionIndex = initialAbcdOptions.findIndex(opt => String(opt).trim().toLowerCase() === qCorrect.toLowerCase());
-      }
+        if (foundIdx === -1) {
+          const corLower = corItem.toLowerCase();
+          foundIdx = initialAbcdOptions.findIndex(opt =>
+            (opt.value && opt.value.toLowerCase() === corLower) ||
+            (opt.text && opt.text.toLowerCase() === corLower) ||
+            (opt.image_path && opt.image_path.toLowerCase() === corLower)
+          );
+        }
+        if (foundIdx !== -1) correctOptionIndices.add(foundIdx);
+      });
     }
 
     // Meglévő helyes válasz azonosítása TF esetén
@@ -3128,20 +3145,33 @@
           </div>
         </div>
 
-        <!-- 1. Válaszlehetőségek szerkesztése ABCD esetén (Számozott gombokra kattintva kizöldül a helyes) -->
+        <!-- 1. Válaszlehetőségek szerkesztése ABCD esetén (Számozott gombokra kattintva kizöldül a helyes, több is kijelölhető) -->
         <div class="q-options-box" style="${qType === 'ABCD' ? '' : 'display:none;'} margin-bottom: 12px;">
-          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
-            <span>A helyes válasz megadásához kattints a kérdés számára!</span>
-            <span style="font-size: 0.82rem; font-weight: normal; color: var(--text-muted);">🟢 1 kötelezően kijelölendő</span>
+          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+            <span>A helyes válasz(ok) megadásához kattints a válasz számára!</span>
+            <span class="q-opt-correct-hint" style="font-size: 0.82rem; font-weight: normal; color: var(--text-muted);">${correctOptionIndices.size > 1 ? `🟢 ${correctOptionIndices.size} helyes válasz kijelölve (szigorú pontozás)` : '🟢 Legalább 1 kijelölendő (több is választható)'}</span>
           </label>
           <div class="q-opt-grid">
-            ${initialAbcdOptions.map((optVal, i) => `
-              <div class="q-opt-row ${correctOptionIndex === i ? 'is-correct' : ''}">
-                <button type="button" class="q-opt-correct-toggle ${correctOptionIndex === i ? 'is-correct' : ''}" data-opt-index="${i}" title="Kattints ide a helyes válasz kizöldítéséhez!">
+            ${initialAbcdOptions.map((optObj, i) => `
+              <div class="q-opt-row ${correctOptionIndices.has(i) ? 'is-correct' : ''}">
+                <button type="button" class="q-opt-correct-toggle ${correctOptionIndices.has(i) ? 'is-correct' : ''}" data-opt-index="${i}" title="Kattints ide a helyes válasz be- vagy kikapcsolásához (több is kijelölhető)!">
                   <span class="q-opt-num">${i + 1}</span>
                   <span class="material-symbols-outlined q-opt-check">check</span>
                 </button>
-                <div class="form-control q-rich-editor q-opt-input q-opt-${i}" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="${i + 1}. válaszlehetőség">${formatCode(optVal || '')}</div>
+                <div class="q-opt-content-col">
+                  <div class="form-control q-rich-editor q-opt-input q-opt-${i}" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="${i + 1}. válaszlehetőség (vagy csatolj képet / Ctrl+V)">${formatCode(optObj.text || '')}</div>
+                  <input type="hidden" class="q-opt-image-path" value="${escapeHtml(optObj.image_path || '')}">
+                  <input type="file" class="q-opt-image-file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" style="display: none;">
+                  <div class="q-opt-img-preview" style="${optObj.image_path ? 'display: flex;' : 'display: none;'}">
+                    <img src="${escapeHtml(optObj.image_path || '')}" alt="Válasz képe" class="q-opt-img-thumb">
+                    <button type="button" class="btn btn-secondary btn-remove-abcd-opt-img" title="Válasz képének eltávolítása">
+                      <span class="material-symbols-outlined" style="font-size: 15px;">delete</span>
+                    </button>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-secondary btn-attach-abcd-opt-img" title="Kép csatolása a válaszhoz (vagy Ctrl+V a szövegmezőben)" style="padding: 6px 8px; font-size: 0.85rem;">
+                  <span class="material-symbols-outlined" style="font-size: 17px; vertical-align: middle;">add_photo_alternate</span>
+                </button>
                 <button type="button" class="btn btn-secondary btn-remove-abcd-opt" title="Válaszlehetőség eltávolítása" style="padding: 6px 8px; font-size: 0.85rem; ${initialAbcdOptions.length > 2 ? '' : 'display: none;'}">
                   <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
                 </button>
@@ -3255,17 +3285,90 @@
       });
     }
 
+    async function uploadAbcdOptionImage(row, file) {
+      if (!row || !file) return;
+      if (file.size > 5 * 1024 * 1024) {
+        showAdminAlert('⚠️ Túl nagy fájl', 'A kiválasztott kép mérete meghaladja az engedélyezett 5 MB-ot!');
+        return;
+      }
+      const formData = new FormData();
+      formData.append('image', file);
+      const currentQuizId = editQuizId ? editQuizId.value.trim() : '';
+      const uploadUrl = currentQuizId
+        ? `/api/admin/upload-image?quizId=${encodeURIComponent(currentQuizId)}`
+        : '/api/admin/upload-image';
+
+      const attachBtn = row.querySelector('.btn-attach-abcd-opt-img');
+      if (attachBtn) attachBtn.disabled = true;
+      try {
+        const resp = await fetch(uploadUrl, { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (!resp.ok || !data.success) {
+          throw new Error(data.error || 'A kép feltöltése sikertelen!');
+        }
+        const pathInput = row.querySelector('.q-opt-image-path');
+        const previewBox = row.querySelector('.q-opt-img-preview');
+        const previewImg = row.querySelector('.q-opt-img-thumb');
+        if (pathInput) pathInput.value = data.imagePath;
+        if (previewImg) previewImg.src = data.imagePath;
+        if (previewBox) previewBox.style.display = 'flex';
+      } catch (err) {
+        showAdminAlert('❌ Feltöltési hiba', err.message);
+      } finally {
+        if (attachBtn) attachBtn.disabled = false;
+      }
+    }
+
     if (abcdGrid) {
+      const updateAbcdCorrectHint = () => {
+        const count = abcdGrid.querySelectorAll('.q-opt-correct-toggle.is-correct').length;
+        const hintEl = item.querySelector('.q-opt-correct-hint');
+        if (hintEl) {
+          hintEl.textContent = count > 1
+            ? `🟢 ${count} helyes válasz kijelölve (szigorú pontozás)`
+            : '🟢 Legalább 1 kijelölendő (több is választható)';
+        }
+        if (instructionsTextarea && typeSelect && typeSelect.value === 'ABCD') {
+          const singleDefault = 'Válaszd ki az egyetlen helyes megoldást!';
+          const multiDefault = 'Jelöld meg az összes helyes megoldást!';
+          const curInst = instructionsTextarea.value.trim();
+          if (count > 1 && (!curInst || curInst === singleDefault)) {
+            instructionsTextarea.value = multiDefault;
+          } else if (count <= 1 && curInst === multiDefault) {
+            instructionsTextarea.value = singleDefault;
+          }
+        }
+      };
+
       abcdGrid.addEventListener('click', (e) => {
         const toggle = e.target.closest('.q-opt-correct-toggle');
         if (toggle) {
           const isAlreadyCorrect = toggle.classList.contains('is-correct');
-          abcdGrid.querySelectorAll('.q-opt-row').forEach(r => r.classList.remove('is-correct'));
-          abcdGrid.querySelectorAll('.q-opt-correct-toggle').forEach(t => t.classList.remove('is-correct'));
-          if (!isAlreadyCorrect) {
-            toggle.classList.add('is-correct');
-            const parentRow = toggle.closest('.q-opt-row');
-            if (parentRow) parentRow.classList.add('is-correct');
+          toggle.classList.toggle('is-correct', !isAlreadyCorrect);
+          const parentRow = toggle.closest('.q-opt-row');
+          if (parentRow) parentRow.classList.toggle('is-correct', !isAlreadyCorrect);
+          updateAbcdCorrectHint();
+          return;
+        }
+        const btnAttachImg = e.target.closest('.btn-attach-abcd-opt-img');
+        if (btnAttachImg) {
+          const row = btnAttachImg.closest('.q-opt-row');
+          const fileInput = row ? row.querySelector('.q-opt-image-file') : null;
+          if (fileInput) fileInput.click();
+          return;
+        }
+        const btnRemoveImg = e.target.closest('.btn-remove-abcd-opt-img');
+        if (btnRemoveImg) {
+          const row = btnRemoveImg.closest('.q-opt-row');
+          if (row) {
+            const pathInput = row.querySelector('.q-opt-image-path');
+            const previewBox = row.querySelector('.q-opt-img-preview');
+            const previewImg = row.querySelector('.q-opt-img-thumb');
+            const fileInput = row.querySelector('.q-opt-image-file');
+            if (pathInput) pathInput.value = '';
+            if (previewImg) previewImg.src = '';
+            if (previewBox) previewBox.style.display = 'none';
+            if (fileInput) fileInput.value = '';
           }
           return;
         }
@@ -3277,8 +3380,17 @@
           if (row) {
             row.remove();
             refreshAbcdOptionRows();
+            updateAbcdCorrectHint();
           }
         }
+      });
+
+      abcdGrid.addEventListener('change', async (e) => {
+        const fileInput = e.target.closest('.q-opt-image-file');
+        if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
+        const row = fileInput.closest('.q-opt-row');
+        await uploadAbcdOptionImage(row, fileInput.files[0]);
+        fileInput.value = '';
       });
     }
 
@@ -3292,7 +3404,20 @@
             <span class="q-opt-num">${idx + 1}</span>
             <span class="material-symbols-outlined q-opt-check">check</span>
           </button>
-          <div class="form-control q-rich-editor q-opt-input" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="${idx + 1}. válaszlehetőség"></div>
+          <div class="q-opt-content-col">
+            <div class="form-control q-rich-editor q-opt-input" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="${idx + 1}. válaszlehetőség (vagy csatolj képet / Ctrl+V)"></div>
+            <input type="hidden" class="q-opt-image-path" value="">
+            <input type="file" class="q-opt-image-file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" style="display: none;">
+            <div class="q-opt-img-preview" style="display: none;">
+              <img src="" alt="Válasz képe" class="q-opt-img-thumb">
+              <button type="button" class="btn btn-secondary btn-remove-abcd-opt-img" title="Válasz képének eltávolítása">
+                <span class="material-symbols-outlined" style="font-size: 15px;">delete</span>
+              </button>
+            </div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-attach-abcd-opt-img" title="Kép csatolása a válaszhoz (vagy Ctrl+V a szövegmezőben)" style="padding: 6px 8px; font-size: 0.85rem;">
+            <span class="material-symbols-outlined" style="font-size: 17px; vertical-align: middle;">add_photo_alternate</span>
+          </button>
           <button type="button" class="btn btn-secondary btn-remove-abcd-opt" title="Válaszlehetőség eltávolítása" style="padding: 6px 8px; font-size: 0.85rem;">
             <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
           </button>
@@ -3723,10 +3848,21 @@
       if (e.target.closest('.q-rich-editor')) updateToolbarState();
     });
 
-    // Tiszta beillesztés (Word / web stílusok eldobása, Ctrl+Z-vel visszavonható módon)
+    // Tiszta beillesztés (Word / web stílusok eldobása; ha kép van a vágólapon ABCD opcióban, feltölti!)
     item.addEventListener('paste', (e) => {
       const ed = e.target.closest('.q-rich-editor');
       if (!ed) return;
+      const clipItems = e.clipboardData && e.clipboardData.items ? Array.from(e.clipboardData.items) : [];
+      const imgItem = clipItems.find(it => it.type && it.type.startsWith('image/'));
+      if (imgItem && ed.classList.contains('q-opt-input')) {
+        e.preventDefault();
+        const imgFile = imgItem.getAsFile();
+        const row = ed.closest('.q-opt-row');
+        if (imgFile && row) {
+          uploadAbcdOptionImage(row, imgFile);
+        }
+        return;
+      }
       e.preventDefault();
       const plain = (e.clipboardData || window.clipboardData)?.getData('text/plain') || '';
       document.execCommand('insertText', false, plain);
@@ -3831,6 +3967,23 @@
     return item;
   }
 
+  // Közös helper: ABCD opció kiolvasása egy szerkesztő sorból (szöveg és/vagy kép)
+  function extractAbcdOptionFromRow(row) {
+    if (!row) return null;
+    const inp = row.querySelector('.q-opt-input');
+    const imgInput = row.querySelector('.q-opt-image-path');
+    const text = inp ? serializeRichEditorToMarkdown(inp) : '';
+    const image_path = imgInput ? imgInput.value.trim() : '';
+    if (!text && !image_path) return null;
+    if (image_path) {
+      return {
+        stored: { text, image_path },
+        value: text || image_path
+      };
+    }
+    return { stored: text, value: text };
+  }
+
   // Egyetlen kérdéskártya validálása és lokális mentése (a feladatsor többi kérdésétől függetlenül)
   async function saveSingleQuestionCard(cardEl, triggerBtn = null) {
     if (isSavingQuiz || !cardEl) return;
@@ -3858,28 +4011,33 @@
     let options = [];
 
     if (type === 'ABCD') {
-      const selectedToggle = cardEl.querySelector('.q-opt-correct-toggle.is-correct');
-      if (!selectedToggle) {
-        showAdminAlert('⚠️ Helyes válasz nincs kijelölve', `A(z) ${qNum}. feleletválasztós kérdésnél nem jelölted meg a helyes választ!\n\nKérlek, kattints a helyes válasz számozott körére!`);
+      const selectedToggles = Array.from(cardEl.querySelectorAll('.q-opt-correct-toggle.is-correct'));
+      if (selectedToggles.length === 0) {
+        showAdminAlert('⚠️ Helyes válasz nincs kijelölve', `A(z) ${qNum}. feleletválasztós kérdésnél nem jelölted meg a helyes választ!\n\nKérlek, kattints legalább egy helyes válasz számozott körére!`);
         return;
       }
-      const selRow = selectedToggle.closest('.q-opt-row');
-      const selIdx = parseInt(selectedToggle.dataset.optIndex, 10) || 0;
-      const selInput = selRow ? selRow.querySelector('.q-opt-input') : null;
-      const correctVal = selInput ? serializeRichEditorToMarkdown(selInput) : '';
-      if (!correctVal) {
-        showAdminAlert('⚠️ Üres a helyes válasz', `A(z) ${qNum}. kérdésnél a helyesnek jelölt (${selIdx + 1}.) válaszlehetőség szövege nem lehet üres!`);
-        return;
+      const correctVals = [];
+      for (const selToggle of selectedToggles) {
+        const selRow = selToggle.closest('.q-opt-row');
+        const selIdx = parseInt(selToggle.dataset.optIndex, 10) || 0;
+        const selExtracted = extractAbcdOptionFromRow(selRow);
+        const cVal = selExtracted ? selExtracted.value : '';
+        if (!cVal) {
+          showAdminAlert('⚠️ Üres a helyes válasz', `A(z) ${qNum}. kérdésnél a helyesnek jelölt (${selIdx + 1}.) válaszlehetőség nem lehet üres (adj meg szöveget vagy csatolj képet)!`);
+          return;
+        }
+        if (!correctVals.includes(cVal)) correctVals.push(cVal);
       }
-      const filledOpts = Array.from(cardEl.querySelectorAll('.q-opt-input'))
-        .map(inp => serializeRichEditorToMarkdown(inp))
-        .filter(Boolean);
+      const filledOpts = Array.from(cardEl.querySelectorAll('.q-opt-row'))
+        .map(extractAbcdOptionFromRow)
+        .filter(Boolean)
+        .map(item => item.stored);
       if (filledOpts.length < 2) {
         showAdminAlert('⚠️ Kevés válaszlehetőség', `A(z) ${qNum}. feleletválasztós kérdésnél legalább 2 válaszlehetőség kitöltése kötelező!`);
         return;
       }
       options = filledOpts;
-      correct = correctVal;
+      correct = correctVals.length === 1 ? correctVals[0] : JSON.stringify(correctVals);
     } else if (type === 'TF') {
       const selectedTf = cardEl.querySelector('.btn-tf-pick.is-correct');
       if (!selectedTf) {
@@ -3987,25 +4145,30 @@
       let options = [];
 
       if (type === 'ABCD') {
-        const selectedToggle = b.querySelector('.q-opt-correct-toggle.is-correct');
-        if (!selectedToggle) {
-          showAdminAlert('⚠️ Helyes válasz nincs kijelölve', `A(z) ${qNum}. feleletválasztós kérdésnél nem jelölted meg a helyes választ!\n\nKérlek, kattints a helyes válasz számozott körére!`);
+        const selectedToggles = Array.from(b.querySelectorAll('.q-opt-correct-toggle.is-correct'));
+        if (selectedToggles.length === 0) {
+          showAdminAlert('⚠️ Helyes válasz nincs kijelölve', `A(z) ${qNum}. feleletválasztós kérdésnél nem jelölted meg a helyes választ!\n\nKérlek, kattints legalább egy helyes válasz számozott körére!`);
           return;
         }
 
-        const selRow = selectedToggle.closest('.q-opt-row');
-        const selIdx = parseInt(selectedToggle.dataset.optIndex, 10) || 0;
-        const selInput = selRow ? selRow.querySelector('.q-opt-input') : null;
-        const correctVal = selInput ? serializeRichEditorToMarkdown(selInput) : '';
+        const correctVals = [];
+        for (const selToggle of selectedToggles) {
+          const selRow = selToggle.closest('.q-opt-row');
+          const selIdx = parseInt(selToggle.dataset.optIndex, 10) || 0;
+          const selExtracted = extractAbcdOptionFromRow(selRow);
+          const cVal = selExtracted ? selExtracted.value : '';
 
-        if (!correctVal) {
-          showAdminAlert('⚠️ Üres a helyes válasz', `A(z) ${qNum}. kérdésnél a helyesnek jelölt (${selIdx + 1}.) válaszlehetőség szövege nem lehet üres!`);
-          return;
+          if (!cVal) {
+            showAdminAlert('⚠️ Üres a helyes válasz', `A(z) ${qNum}. kérdésnél a helyesnek jelölt (${selIdx + 1}.) válaszlehetőség nem lehet üres (adj meg szöveget vagy csatolj képet)!`);
+            return;
+          }
+          if (!correctVals.includes(cVal)) correctVals.push(cVal);
         }
 
-        const filledOpts = Array.from(b.querySelectorAll('.q-opt-input'))
-          .map(inp => serializeRichEditorToMarkdown(inp))
-          .filter(Boolean);
+        const filledOpts = Array.from(b.querySelectorAll('.q-opt-row'))
+          .map(extractAbcdOptionFromRow)
+          .filter(Boolean)
+          .map(item => item.stored);
 
         if (filledOpts.length < 2) {
           showAdminAlert('⚠️ Kevés válaszlehetőség', `A(z) ${qNum}. feleletválasztós kérdésnél legalább 2 válaszlehetőség kitöltése kötelező!`);
@@ -4013,7 +4176,7 @@
         }
 
         options = filledOpts;
-        correct = correctVal;
+        correct = correctVals.length === 1 ? correctVals[0] : JSON.stringify(correctVals);
 
       } else if (type === 'TF') {
         const selectedTf = b.querySelector('.btn-tf-pick.is-correct');

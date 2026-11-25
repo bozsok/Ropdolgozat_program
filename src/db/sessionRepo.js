@@ -1554,15 +1554,46 @@ function finalizeOpenNavigationParticipantInTx(participantId) {
 
     let finalAnswerText = '';
     if (q.question_type === 'ABCD') {
-      const optStrings = Array.isArray(parsedOptions) ? parsedOptions.map(o => String(o)) : [];
-      if (optStrings.includes(rawDraft)) {
-        // Pontos, pillanatképhez kötött ABCD opciószöveg megőrzése (szélső szóközökkel együtt!)
-        finalAnswerText = rawDraft;
-      } else if (rawDraft.trim() === '') {
-        continue;
-      } else {
-        const trimmedMatches = optStrings.filter(o => o.trim() === rawDraft.trim());
-        finalAnswerText = trimmedMatches.length === 1 ? trimmedMatches[0] : rawDraft;
+      const extractOptVal = (o) => {
+        if (o && typeof o === 'object') {
+          const t = o.text !== undefined && o.text !== null ? String(o.text).trim() : '';
+          const img = o.image_path !== undefined && o.image_path !== null ? String(o.image_path).trim() : '';
+          return t || img;
+        }
+        return String(o);
+      };
+      const optStrings = Array.isArray(parsedOptions) ? parsedOptions.map(extractOptVal) : [];
+      const resolveSingleOpt = (val) => {
+        const s = String(val ?? '');
+        if (optStrings.includes(s)) return s;
+        const trimmedMatches = optStrings.filter(o => o.trim() === s.trim());
+        return trimmedMatches.length === 1 ? trimmedMatches[0] : s;
+      };
+
+      let handledMulti = false;
+      if (rawDraft.trim().startsWith('[')) {
+        try {
+          const parsedMulti = JSON.parse(rawDraft);
+          if (Array.isArray(parsedMulti)) {
+            handledMulti = true;
+            const resolvedList = [...new Set(
+              parsedMulti.map(item => resolveSingleOpt(item)).filter(v => v.trim() !== '')
+            )];
+            if (resolvedList.length === 0) continue;
+            finalAnswerText = JSON.stringify(resolvedList);
+          }
+        } catch {}
+      }
+
+      if (!handledMulti) {
+        if (optStrings.includes(rawDraft)) {
+          // Pontos, pillanatképhez kötött ABCD opciószöveg megőrzése (szélső szóközökkel együtt!)
+          finalAnswerText = rawDraft;
+        } else if (rawDraft.trim() === '') {
+          continue;
+        } else {
+          finalAnswerText = resolveSingleOpt(rawDraft);
+        }
       }
     } else {
       const trimmed = rawDraft.trim();
@@ -1713,20 +1744,61 @@ function saveDraftAnswer({ participant_id, question_id, draft_answer, base_versi
         throw makeErr('Igaz / Hamis kérdésnél csak az „Igaz” vagy a „Hamis” érték választható!', 'INVALID_DRAFT_OPTION', 400);
       }
     } else if (questionObj.question_type === 'ABCD') {
+      const extractOptVal = (o) => {
+        if (o && typeof o === 'object') {
+          const t = o.text !== undefined && o.text !== null ? String(o.text).trim() : '';
+          const img = o.image_path !== undefined && o.image_path !== null ? String(o.image_path).trim() : '';
+          return t || img;
+        }
+        return String(o);
+      };
       let validOpts = [];
       if (Array.isArray(questionObj.options)) {
-        validOpts = questionObj.options.map(o => String(o));
+        validOpts = questionObj.options.map(extractOptVal);
       } else if (typeof questionObj.options === 'string') {
-        try { validOpts = JSON.parse(questionObj.options).map(o => String(o)); } catch { validOpts = []; }
+        try { validOpts = JSON.parse(questionObj.options).map(extractOptVal); } catch { validOpts = []; }
       }
 
-      if (draft_answer === '') {
+      if (draft_answer === '' || draft_answer.trim() === '') {
         valueToStore = '';
+      } else if (draft_answer.trim().startsWith('[')) {
+        // Többválasztós ABCD piszkozat (JSON tömb)
+        let parsedMulti = null;
+        try {
+          const tmp = JSON.parse(draft_answer);
+          if (Array.isArray(tmp)) parsedMulti = tmp;
+        } catch {}
+
+        if (parsedMulti !== null) {
+          const resolvedItems = [];
+          for (const item of parsedMulti) {
+            const s = String(item ?? '');
+            if (s.trim() === '') continue;
+            if (validOpts.length === 0 || validOpts.includes(s)) {
+              if (!resolvedItems.includes(s)) resolvedItems.push(s);
+            } else {
+              const trimmedMatches = validOpts.filter(o => o.trim() === s.trim());
+              if (trimmedMatches.length === 1) {
+                if (!resolvedItems.includes(trimmedMatches[0])) resolvedItems.push(trimmedMatches[0]);
+              } else {
+                throw makeErr('A kiválasztott válaszlehetőség nem tartozik ehhez a kérdéshez!', 'INVALID_DRAFT_OPTION', 400);
+              }
+            }
+          }
+          valueToStore = resolvedItems.length > 0 ? JSON.stringify(resolvedItems) : '';
+        } else if (validOpts.length === 0 || validOpts.includes(draft_answer)) {
+          valueToStore = draft_answer;
+        } else {
+          const trimmedMatches = validOpts.filter(o => o.trim() === draft_answer.trim());
+          if (trimmedMatches.length === 1) {
+            valueToStore = trimmedMatches[0];
+          } else {
+            throw makeErr('A kiválasztott válaszlehetőség nem tartozik ehhez a kérdéshez!', 'INVALID_DRAFT_OPTION', 400);
+          }
+        }
       } else if (validOpts.length === 0 || validOpts.includes(draft_answer)) {
         // Pontos, veszteségmentes egyezés a pillanatkép opciójával (hosszú és szélső szóközös opciók is!)
         valueToStore = draft_answer;
-      } else if (draft_answer.trim() === '') {
-        valueToStore = '';
       } else {
         // Kompatibilitási feloldás: csak akkor fogadjuk el a trimmelt egyezést, ha pontosan egy opcióra illik
         const trimmedMatches = validOpts.filter(o => o.trim() === draft_answer.trim());

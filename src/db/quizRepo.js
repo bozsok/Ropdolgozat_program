@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../../config');
 const db = require('./init');
+const grader = require('../services/grader');
 
 /**
  * quizRepo.js - Tesztek és kérdések adatbázis műveletei
@@ -142,6 +143,7 @@ function getQuizById(quizId, isStudentView = false, includeDeleted = false) {
         instructions: q.instructions || '',
         image_path: q.image_path,
         options: parsedOptions,
+        allow_multiple: grader.isMultipleChoiceCorrectAnswer(q.question_type, q.correct_answer),
         points: q.points
       };
     }

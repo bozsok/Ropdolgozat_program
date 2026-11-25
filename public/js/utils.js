@@ -33,8 +33,9 @@ function formatCode(text) {
   });
 
   // 2. Félkövér (**...**), aláhúzott (__...__), dőlt (*...*), felső (^...^) és alsó (~...~) index
-  html = html.replace(/\*\*([^\s*](?:[^*\n]*?[^\s*])?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/__([^\s_](?:[^_\n]*?[^\s_])?)__/g, '<u>$1</u>');
+  // Megjegyzés: a negatív lookahead ((?!\*\*), (?!__)) megengedi a szövegen belüli önálló * (pl. szorzásjel: **280 * 50 = ...**) és _ karaktereket
+  html = html.replace(/\*\*([^\s*](?:(?:(?!\*\*)[^\n])*?[^\s*])?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([^\s_](?:(?:(?!__)[^\n])*?[^\s_])?)__/g, '<u>$1</u>');
   html = html.replace(/\*([^\s*](?:[^*\n]*?[^\s*])?)\*/g, '<em>$1</em>');
   html = html.replace(/\^([^\^\n]+?)\^/g, '<sup>$1</sup>');
   html = html.replace(/~([^~\n]+?)~/g, '<sub>$1</sub>');
@@ -55,8 +56,8 @@ function stripFormatting(text) {
   if (!text) return '';
   return String(text)
     .replace(/`([^`\n]+)`/g, '$1')
-    .replace(/\*\*([^\s*](?:[^*\n]*?[^\s*])?)\*\*/g, '$1')
-    .replace(/__([^\s_](?:[^_\n]*?[^\s_])?)__/g, '$1')
+    .replace(/\*\*([^\s*](?:(?:(?!\*\*)[^\n])*?[^\s*])?)\*\*/g, '$1')
+    .replace(/__([^\s_](?:(?:(?!__)[^\n])*?[^\s_])?)__/g, '$1')
     .replace(/\*([^\s*](?:[^*\n]*?[^\s*])?)\*/g, '$1')
     .replace(/\^([^\^\n]+?)\^/g, '$1')
     .replace(/~([^~\n]+?)~/g, '$1')
@@ -98,12 +99,23 @@ function serializeRichEditorToMarkdown(rootEl) {
 
     const isBlock = tag === 'DIV' || tag === 'P';
     const nextInCode = inCode || tag === 'CODE';
+    const children = Array.from(node.childNodes);
+
+    // Szándékos üres sor (Chrome/Edge: <div><br></div> vagy <p><br></p>) megőrzése
+    if (
+      isBlock &&
+      node !== rootEl &&
+      children.length === 1 &&
+      children[0].nodeType === 1 &&
+      children[0].tagName.toUpperCase() === 'BR'
+    ) {
+      return '\n';
+    }
 
     let inner = '';
-    const children = Array.from(node.childNodes);
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
-      // A böngészők gyakran tesznek egy záró <br>-t egy blokk/editor végére, ezt nem duplázzuk sortöréssé
+      // A böngészők gyakran tesznek egy záró <br>-t egy szöveges blokk/editor végére, ezt nem duplázzuk sortöréssé
       if (
         child.nodeType === 1 &&
         child.tagName.toUpperCase() === 'BR' &&
@@ -149,6 +161,76 @@ function serializeRichEditorToMarkdown(rootEl) {
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/**
+ * ABCD opció normalizálása (visszafelé kompatibilis: sima string és { text, image_path } objektum)
+ * @returns {{ text: string, image_path: string, value: string }}
+ */
+function normalizeOptionItem(opt) {
+  if (opt && typeof opt === 'object') {
+    const text = opt.text !== undefined && opt.text !== null ? String(opt.text).trim() : '';
+    const image_path = opt.image_path !== undefined && opt.image_path !== null ? String(opt.image_path).trim() : '';
+    return { text, image_path, value: text || image_path };
+  }
+  const text = (opt !== undefined && opt !== null) ? String(opt).trim() : '';
+  return { text, image_path: '', value: text };
+}
+
+/**
+ * Többválasztós (JSON tömb) vagy egyetlen válasz string felbontása tömbbé
+ * @returns {string[]}
+ */
+function parseMultiAnswerValues(rawAnswer) {
+  if (rawAnswer === undefined || rawAnswer === null) return [];
+  const str = String(rawAnswer).trim();
+  if (!str) return [];
+  if (str.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(str);
+      if (Array.isArray(parsed)) {
+        return parsed.map(item => String(item ?? '').trim()).filter(Boolean);
+      }
+    } catch {
+      // Nem érvényes JSON tömb -> sima szövegként kezeljük
+    }
+  }
+  return [str];
+}
+
+/**
+ * Válasz megjelenítése összegzőben/visszajelzésben (képes opció esetén bélyegképpel,
+ * többválasztós válasz esetén az összes kijelölt elem megjelenítésével)
+ */
+function renderAnswerDisplayHtml(rawAnswer, questionOptions = []) {
+  const values = parseMultiAnswerValues(rawAnswer);
+  if (values.length === 0) return '–';
+
+  const normalizedOpts = Array.isArray(questionOptions) ? questionOptions.map(normalizeOptionItem) : [];
+
+  const renderSingle = (ansStr) => {
+    if (normalizedOpts.length > 0) {
+      const matched = normalizedOpts.find(item => item.value && item.value.toLowerCase() === ansStr.toLowerCase());
+      if (matched && matched.image_path) {
+        const imgHtml = `<img src="${escapeHtml(matched.image_path)}" alt="Válasz képe" class="summary-answer-thumb">`;
+        return matched.text
+          ? `<span class="summary-answer-with-img">${imgHtml}<span>${formatCode(matched.text)}</span></span>`
+          : `<span class="summary-answer-with-img">${imgHtml}</span>`;
+      }
+    }
+
+    if (/^\/uploads\/.+\.(?:png|jpe?g|webp|gif|svg)$/i.test(ansStr)) {
+      return `<span class="summary-answer-with-img"><img src="${escapeHtml(ansStr)}" alt="Válasz képe" class="summary-answer-thumb"></span>`;
+    }
+
+    return formatCode(ansStr);
+  };
+
+  if (values.length === 1) {
+    return renderSingle(values[0]);
+  }
+
+  return `<span class="summary-answer-multi">${values.map(v => `<span class="summary-answer-multi-item">${renderSingle(v)}</span>`).join('')}</span>`;
 }
 
 /**

@@ -3,6 +3,20 @@
  */
 
 /**
+ * ABCD opció kanonikus szöveges/azonosító értékének kinyerése
+ * (visszafelé kompatibilis: támogatja a sima string és a { text, image_path } objektum opciókat is)
+ */
+function getOptionValue(opt) {
+  if (opt === null || opt === undefined) return '';
+  if (typeof opt === 'object') {
+    const txt = opt.text !== undefined && opt.text !== null ? String(opt.text).trim() : '';
+    const img = opt.image_path !== undefined && opt.image_path !== null ? String(opt.image_path).trim() : '';
+    return txt || img;
+  }
+  return String(opt).trim();
+}
+
+/**
  * Szöveges válasz tisztítása összehasonlításhoz:
  * Kisbetűsítés, felesleges szóközök és írásjelek egységesítése
  */
@@ -12,6 +26,51 @@ function normalizeText(str) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ');
+}
+
+/**
+ * Válasz(ok) parszolása tömbbé (többválasztós JSON tömb vagy egyetlen string esetén is)
+ */
+function parseAnswerList(raw) {
+  if (raw === null || raw === undefined) return [];
+  const str = String(raw).trim();
+  if (!str) return [];
+  if (str.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(str);
+      if (Array.isArray(parsed)) {
+        return parsed.map(item => String(item ?? '').trim()).filter(Boolean);
+      }
+    } catch {
+      // Nem érvényes JSON tömb -> sima szöveges válaszként kezeljük
+    }
+  }
+  return [str];
+}
+
+/**
+ * Eldönti, hogy egy kérdéshez több helyes ABCD válasz tartozik-e
+ */
+function isMultipleChoiceCorrectAnswer(questionType, correctAnswer) {
+  if (questionType !== 'ABCD') return false;
+  return parseAnswerList(correctAnswer).length > 1;
+}
+
+/**
+ * ABCD opció normalizálása összehasonlításhoz (betűjel A-F feloldással együtt, ha van options)
+ */
+function resolveAbcdCanonical(val, options = []) {
+  const lower = String(val ?? '').trim().toLowerCase();
+  if (!lower) return '';
+  if (Array.isArray(options) && options.length > 0) {
+    const letterMap = { 'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5 };
+    const idx = letterMap[lower];
+    if (idx !== undefined && options[idx] !== undefined) {
+      const optVal = getOptionValue(options[idx]).toLowerCase();
+      if (optVal) return optVal;
+    }
+  }
+  return lower;
 }
 
 /**
@@ -37,36 +96,45 @@ function evaluateAnswer(questionType, submittedAnswer, correctAnswer, maxPoints 
 
   // 1. Feleletválasztós (ABCD) kiértékelése
   if (questionType === 'ABCD') {
-    // Támogatjuk, ha a correctAnswer JSON tömb vagy sima szöveg
-    let acceptedAnswers = [];
-    try {
-      const parsed = JSON.parse(rawCorrect);
-      if (Array.isArray(parsed)) {
-        acceptedAnswers = parsed.map(a => String(a).trim());
-      } else {
-        acceptedAnswers = [rawCorrect];
-      }
-    } catch {
-      acceptedAnswers = [rawCorrect];
+    const acceptedAnswers = parseAnswerList(rawCorrect);
+
+    // Több helyes válasz (többválasztós ABCD): SZIGORÚ (minden vagy semmi) halmazegyezés
+    if (acceptedAnswers.length > 1) {
+      const submittedAnswers = parseAnswerList(rawSubmitted);
+      const acceptedSet = new Set(acceptedAnswers.map(ans => resolveAbcdCanonical(ans, options)).filter(Boolean));
+      const submittedSet = new Set(submittedAnswers.map(ans => resolveAbcdCanonical(ans, options)).filter(Boolean));
+
+      const isMatch = acceptedSet.size > 0
+        && submittedSet.size === acceptedSet.size
+        && [...acceptedSet].every(ans => submittedSet.has(ans));
+
+      return {
+        eval_status: isMatch ? 'CORRECT' : 'WRONG',
+        points_earned: isMatch ? points : 0.0,
+        is_correct: isMatch ? 1 : 0
+      };
     }
 
+    // Egyetlen helyes válasz (hagyományos ABCD)
     let isMatch = acceptedAnswers.some(ans => ans.toLowerCase() === rawSubmitted.toLowerCase());
 
-    // Kompatibilitási fallback: ha a correctAnswer betűjel (pl. 'A', 'B', 'C', 'D'), és van options tömb
+    // Kompatibilitási fallback: ha a correctAnswer betűjel (pl. 'A'-'F'), és van options tömb
     if (!isMatch && Array.isArray(options) && options.length > 0) {
-      const letterMap = { 'a': 0, 'b': 1, 'c': 2, 'd': 3 };
+      const letterMap = { 'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5 };
       const subLower = rawSubmitted.toLowerCase();
       acceptedAnswers.forEach(ans => {
         const idx = letterMap[ans.toLowerCase()];
-        if (idx !== undefined && options[idx] && options[idx].toLowerCase().trim() === subLower) {
+        const optVal = idx !== undefined && options[idx] !== undefined ? getOptionValue(options[idx]) : '';
+        if (optVal && optVal.toLowerCase() === subLower) {
           isMatch = true;
         }
       });
-      // Vagy fordítva: ha a diák betűjelet küldött be, de a correct_answer a szöveg
+      // Vagy fordítva: ha a diák betűjelet küldött be, de a correct_answer a szöveg/kép
       const subIdx = letterMap[subLower];
-      if (!isMatch && subIdx !== undefined && options[subIdx]) {
-        const optText = options[subIdx].toLowerCase().trim();
-        if (acceptedAnswers.some(ans => ans.toLowerCase() === optText)) {
+      const subOptVal = subIdx !== undefined && options[subIdx] !== undefined ? getOptionValue(options[subIdx]) : '';
+      if (!isMatch && subOptVal) {
+        const optLower = subOptVal.toLowerCase();
+        if (acceptedAnswers.some(ans => ans.toLowerCase() === optLower)) {
           isMatch = true;
         }
       }
@@ -177,6 +245,9 @@ function getGradeText(grade) {
 }
 
 module.exports = {
+  getOptionValue,
+  parseAnswerList,
+  isMultipleChoiceCorrectAnswer,
   normalizeText,
   evaluateAnswer,
   calculateGrade,
