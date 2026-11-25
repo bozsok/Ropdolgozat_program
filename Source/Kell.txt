@@ -1,12 +1,3 @@
-1. Ha elkezdek a Tesztszerkesztő felületen egy tesztet megváltoztatni és ez a teszt importáláson keresztül jutott a programba, akkor ha kivaítok egy hibát pl. a 4. kérdésnél, akkor hiába nyomom meg az adott kérdésnél a zöld Mentés gombot,  kiírja, hogy
-"Helyes válasz nincs kijelölve", "A(z) 5. feleletválasztós kérdésnél nem jelölted meg a helyes választ! Kérlek, kattints a helyes válasz számozott körére (1–4)." <-- én a lokális zöld gombbal azt szerettem volna elérni, hogy az adott módosítás azonnal bejegyzésre kerüljön a tesztben, nem pedig az oldal alján lévő "Feladatsor mentése" gomb funkcióját, amely azoonal ellenőrzést hajt végre az egész teszten és ha talál nem megjölt helyes választ, akkor jelez.
+1. Mi a helyes nyelvtanilag a magyar helyesírás szerint a feleletválasztós válaszok megadásál? Arra gondolok, hoyg kell-e pont a beírt válasz után, nagy kezdőbetűvel kell-e kezdeni?
 
-2. importálás funkció nem teljesen jól olvassa be a teszteket, mert
-- feleletválasztós kérdésnek jelöli az össze lehetséges kérdést (igaz-hamis, beírós)
-- az első válaszban az összes tovűábbi kérdéseket és válaszokat is megjelöli, pl. a 23. kérdéshez mehjelöli a 24-25-26 stb. kérdéseket és válaszokat ömlesztve.
-
-3. egy teszt importálásakor a "Hiba a PDF feldolgozása során: UNIQUE constraint failed: questions.quiz_id, questions.question_order" hibaüzenetet kapom és nem tudom a .pdf állományt imőportálni.
-
-4. Ha bejelentkezek a tanári gépen, akkor megjelenik a 'Tanári munkaállomás' kapszula a 'Tanári belépés' gomb mellett. Amenniyben bejelentkezést követően kilépék a 'Kilépés' gombbal, neincsen feltüntetve a 'Tanári munkaállomás' kapszula, már eltűnt. Miért? Illetve bejelentkezést követően is jó lenne a fejlécben látni a 'Tanári munkaállomás' kapszulát.
-
-5. Diák beleépsi felületen látszik a '1. gép' kapszula a jobb felső sarokban. Teszt írásakor ez a kapszula a baloldalon jelenik meg a fejlécben és a jobb oldalon a tanuló neve + gépszám/név ismételten látszik, pl. Kovűács János (1. gép). Miért kell duplán jelezni a gép számot? Nem elég a baloldali kapszulában?
+2. A diák felüelt teszt kitüöltése esetén is legyen egységes. Baloldalon legyen egy kép helyőrző akkor is, ha nincsen kép az adott kérdéshez, így mindig  ajobb oldalon lesz a tesztkérdés és a válaszok megadásának lehetősége. Most úgy működik, hogy ha nincsen kép, akkor egy szép animációval összeszűkül a kérdés kártyája. Szerintem érdemes ezt is egységesre hozni.

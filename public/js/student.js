@@ -4243,7 +4243,7 @@
                   </button>
                 </span>
               ` : ''}</span>
-              <span class="calm-summary-q-ans">Válaszod: <strong>${escapeHtml(submittedText)}</strong></span>
+              <span class="calm-summary-q-ans">Válaszod: <strong>${formatCode(submittedText)}</strong></span>
             </div>
           </div>
           <div class="calm-summary-q-badge ${badgeClass}">

@@ -60,6 +60,23 @@ function createPng(width, height, rawRgbBuffer) {
 }
 
 /**
+ * Az Inter betűtípus (Inter-Regular, Inter-Bold stb.) OpenType kontextuális (calt/case)
+ * glifáinak pótlása: a Socrative PDF-exportáló ezekhez <0000> ToUnicode értéket ír,
+ * ezért nélküle kimaradnak a szövegből (pl. 'interneten' -> 'inteneten', 'True' -> 'Tue').
+ * Kizárólag akkor érvényesül, ha a font neve Inter és a CMap-ben ténylegesen <0000> szerepel.
+ */
+const INTER_NULL_GLYPH_FALLBACK = new Map([
+  [0x0336, 'r'], // r.calt (pl. interneten, pendrive, történik, True)
+  [0x051E, '('], // parenleft.case
+  [0x051F, ')'], // parenright.case
+  [0x0535, '-'], // hyphen.case
+  [0x056F, '='], // equal.case
+  [0x0571, '+'], // plus.case
+  [0x0572, '–'], // endash/minus.case
+  [0x0581, '×']  // multiply.case
+]);
+
+/**
  * Socrative PDF fájl bináris elemzése és tartalomkinyerése
  * @param {Buffer} pdfBuffer - A feltöltött PDF fájl tartalma
  * @returns {Object} { quizTitle, questions: Array }
@@ -73,7 +90,7 @@ function parseSocrativePdf(pdfBuffer) {
     return m ? m[1] : null;
   }
 
-  function parseCMap(objNum) {
+  function parseCMap(objNum, baseFont = '') {
     const body = getObjectBody(objNum);
     if (!body) return new Map();
     const streamMatch = body.match(/stream[\r\n]+/);
@@ -88,6 +105,7 @@ function parseSocrativePdf(pdfBuffer) {
       return new Map();
     }
 
+    const isInterFont = /(?:^|[+])Inter(?:[-_]|$)/i.test(baseFont);
     const map = new Map();
     const bfcBlocks = txt.match(/\d+\s+beginbfchar([\s\S]*?)endbfchar/g) || [];
     for (const block of bfcBlocks) {
@@ -95,6 +113,10 @@ function parseSocrativePdf(pdfBuffer) {
       let m;
       while ((m = re.exec(block)) !== null) {
         const src = parseInt(m[1], 16);
+        if (isInterFont && src !== 0 && m[2] === '0000' && INTER_NULL_GLYPH_FALLBACK.has(src)) {
+          map.set(src, INTER_NULL_GLYPH_FALLBACK.get(src));
+          continue;
+        }
         let s = '';
         for (let i = 0; i < m[2].length; i += 4) {
           s += String.fromCharCode(parseInt(m[2].slice(i, i + 4), 16));
@@ -186,7 +208,9 @@ function parseSocrativePdf(pdfBuffer) {
     if (!fBody) return new Map();
     const toUniMatch = fBody.match(/\/ToUnicode\s+(\d+)\s+0\s+R/);
     if (!toUniMatch) return new Map();
-    const cmap = parseCMap(parseInt(toUniMatch[1], 10));
+    const baseFontMatch = fBody.match(/\/BaseFont\s+\/([^\s\/\[\]<>]+)/);
+    const baseFont = baseFontMatch ? baseFontMatch[1] : '';
+    const cmap = parseCMap(parseInt(toUniMatch[1], 10), baseFont);
     cmapCache.set(fontObjId, cmap);
     return cmap;
   }
@@ -592,7 +616,11 @@ function parseSocrativePdf(pdfBuffer) {
 
   // 8. Végső kérdésobjektumok összeállítása (ABCD, TF, SHORT felismerés + egyedi question_order)
   const parsedQuestions = rawQuestions.map((q, idx) => {
-    const qBody = q.questionLines.join(' ').replace(/\s+/g, ' ').trim();
+    const qBody = q.questionLines
+      .join(' ')
+      .replace(/\s*Válaszd ki az egyetlen helyes megoldást!/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
     const explanationRaw = q.explanationLines.join(' ').replace(/\s+/g, ' ').trim();
 
     // Opcionális régi magyar megoldókulcs-szöveg a magyarázatban ("A helyes válasz: ...")

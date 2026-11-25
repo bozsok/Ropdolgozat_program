@@ -702,7 +702,7 @@
 
     if (tpQuestionSelect) {
       tpQuestionSelect.innerHTML = questions.map((q, idx) => {
-        const plain = String(q.question_text || '').replace(/<[^>]*>/g, '').trim();
+        const plain = stripFormatting(String(q.question_text || '').replace(/<[^>]*>/g, ''));
         const shortTxt = plain.length > 36 ? `${plain.slice(0, 36)}…` : plain;
         return `<option value="${idx}" ${idx === currentIdx ? 'selected' : ''}>${idx + 1} / ${total}. kérdés${shortTxt ? ' – ' + escapeHtml(shortTxt) : ''}</option>`;
       }).join('');
@@ -738,7 +738,7 @@
       if (isReviewPhase) {
         tpQuestionPreview.textContent = 'Kérdések lezárva – a tanulók látják az összegzést. A mátrixban még javíthatsz és adhatsz részpontot!';
       } else if (activeQ) {
-        const plainText = String(activeQ.question_text || '').replace(/<[^>]*>/g, '').trim();
+        const plainText = stripFormatting(String(activeQ.question_text || '').replace(/<[^>]*>/g, ''));
         tpQuestionPreview.textContent = `${currentIdx + 1}. kérdés: ${plainText || '–'}`;
       }
     }
@@ -2985,7 +2985,7 @@
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 200px 100px 1fr; gap: 12px; margin-bottom: 12px;">
+        <div style="display: grid; grid-template-columns: 200px 100px 1fr; gap: 12px; align-items: start; margin-bottom: 12px;">
           <div>
             <label class="form-label">Típus:</label>
             <select class="form-control q-type-select">
@@ -2999,11 +2999,24 @@
             <input type="number" step="0.5" min="0.5" class="form-control q-points" value="${qPoints}">
           </div>
           <div>
-            <label class="form-label" style="display: inline-flex; align-items: center; gap: 5px;">
-              <span>Kérdés szövege:</span>
-              <span class="material-symbols-outlined help-tooltip-icon" title="Kódrészlet, képlet vagy billentyűkombináció kiemeléséhez használd a visszahajló idézőjelet (backtick --> AltGr+9): \`kód\` (pl. \`=SZUM(A1:A10)\` vagy \`Ctrl+C\`).">help</span>
-            </label>
-            <input type="text" class="form-control q-text" value="${escapeHtml(qText)}" placeholder="pl. Melyik képlet számol összeget?">
+            <div class="q-text-label-row">
+              <label class="form-label" style="display: inline-flex; align-items: center; gap: 5px;">
+                <span>Kérdés szövege:</span>
+                <span class="material-symbols-outlined help-tooltip-icon" title="Formázás (a kérdésre és a válaszokra is működik): **félkövér** (Ctrl+B), *dőlt* (Ctrl+I), __aláhúzott__ (Ctrl+U), \`kód\`, ^felső index^, ~alsó index~, Enter = sortörés.">help</span>
+              </label>
+              <div class="q-format-toolbar" role="toolbar" aria-label="Szövegformázás (kérdés és válaszok)">
+                <button type="button" class="q-fmt-btn" data-fmt="bold" title="Félkövér (**szöveg**, Ctrl+B)"><strong>B</strong></button>
+                <button type="button" class="q-fmt-btn" data-fmt="italic" title="Dőlt (*szöveg*, Ctrl+I)"><em>I</em></button>
+                <button type="button" class="q-fmt-btn" data-fmt="underline" title="Aláhúzott (__szöveg__, Ctrl+U)"><u>U</u></button>
+                <span class="q-fmt-sep" aria-hidden="true"></span>
+                <button type="button" class="q-fmt-btn" data-fmt="code" title="Kód / képlet (\`kód\`)">&lt;/&gt;</button>
+                <button type="button" class="q-fmt-btn" data-fmt="sup" title="Felső index (^szöveg^)">x<sup>2</sup></button>
+                <button type="button" class="q-fmt-btn" data-fmt="sub" title="Alsó index (~szöveg~)">x<sub>2</sub></button>
+                <span class="q-fmt-sep" aria-hidden="true"></span>
+                <button type="button" class="q-fmt-btn" data-fmt="br" title="Sortörés beszúrása (Enter)">↵</button>
+              </div>
+            </div>
+            <textarea class="form-control q-text q-auto-textarea" rows="2" placeholder="pl. Melyik képlet számol összeget?">${escapeHtml(qText)}</textarea>
           </div>
         </div>
 
@@ -3065,7 +3078,7 @@
                   <span class="q-opt-num">${i + 1}</span>
                   <span class="material-symbols-outlined q-opt-check">check</span>
                 </button>
-                <input type="text" class="form-control q-opt-input q-opt-${i}" placeholder="${i + 1}. válaszlehetőség" value="${escapeHtml(optVal || '')}">
+                <textarea class="form-control q-opt-input q-auto-textarea q-opt-${i}" rows="1" placeholder="${i + 1}. válaszlehetőség">${escapeHtml(optVal || '')}</textarea>
                 <button type="button" class="btn btn-secondary btn-remove-abcd-opt" title="Válaszlehetőség eltávolítása" style="padding: 6px 8px; font-size: 0.85rem; ${initialAbcdOptions.length > 2 ? '' : 'display: none;'}">
                   <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
                 </button>
@@ -3216,7 +3229,7 @@
             <span class="q-opt-num">${idx + 1}</span>
             <span class="material-symbols-outlined q-opt-check">check</span>
           </button>
-          <input type="text" class="form-control q-opt-input" placeholder="${idx + 1}. válaszlehetőség" value="">
+          <textarea class="form-control q-opt-input q-auto-textarea" rows="1" placeholder="${idx + 1}. válaszlehetőség"></textarea>
           <button type="button" class="btn btn-secondary btn-remove-abcd-opt" title="Válaszlehetőség eltávolítása" style="padding: 6px 8px; font-size: 0.85rem;">
             <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">close</span>
           </button>
@@ -3372,6 +3385,122 @@
         changeBtn.disabled = false;
         fileInput.value = '';
       }
+    });
+
+    // Dinamikus magasságállítás (auto-resize) és szövegformázó eszköztár a kérdés- és válaszmezőkhöz
+    const autoResizeTextarea = (el) => {
+      if (!el || el.tagName !== 'TEXTAREA') return;
+      const maxH = el.classList.contains('q-text') ? 240 : 160;
+      el.style.height = 'auto';
+      const targetH = Math.min(el.scrollHeight + 2, maxH);
+      el.style.height = `${targetH}px`;
+      el.style.overflowY = (el.scrollHeight + 2 > maxH) ? 'auto' : 'hidden';
+    };
+
+    const FORMAT_SPECS = {
+      bold: { prefix: '**', suffix: '**' },
+      italic: { prefix: '*', suffix: '*' },
+      underline: { prefix: '__', suffix: '__' },
+      code: { prefix: '`', suffix: '`' },
+      sup: { prefix: '^', suffix: '^' },
+      sub: { prefix: '~', suffix: '~' }
+    };
+
+    let lastFocusedFormatField = item.querySelector('.q-text');
+
+    const applyFormatToField = (field, fmtKey) => {
+      if (!field || field.tagName !== 'TEXTAREA') return;
+      const start = field.selectionStart ?? field.value.length;
+      const end = field.selectionEnd ?? field.value.length;
+      const val = field.value;
+
+      if (fmtKey === 'br') {
+        field.value = val.slice(0, start) + '\n' + val.slice(end);
+        const caret = start + 1;
+        field.focus();
+        field.setSelectionRange(caret, caret);
+        autoResizeTextarea(field);
+        return;
+      }
+
+      const spec = FORMAT_SPECS[fmtKey];
+      if (!spec) return;
+      const { prefix, suffix } = spec;
+      const selected = val.slice(start, end);
+
+      // Ha a kijelölés már pontosan az adott jelöléssel van körbevéve, levesszük (toggle)
+      if (selected && selected.startsWith(prefix) && selected.endsWith(suffix) && selected.length >= prefix.length + suffix.length) {
+        const unwrapped = selected.slice(prefix.length, selected.length - suffix.length);
+        field.value = val.slice(0, start) + unwrapped + val.slice(end);
+        field.focus();
+        field.setSelectionRange(start, start + unwrapped.length);
+      } else if (
+        start >= prefix.length &&
+        val.slice(start - prefix.length, start) === prefix &&
+        val.slice(end, end + suffix.length) === suffix
+      ) {
+        field.value = val.slice(0, start - prefix.length) + selected + val.slice(end + suffix.length);
+        field.focus();
+        field.setSelectionRange(start - prefix.length, end - prefix.length);
+      } else {
+        field.value = val.slice(0, start) + prefix + selected + suffix + val.slice(end);
+        field.focus();
+        if (selected) {
+          field.setSelectionRange(start + prefix.length, end + prefix.length);
+        } else {
+          const caret = start + prefix.length;
+          field.setSelectionRange(caret, caret);
+        }
+      }
+      autoResizeTextarea(field);
+    };
+
+    item.addEventListener('focusin', (e) => {
+      const ta = e.target.closest('.q-text, .q-opt-input');
+      if (ta) lastFocusedFormatField = ta;
+    });
+
+    item.addEventListener('input', (e) => {
+      const ta = e.target.closest('.q-auto-textarea');
+      if (ta) autoResizeTextarea(ta);
+    });
+
+    item.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const ta = e.target.closest('.q-text, .q-opt-input');
+      if (!ta) return;
+      const key = e.key.toLowerCase();
+      if (key === 'b') {
+        e.preventDefault();
+        applyFormatToField(ta, 'bold');
+      } else if (key === 'i') {
+        e.preventDefault();
+        applyFormatToField(ta, 'italic');
+      } else if (key === 'u') {
+        e.preventDefault();
+        applyFormatToField(ta, 'underline');
+      }
+    });
+
+    const formatToolbar = item.querySelector('.q-format-toolbar');
+    if (formatToolbar) {
+      formatToolbar.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.q-fmt-btn')) {
+          e.preventDefault(); // Megőrzi a szövegkijelölést és fókuszt a textarea-ban
+        }
+      });
+      formatToolbar.addEventListener('click', (e) => {
+        const btn = e.target.closest('.q-fmt-btn');
+        if (!btn) return;
+        const targetField = (lastFocusedFormatField && item.contains(lastFocusedFormatField))
+          ? lastFocusedFormatField
+          : item.querySelector('.q-text');
+        applyFormatToField(targetField, btn.dataset.fmt);
+      });
+    }
+
+    requestAnimationFrame(() => {
+      item.querySelectorAll('.q-auto-textarea').forEach(autoResizeTextarea);
     });
 
     // In-line beszúró gomb (ez az elem mögé = a következő elé szúr be)
@@ -4070,6 +4199,24 @@
   // ==========================================================================
   // Socrative PDF Teszt Importálása Kezelő
   // ==========================================================================
+  /**
+   * Évfolyam (3–8) kiolvasása az aktuális mappa útvonalából (belülről kifelé haladva)
+   */
+  function detectGradeFromCurrentFolder() {
+    if (!Array.isArray(currentBreadcrumbs) || currentBreadcrumbs.length === 0) {
+      return '3';
+    }
+    const gradeRegex = /(?:^|[^\d])([3-8])\s*(?:\.\s*(?:évfolyam|évf\.?|osztály|oszt\.?|o\.?)|\s+(?:évfolyam|évf\.?|osztály|oszt\.?))(?:\s|$|[^a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ])/i;
+    for (let i = currentBreadcrumbs.length - 1; i >= 0; i--) {
+      const folderName = String(currentBreadcrumbs[i] && currentBreadcrumbs[i].name || '');
+      const match = folderName.match(gradeRegex);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    return '3';
+  }
+
   function resetQuizPdfImportModal() {
     selectedQuizPdfFile = null;
     if (inputQuizPdfFile) inputQuizPdfFile.value = '';
@@ -4083,7 +4230,7 @@
       btnSubmitImportQuizPdf.disabled = true;
       btnSubmitImportQuizPdf.innerHTML = '<span class="material-symbols-outlined" style="font-size: 19px;">upload_file</span><span>Teszt importálása</span>';
     }
-    if (importPdfGrade) importPdfGrade.value = '6';
+    if (importPdfGrade) importPdfGrade.value = detectGradeFromCurrentFolder();
   }
 
   function handleQuizPdfFileSelect(file) {

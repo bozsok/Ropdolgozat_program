@@ -4,6 +4,42 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.9] – 2026-11-25
+
+### PDF-import karakterjavítás, Tesztszerkesztő szövegformázás és dinamikus beviteli mezők
+
+Célzott hibajavítások, új szerkesztői szövegformázás és UX-finomítások a napi tantermi munka gyorsításához, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Hozzáadva (Added)
+* **Szövegformázási lehetőségek és dinamikus magasságú beviteli mezők a Tesztszerkesztőben (`public/js/utils.js`, `public/js/admin.js`, `public/js/student.js`, `public/css/style.css`):**
+  - **Fájlok:** [`public/js/utils.js`](file:///d:/dev/Röpdolgozat%20program/public/js/utils.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A központi, XSS-biztos `formatCode()` kibővült a **félkövér** (`**szöveg**`), *dőlt* (`*szöveg*`), aláhúzott (`__szöveg__`), `kód` (`` `kód` ``), felső index (`^szöveg^`), alsó index (`~szöveg~`) és sortörés (`\n` → `<br>`) támogatásával, védett inline kódblokkokkal és új `stripFormatting()` segédfüggvénnyel.
+  - A Tesztszerkesztőben a **Kérdés szövege** (`.q-text`, alapból 2 soros) és a **Válaszlehetőségek** (`.q-opt-input`, alapból 1 soros) automatikusan méreteződő (`auto-resize`) `<textarea>` mezők lettek.
+  - Minden kérdéskártyán kompakt formázó eszköztár (`B`, `I`, `U`, `</>`,`x²`, `x₂`, `↵`) és gyorsbillentyű-támogatás (`Ctrl+B`, `Ctrl+I`, `Ctrl+U`) segíti a kérdések és válaszok formázását a kijelölés elvesztése nélkül; a formázott szövegek a diák felületen és az összegző kártyán is helyesen jelennek meg.
+
+#### Javítva (Fixed)
+* **Socrative PDF-importnál kimaradó `r` betűk és írásjelek javítása (`src/services/socrativePdfParser.js`):**
+  - **Fájl:** [`src/services/socrativePdfParser.js`](file:///d:/dev/Röpdolgozat%20program/src/services/socrativePdfParser.js)
+  - A Socrative PDF-ekben használt `Inter` betűtípus OpenType kontextuális (`calt`/`case`) glifáihoz a PDF-exportáló `<0000>` (`ToUnicode`) értéket rendel, ami miatt bizonyos betűkapcsolatokban (pl. `interneten`, `pendrive`, `történik`, `True`) kiesett az `r` betű és néhány írásjel/operátor.
+  - A `getFontCMap()` kiolvassa a betűtípus `/BaseFont` nevét, és az `INTER_NULL_GLYPH_FALLBACK` tábla kizárólag `Inter` betűtípusnál, tényleges `<0000>` bejegyzés esetén pótolja a hiányzó karaktereket (`<0336>` → `r`, `<051E>` → `(`, `<051F>` → `)`, `<0535>` → `-`, `<056F>` → `=`, `<0571>` → `+`, `<0572>` → `–`, `<0581>` → `×`).
+  - **Adatbázis utólagos javítása (`data/ropdolgozat.db`):** Biztonsági mentés ([`ropdolgozat_before_r_fix_2026-11-25T06-08-00.db`](file:///d:/dev/Röpdolgozat%20program/data/backups/ropdolgozat_before_r_fix_2026-11-25T06-08-00.db)) után 31 már importált teszt 323 kérdésében 820 elmaradt `r` betű és 6 db `104108` → `104-108` érték került kijavításra, az ABCD javítókulcsok (`options_json` ↔ `correct_answer`) teljes szinkronjával és SQLite integritás-ellenőrzéssel.
+
+* **Ismétlődő instrukciós mondat kiszűrése PDF-importnál (`src/services/socrativePdfParser.js`):**
+  - **Fájl:** [`src/services/socrativePdfParser.js`](file:///d:/dev/Röpdolgozat%20program/src/services/socrativePdfParser.js)
+  - PDF-importáláskor a `qBody` (a **Kérdés szövege** mező) összeállításakor automatikusan eltávolításra kerül a `Válaszd ki az egyetlen helyes megoldást!` mondat (kis- és nagybetű-függetlenül), mivel ez az ABCD kérdéseknél már alapértelmezetten szerepel a **További instrukciók a kérdéshez** (`instructions`) mezőben.
+
+#### Módosítva (Changed)
+* **Mappaalapú automatikus évfolyam-felismerés a PDF-importálásnál (`public/admin.html`, `public/js/admin.js`):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A *PDF importálása* modál `#import-pdf-grade` alapértelmezése `6. évfolyam` helyett **`3. évfolyam`** lett.
+  - A `detectGradeFromCurrentFolder()` a modál megnyitásakor belülről kifelé végignézi az aktuális mappa útvonalát (`currentBreadcrumbs`), és ha talál `3–8` közötti évfolyamra utaló mintát (pl. `7. évfolyam`, `7. évf.`, `7. osztály`, `7. oszt.`, `7.o`, `7. o.`, `7 osztály`), automatikusan azt az évfolyamot jelöli ki.
+
+* **Felesleges statikus alsó tippsáv eltávolítása a diák felületről (`public/student.html`):**
+  - **Fájl:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html)
+  - Eltávolításra került a statikus `.quiz-calm-tip-compact` sáv a kérdéskártya alól, több függőleges teret hagyva a feladatoknak és ábráknak.
+
+---
+
 ## [1.37.8] – 2026-11-24
 
 ### Open Navigation (Szabad navigáció) UX-finomítás: Stabil lábléc görgetősáv-villanás nélkül és átlátható beadás-elhelyezés

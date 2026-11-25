@@ -16,14 +16,53 @@ function escapeHtml(str) {
 }
 
 /**
- * Kódrészletek formázása: a backtick ( `kód` ) közötti részek kiemelése
- * Először XSS-biztos tisztítás történik, majd <code class="inline-code"> generálása
+ * Szövegformázó (XSS-biztos, 0 külső függőség):
+ * Támogatott jelölések: `kód`, **félkövér**, *dőlt*, __aláhúzott__, ^felső index^, ~alsó index~, sortörés (\n).
+ * Először escapeHtml() fut, a `kód` blokkok pedig védett helyőrzőt kapnak, így a kódon belüli jelek nem formázódnak.
  */
 function formatCode(text) {
   if (!text) return '';
-  const escaped = escapeHtml(text);
-  // Cseréljük a `kód` részeket inline code tagre
-  return escaped.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+  let html = escapeHtml(text);
+
+  // 1. Inline kód blokkok kimentése, hogy a bennük lévő *, _, ^, ~ karakterek ne formázódjanak
+  const codeBlocks = [];
+  html = html.replace(/`([^`\n]+)`/g, (_, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push(`<code class="inline-code">${code}</code>`);
+    return `\u0000CODE${idx}\u0000`;
+  });
+
+  // 2. Félkövér (**...**), aláhúzott (__...__), dőlt (*...*), felső (^...^) és alsó (~...~) index
+  html = html.replace(/\*\*([^\s*](?:[^*\n]*?[^\s*])?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([^\s_](?:[^_\n]*?[^\s_])?)__/g, '<u>$1</u>');
+  html = html.replace(/\*([^\s*](?:[^*\n]*?[^\s*])?)\*/g, '<em>$1</em>');
+  html = html.replace(/\^([^\^\n]+?)\^/g, '<sup>$1</sup>');
+  html = html.replace(/~([^~\n]+?)~/g, '<sub>$1</sub>');
+
+  // 3. Sortörések megtartása
+  html = html.replace(/\r?\n/g, '<br>');
+
+  // 4. Inline kód blokkok visszahelyezése
+  html = html.replace(/\u0000CODE(\d+)\u0000/g, (_, idx) => codeBlocks[Number(idx)] || '');
+
+  return html;
+}
+
+/**
+ * Formázójelek eltávolítása egyszerű szöveges (tooltip, összefoglaló) megjelenítéshez
+ */
+function stripFormatting(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/`([^`\n]+)`/g, '$1')
+    .replace(/\*\*([^\s*](?:[^*\n]*?[^\s*])?)\*\*/g, '$1')
+    .replace(/__([^\s_](?:[^_\n]*?[^\s_])?)__/g, '$1')
+    .replace(/\*([^\s*](?:[^*\n]*?[^\s*])?)\*/g, '$1')
+    .replace(/\^([^\^\n]+?)\^/g, '$1')
+    .replace(/~([^~\n]+?)~/g, '$1')
+    .replace(/\r?\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
