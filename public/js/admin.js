@@ -407,7 +407,7 @@
       badge.title = `${session.subject_name} ${session.grade_level}. évfolyam – „${session.quiz_title}” (${session.participant_count} diák)`;
       badge.innerHTML = `
         <span class="badge-subject-dot" style="background-color: ${theme.color};"></span>
-        <span class="badge-text-compact"><strong>${escapeHtml(session.grade_level)}. évf.</strong> · ${escapeHtml(session.quiz_title)}</span>
+        <span class="badge-text-compact">${escapeHtml(session.grade_level)}. évf. · ${escapeHtml(session.quiz_title)}</span>
         <span class="badge-count-pill">${session.participant_count}</span>
       `;
 
@@ -945,7 +945,7 @@
       // 0. Sorszám
       const tdNum = document.createElement('td');
       tdNum.className = 'col-num';
-      tdNum.style.fontWeight = '700';
+      tdNum.style.fontWeight = '400';
       tdNum.style.color = 'var(--text-muted, #5a4138)';
       tdNum.textContent = String(pIdx + 1);
       tr.appendChild(tdNum);
@@ -975,7 +975,7 @@
       const tdPc = document.createElement('td');
       tdPc.className = 'col-pc';
       tdPc.innerHTML = p.pc_number
-        ? `<span style="font-weight: 700; color: var(--text-muted); font-size: 0.85rem;">PC-${p.pc_number}</span>`
+        ? `<span style="font-weight: 400; color: var(--text-muted); font-size: 0.85rem;">PC-${p.pc_number}</span>`
         : '<span style="color: #94a3b8;">–</span>';
       tr.appendChild(tdPc);
 
@@ -1037,7 +1037,7 @@
       // 4. Összpontszám
       const tdPoints = document.createElement('td');
       tdPoints.className = 'col-points';
-      tdPoints.innerHTML = `<strong style="font-size: 0.95rem; color: var(--text-main);">${p.total_points}</strong> <span style="font-size: 0.78rem; color: var(--text-muted);">/ ${data.totalMaxPoints}</span>`;
+      tdPoints.innerHTML = `<span style="font-size: 0.95rem; color: var(--text-main);">${p.total_points}</span> <span style="font-size: 0.78rem; color: var(--text-muted);">/ ${data.totalMaxPoints}</span>`;
       tr.appendChild(tdPoints);
 
       // 5. Százalék
@@ -1046,7 +1046,7 @@
       let pctColor = 'var(--text-main)';
       if (p.percentage >= 85) pctColor = 'var(--success, #16a34a)';
       else if (p.percentage < 50) pctColor = 'var(--danger, #dc2626)';
-      tdPct.innerHTML = `<strong style="color: ${pctColor}; font-size: 0.92rem;">${p.percentage}%</strong>`;
+      tdPct.innerHTML = `<span style="color: ${pctColor}; font-size: 0.92rem;">${p.percentage}%</span>`;
       tr.appendChild(tdPct);
 
       // 6. KRÉTA érdemjegy (MTA 12. kiadása szerinti kisbetűs alakok)
@@ -2057,7 +2057,7 @@
           </div>
           <p class="quiz-card-meta">
             ${escapeHtml(q.subject_name)} &bull; ${escapeHtml(q.subject_grade)}. évfolyam<br>
-            <span style="font-weight: 600;">${q.question_count} kérdés</span> (${q.total_points} pont)
+            <span>${q.question_count} kérdés</span> (${q.total_points} pont)
           </p>
           <div class="quiz-card-actions">
             <button type="button" class="quiz-btn-icon quiz-btn-edit btn-edit" data-id="${q.id}" title="Teszt szerkesztése">
@@ -2223,7 +2223,7 @@
       newCard.innerHTML = `
         <div class="folder-card-new-header">
           <span class="material-symbols-outlined" style="font-size: 26px; color: #d97706;">create_new_folder</span>
-          <strong style="color: #78350f; font-size: 0.95rem;">Új mappa</strong>
+          <span style="color: #78350f; font-size: 0.95rem;">Új mappa</span>
         </div>
         <input type="text" class="folder-card-new-input" value="Új mappa" placeholder="Mappa neve...">
         <div class="folder-card-new-actions">
@@ -4651,9 +4651,9 @@
       reportsCardsContainer.innerHTML = `
         <div class="card" style="text-align: center; padding: 48px 24px; border-radius: 16px; border: 1px solid var(--border-color); background-color: #ffffff;">
           <div style="width: 56px; height: 56px; border-radius: 16px; background-color: var(--surface-low); color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px;">
-            <span class="material-symbols-outlined" style="font-size: 28px;">history_edu</span>
+            <span class="material-symbols-outlined" style="font-size: 28px; font-weight: 300; font-variation-settings: 'wght' 300;">history_edu</span>
           </div>
-          <h4 style="margin: 0 0 6px 0; font-size: 1.1rem; color: var(--text-main);">Nem található dolgozat</h4>
+          <h4 style="margin: 0 0 6px 0; font-size: 1.1rem; font-weight: 400; color: var(--text-main);">Nem található dolgozat</h4>
           <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">
             A megadott keresési vagy szűrési feltételeknek nem felel meg egyetlen dolgozat sem az archívumban.
           </p>
@@ -4670,8 +4670,8 @@
       const startedFormatted = s.started_at ? s.started_at.replace('T', ' ').substring(0, 16) : '–';
       const isAct = s.status === 'ACTIVE';
       const statusBadge = isAct
-        ? `<span class="badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; background-color: rgba(34, 197, 94, 0.12); color: #15803d; font-weight: 700; font-size: 0.78rem;"><span class="material-symbols-outlined" style="font-size: 14px; color: #16a34a;">radio_button_checked</span><span>Folyamatban</span></span>`
-        : `<span class="badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; background-color: rgba(100, 116, 139, 0.12); color: #475569; font-weight: 700; font-size: 0.78rem;"><span class="material-symbols-outlined" style="font-size: 14px; color: #64748b;">lock</span><span>Lezárva</span></span>`;
+        ? `<span class="badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; background-color: rgba(34, 197, 94, 0.12); color: #15803d; font-weight: 400; font-size: 0.78rem;"><span class="material-symbols-outlined" style="font-size: 14px; color: #16a34a;">radio_button_checked</span><span>Folyamatban</span></span>`
+        : `<span class="badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; background-color: rgba(100, 116, 139, 0.12); color: #475569; font-weight: 400; font-size: 0.78rem;"><span class="material-symbols-outlined" style="font-size: 14px; color: #64748b;">lock</span><span>Lezárva</span></span>`;
 
       const modeStyleMap = {
         'TEACHER_PACED': { icon: 'co_present', bg: '#eff6ff', color: '#1d4ed8' },
@@ -4680,7 +4680,7 @@
         'STUDENT_PACED': { icon: 'person', bg: '#fff7ed', color: '#c2410c' }
       };
       const modeCfg = modeStyleMap[s.mode] || modeStyleMap['STUDENT_PACED'];
-      const modeBadge = `<span class="badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; background-color: ${modeCfg.bg}; color: ${modeCfg.color}; font-weight: 700; font-size: 0.78rem;"><span class="material-symbols-outlined" style="font-size: 14px; color: ${modeCfg.color};">${modeCfg.icon}</span><span>${escapeHtml(formatSessionMode(s.mode))}</span></span>`;
+      const modeBadge = `<span class="badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px; background-color: ${modeCfg.bg}; color: ${modeCfg.color}; font-weight: 400; font-size: 0.78rem;"><span class="material-symbols-outlined" style="font-size: 14px; color: ${modeCfg.color};">${modeCfg.icon}</span><span>${escapeHtml(formatSessionMode(s.mode))}</span></span>`;
 
       const classPill = s.class_name
         ? `<span class="report-card-pill">${escapeHtml(s.class_name)} osztály</span>`
@@ -4709,7 +4709,7 @@
               ${classPill}
               <span class="report-card-meta-item">
                 <span class="material-symbols-outlined">school</span>
-                <strong>${escapeHtml(s.subject_name)}</strong>
+                <span>${escapeHtml(s.subject_name)}</span>
               </span>
               <span style="color: var(--border-color);">•</span>
               <span class="report-card-meta-item">
@@ -4719,7 +4719,7 @@
               <span style="color: var(--border-color);">•</span>
               <span class="report-card-meta-item">
                 <span class="material-symbols-outlined">group</span>
-                <span><strong>${s.participant_count || 0}</strong> diák kitöltötte</span>
+                <span>${s.participant_count || 0} diák kitöltötte</span>
               </span>
               ${avgText ? `<span style="color: var(--border-color);">•</span> ${avgText}` : ''}
             </div>

@@ -4,6 +4,33 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.10] – 2026-11-25
+
+### PDF-import helyesírási/tipográfiai egységesítés, állandó kétoszlopos diák felület és letisztult tipográfia
+
+Tantermi olvashatósági és helyesírási fejlesztések a PDF-importálóban és a diák felületen, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Hozzáadva (Added)
+* **Magyar helyesírási (AkH. 12.) és tipográfiai normalizálás PDF-importáláskor (`src/services/socrativePdfParser.js`):**
+  - **Fájl:** [`src/services/socrativePdfParser.js`](file:///d:/dev/Röpdolgozat%20program/src/services/socrativePdfParser.js)
+  - A `normalizeQuestionTypography()` a 3+ hosszúságú aláhúzásokat fix **`_____`** (5 db `_`) alakra egységesíti (a `__aláhúzott__` formázást érintetlenül hagyva), a mondat végi három pontot pedig szóköz nélkül tapadó **`…`** alakra hozza.
+  - A `normalizeAbcdOptions()` eltávolítja a válaszok elejéről a felesleges `...` / `…` jeleket, javítja a kisbetűs mozaikszavakat (`usb` → `USB` stb.), teljes kérdőmondat után nagybetűsíti a kisbetűs opciókat (védett minták kivételével: `.docx`, `=képlet`, `http/www`, `stb.`, `px/cm/kB`), 1–2 szavas válaszok végéről leveszi a felesleges pontot, és hosszabb mondatos opcióknál egységesíti a záró pontot — a `correct_answer` teljes szinkronjával.
+  - **Meglévő adatbázis egységesítése (`data/ropdolgozat.db`):** Biztonsági mentés ([`ropdolgozat_before_grammar_fix_2026-11-25T07-23-14.db`](file:///d:/dev/Röpdolgozat%20program/data/backups/ropdolgozat_before_grammar_fix_2026-11-25T07-23-14.db)) után 32 teszt 222 kérdésében 159 kérdésszöveg és 422 ABCD opció került egységesítésre (`0` javítókulcs-eltérés, SQLite integritás-ellenőrzés rendben).
+
+#### Módosítva (Changed)
+* **Egységes kétoszlopos diák tesztfelület bal oldali kép helyőrzővel (`public/student.html`, `public/js/student.js`, `public/css/style.css`):**
+  - **Fájlok:** [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Asztali képernyőn a tesztfelület mindig egységes kétoszlopos elrendezésű (`max-width: min(1500px, 96vw)`): a kérdés és a válaszok mindig a jobb oldalon, fix helyen maradnak, kérdésváltáskor nem szűkül össze a kártya.
+  - Ábra nélküli kérdésnél a bal oldali fehér kártyán belül, `22px 24px`-es eltartással egy visszafogott, halványszürke, szaggatott keretű helyőrző doboz jelenik meg könnyed ikonnal és normál (`font-weight: 400`) felirattal (*„Ehhez a kérdéshez nem tartozik ábra”*), amely keskeny/mobil kijelzőn (`<= 1024px`) elrejtődik.
+
+* **Diák és tanári felület átfogó tipográfiai letisztítása (`public/css/style.css`, `public/js/student.js`, `public/js/admin.js`, `public/student.html`, `public/admin.html`):**
+  - **Fájlok:** [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css), [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/student.html`](file:///d:/dev/Röpdolgozat%20program/public/student.html), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html)
+  - **Diák felület és belépés:** a tesztkitöltő kérdései (`.quiz-question-text`) és válaszai (`.quiz-option-text`), a dolgozat végi összegző képernyő (`.calm-summary-*`), a belépési varázsló mezői (`.calm-step-label`, `.calm-step-hint`, `.calm-select`, `#session-info-content`, `.reassuring-text`), a *Tanári belépés* gomb (`.top-pill-btn`) és a tanári belépési modál (jelszó címke, beviteli mező, gombok) normál (`font-weight: 400`) vastagságot kaptak, így a tanár által beállított **félkövér** (`800`) és egyéb WYSIWYG kiemelések tisztán, kontrasztosan látszódnak.
+  - **Tanári felület és válaszmátrix:** a felső navigációs fülek (`.admin-nav-tabs`), a *Kilépés* gomb, az aktív dolgozat kapszula (`.live-badge`, `.badge-count-pill`), az eszköztár és *Új dolgozat indítása* gombok, a válaszmátrix fejléce (`.matrix-table th`) és teljes törzse (`#matrix-body`), a jelmagyarázatok (`.admin-matrix-legend`, `.admin-legend-badge-grid`) és az Értesítési központ *Rendben* kapszulája mind `font-weight: 400` vastagságú lett.
+  - **Korábbi dolgozatok, Beállítások és Tesztszerkesztő:** a *Korábbi dolgozatok* kártyáin minden elem `400`-as lett a dolgozat címe (`.report-card-title`) kivételével, beleértve a *Frissítés* gombot, az osztályszűrőt és az üres állapotot; a *Beállítások és mentés* fülön a `.report-badge`, `.settings-action-tile`, `.settings-action-bar` gombjai és a `.settings-thresholds-grid` kártyái; a *Tesztszerkesztőben* pedig az `.admin-toolbar` gombjai, a `.quiz-breadcrumbs-bar` és a `#quizzes-list-container` teszt- és mappakártyái is `font-weight: 400` vastagságot kaptak.
+
+---
+
 ## [1.37.9] – 2026-11-25
 
 ### PDF-import karakterjavítás, Tesztszerkesztő szövegformázás és dinamikus beviteli mezők

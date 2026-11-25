@@ -554,7 +554,7 @@ h5 {
   border: 1px solid var(--border-color, #e5dfdc);
   border-radius: 12px;
   font-size: 0.92rem;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text-main, #1b1b1e);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -656,9 +656,14 @@ h5 {
   border-radius: 9999px;
   background-color: var(--surface-low, #f5f3f6);
   border: 1px solid var(--border-color, #e5dfdc);
-  font-weight: 700;
+  font-weight: 400;
   font-size: 0.8rem;
   color: var(--text-main, #1b1b1e);
+}
+
+.report-card-title-row .badge,
+.report-card-title-row .status-badge {
+  font-weight: 400;
 }
 
 .report-card-meta-item {
@@ -673,7 +678,7 @@ h5 {
 }
 
 .report-card-avg {
-  font-weight: 700;
+  font-weight: 400;
   color: var(--primary, #ea580c);
 }
 
@@ -687,6 +692,7 @@ h5 {
 .report-card-actions .btn {
   padding: 8px 14px;
   font-size: 0.88rem;
+  font-weight: 400;
   border-radius: 10px;
   gap: 6px;
 }
@@ -938,7 +944,7 @@ h5 {
   padding: 5px 10px;
   border-radius: 18px;
   font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: 400;
   cursor: pointer;
   text-decoration: none;
   background-color: #242f3e;
@@ -971,7 +977,7 @@ h5 {
 
 .badge-count-pill {
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 400;
   background: rgba(255, 255, 255, 0.16);
   padding: 1px 6px;
   border-radius: 10px;
@@ -1126,7 +1132,7 @@ h5 {
   padding: 6px 14px;
   border-radius: 9999px;
   font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text-muted, #5a4138);
   border: 1px solid var(--border-color, #e4e1e5);
   background-color: transparent;
@@ -1142,6 +1148,8 @@ h5 {
 
 .admin-btn-logout .material-symbols-outlined {
   font-size: 18px;
+  font-weight: 300;
+  font-variation-settings: 'wght' 300;
 }
 
 /* Calm Learner Fő Navigációs Fülek */
@@ -1165,7 +1173,7 @@ h5 {
   padding: 7px 14px;
   border-radius: 10px;
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text-muted, #5a4138);
   background-color: transparent;
   border: none;
@@ -1192,7 +1200,7 @@ h5 {
 .nav-tab-btn.active {
   background-color: var(--primary, #ea580c);
   color: #ffffff;
-  font-weight: 700;
+  font-weight: 400;
   box-shadow: 0 2px 6px rgba(234, 88, 12, 0.25);
 }
 
@@ -1204,7 +1212,7 @@ h5 {
 .admin-nav-btn-highlight {
   background-color: var(--primary-light, #ffdbce);
   color: var(--primary, #ea580c);
-  font-weight: 700;
+  font-weight: 400;
   border: 1px solid rgba(234, 88, 12, 0.22);
 }
 
@@ -1426,8 +1434,13 @@ h5 {
   border-radius: 12px;
 }
 
+.admin-legend-badge-item .material-symbols-outlined {
+  font-weight: 300;
+  font-variation-settings: 'wght' 300;
+}
+
 .admin-legend-badge-name {
-  font-weight: 800;
+  font-weight: 400;
   font-size: 0.82rem;
   display: block;
   line-height: 1.2;
@@ -1443,7 +1456,7 @@ h5 {
 
 .admin-notify-status-pill {
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--success, #16a34a);
   background-color: var(--success-bg, #dcfce7);
   border: 1px solid var(--success-border, #86efac);
@@ -1496,7 +1509,7 @@ h5 {
   padding: 5px 8px;
   border-radius: 8px;
   font-size: 0.76rem;
-  font-weight: 600;
+  font-weight: 400;
   cursor: pointer;
   transition: all 0.15s ease;
   border: 1px solid var(--border-color, #e4e1e5);
@@ -1521,7 +1534,7 @@ h5 {
   padding: 5px 8px;
   border-radius: 8px;
   font-size: 0.76rem;
-  font-weight: 600;
+  font-weight: 400;
   cursor: pointer;
   transition: all 0.15s ease;
   border: 1px solid var(--danger-border, #fca5a5);
@@ -1590,11 +1603,16 @@ h5 {
 
 .quiz-card-title {
   font-size: 1.05rem;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--text-main, #1b1b1e);
   margin: 0;
   line-height: 1.35;
   word-break: break-word;
+}
+
+#tab-quizzes .admin-toolbar .btn,
+#quizzes-list-container .btn {
+  font-weight: 400;
 }
 
 .quiz-card-meta {
@@ -1738,7 +1756,7 @@ h5 {
   cursor: pointer;
   transition: all 0.15s ease;
   color: #0284c7;
-  font-weight: 500;
+  font-weight: 400;
   text-decoration: none;
   border: none;
   background: transparent;
@@ -1752,7 +1770,7 @@ h5 {
 }
 
 .quiz-breadcrumb-item.active {
-  font-weight: 700;
+  font-weight: 400;
   color: var(--text-main, #1b1b1e);
   cursor: default;
 }
@@ -1776,7 +1794,7 @@ h5 {
   gap: 6px;
   padding: 5px 12px;
   font-size: 0.84rem;
-  font-weight: 600;
+  font-weight: 400;
   color: #475569;
   background-color: #ffffff;
   border: 1px solid #cbd5e1;
@@ -1844,7 +1862,7 @@ h5 {
 
 .folder-card-title {
   font-size: 1.05rem;
-  font-weight: 700;
+  font-weight: 400;
   color: #78350f;
   margin: 0 0 4px 0;
   line-height: 1.35;
@@ -1921,7 +1939,7 @@ h5 {
   width: 100%;
   padding: 8px 12px;
   font-size: 0.95rem;
-  font-weight: 600;
+  font-weight: 400;
   border: 1.5px solid #d97706;
   border-radius: 6px;
   outline: none;
@@ -2010,7 +2028,7 @@ h5 {
   align-items: center;
   gap: 14px;
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text-muted, #5a4138);
 }
 
@@ -2058,7 +2076,7 @@ h5 {
 
 .matrix-table th {
   background-color: var(--surface-low, #f5f3f6);
-  font-weight: 800;
+  font-weight: 400;
   color: var(--text-muted, #5a4138);
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -2203,7 +2221,7 @@ h5 {
 }
 
 .admin-student-name {
-  font-weight: 700;
+  font-weight: 400;
   font-size: 0.9rem;
   color: var(--text-main, #1b1b1e);
   line-height: 1.25;
@@ -2211,7 +2229,7 @@ h5 {
 
 .admin-student-status {
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 400;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2238,7 +2256,7 @@ h5 {
   height: 32px;
   padding: 0 4px;
   border-radius: 8px;
-  font-weight: 700;
+  font-weight: 400;
   font-size: 0.82rem;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -2296,7 +2314,7 @@ h5 {
   min-width: 110px;
   padding: 4px 6px;
   border-radius: 6px;
-  font-weight: 800;
+  font-weight: 400;
   font-size: 0.82rem;
   line-height: 1.3;
   white-space: nowrap;
@@ -2335,7 +2353,7 @@ h5 {
 /* Fókuszvesztés jelzés a tanárnak */
 .focus-alert {
   color: var(--danger);
-  font-weight: 700;
+  font-weight: 400;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2348,7 +2366,7 @@ h5 {
   padding: 5px 8px;
   border-radius: 6px;
   font-size: 0.76rem;
-  font-weight: 600;
+  font-weight: 400;
   cursor: pointer;
   transition: all 0.15s ease;
   border: 1px solid var(--border-color, #e4e1e5);
@@ -2428,7 +2446,7 @@ h5 {
   background-color: var(--primary, #ea580c);
   color: #ffffff;
   font-size: 0.92rem;
-  font-weight: 700;
+  font-weight: 400;
   font-family: inherit;
   line-height: 1;
   border-radius: var(--radius-md, 10px);
@@ -2553,7 +2571,7 @@ h5 {
   color: #ffffff;
   border: 1px solid transparent;
   font-size: 0.92rem;
-  font-weight: 700;
+  font-weight: 400;
   font-family: inherit;
   line-height: 1;
   cursor: pointer;
@@ -2583,7 +2601,7 @@ h5 {
   color: var(--text-main, #1b1b1e);
   border: 1px solid var(--border-color, #e4e1e5);
   font-size: 0.92rem;
-  font-weight: 700;
+  font-weight: 400;
   font-family: inherit;
   line-height: 1;
   cursor: pointer;
@@ -2620,7 +2638,7 @@ h5 {
   color: #ffffff;
   border: 1px solid transparent;
   font-size: 0.92rem;
-  font-weight: 700;
+  font-weight: 400;
   font-family: inherit;
   line-height: 1;
   cursor: pointer;
@@ -3063,7 +3081,7 @@ body.modal-open {
   background-color: var(--surface-high);
   color: var(--on-surface);
   font-size: 0.95rem;
-  font-weight: 700;
+  font-weight: 400;
   border: none;
   cursor: pointer;
   transition: background-color 0.2s ease, color 0.2s ease;
@@ -3161,13 +3179,13 @@ body.modal-open {
   align-items: center;
   gap: 8px;
   font-size: 1.25rem;
-  font-weight: 800;
+  font-weight: 400;
   color: var(--text-main);
 }
 
 .calm-step-hint {
   font-size: 0.95rem;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text-light);
 }
 
@@ -3217,7 +3235,7 @@ body.modal-open {
   border-radius: 14px;
   font-size: 1.25rem;
   font-family: inherit;
-  font-weight: 700;
+  font-weight: 400;
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
@@ -3380,6 +3398,8 @@ body.modal-open {
 
 .reassuring-icon-wrap .material-symbols-outlined {
   font-size: 24px;
+  font-weight: 300;
+  font-variation-settings: 'wght' 300;
 }
 
 .reassuring-text {
@@ -3387,7 +3407,7 @@ body.modal-open {
   line-height: 1.5;
   color: var(--text-muted);
   margin: 0;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 /* Space Race Színválasztó Calm Learner stílusban */
@@ -3574,7 +3594,7 @@ body.modal-open {
   border: 2px solid var(--border-color);
   border-radius: 14px;
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: 400;
   font-family: inherit;
   transition: all 0.2s ease;
 }
@@ -3634,7 +3654,7 @@ body.modal-open {
   border-radius: 14px;
   font-size: 1.15rem;
   font-family: inherit;
-  font-weight: 800;
+  font-weight: 400;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3660,7 +3680,7 @@ body.modal-open {
   border-radius: 14px;
   font-size: 1.05rem;
   font-family: inherit;
-  font-weight: 700;
+  font-weight: 400;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -3682,10 +3702,9 @@ body.modal-open {
 }
 
 .student-entry-inner.quiz-active {
-  max-width: 760px;
+  max-width: min(1500px, 96vw);
   width: 100%;
   margin-top: 0;
-  transition: max-width 0.25s ease;
 }
 
 .student-entry-inner.quiz-active.has-image {
@@ -3981,10 +4000,17 @@ body.modal-open {
 
 .quiz-question-text {
   font-size: 1.35rem;
-  font-weight: 800;
+  font-weight: 400;
   color: var(--text-main);
   line-height: 1.45;
   margin-bottom: 4px;
+}
+
+.quiz-question-text b,
+.quiz-question-text strong,
+.quiz-option-text b,
+.quiz-option-text strong {
+  font-weight: 800;
 }
 
 .quiz-question-hint {
@@ -3993,13 +4019,13 @@ body.modal-open {
   font-style: italic;
 }
 
-/* Kétkártyás elrendezés ábrás kérdésekhez (Teljes szélességű kép kártya és kérdés kártya egymás mellett) */
+/* Egységes kétkártyás elrendezés (balra kép vagy helyőrző, jobbra kérdés és válaszok) */
 .quiz-cards-row {
   display: block;
   width: 100%;
 }
 
-.student-entry-inner.quiz-active.has-image .quiz-cards-row {
+.student-entry-inner.quiz-active .quiz-cards-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
   gap: 24px;
@@ -4007,12 +4033,12 @@ body.modal-open {
   margin-bottom: 16px;
 }
 
-.student-entry-inner.quiz-active.has-image .quiz-cards-row .quiz-main-card {
+.student-entry-inner.quiz-active .quiz-cards-row .quiz-main-card {
   margin-bottom: 0;
   height: 100%;
 }
 
-/* Bal oldali ábra / kép kártya */
+/* Bal oldali ábra / kép kártya (és üres helyőrző) */
 .quiz-image-card {
   background-color: var(--surface-lowest);
   border-radius: 16px;
@@ -4029,7 +4055,39 @@ body.modal-open {
   min-height: 400px;
 }
 
-.student-entry-inner.quiz-active.has-image .quiz-image-card {
+.quiz-image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  min-height: 340px;
+  text-align: center;
+  color: var(--text-light);
+  background-color: var(--surface-low);
+  border: 1.5px dashed var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.quiz-image-placeholder-icon {
+  font-size: 46px;
+  font-weight: 300;
+  font-variation-settings: 'wght' 300;
+  opacity: 0.4;
+}
+
+.quiz-image-placeholder-text {
+  font-size: 0.95rem;
+  font-weight: 400;
+  opacity: 0.72;
+}
+
+.student-entry-inner.quiz-active .quiz-image-card {
   margin-bottom: 0;
   height: 100%;
 }
@@ -4089,12 +4147,15 @@ body.modal-open {
 }
 
 @media (max-width: 1024px) {
-  .student-entry-inner.quiz-active.has-image .quiz-cards-row {
+  .student-entry-inner.quiz-active .quiz-cards-row {
     grid-template-columns: 1fr;
     gap: 16px;
   }
   .quiz-image-card {
     min-height: 260px;
+  }
+  .quiz-image-card.is-empty {
+    display: none;
   }
   .quiz-image {
     max-height: 320px;
@@ -4218,13 +4279,12 @@ body.modal-open {
 .quiz-option-text {
   font-size: 1.2rem;
   color: var(--text-main);
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.4;
   word-break: break-word;
 }
 
 .quiz-option-tile.selected .quiz-option-text {
-  font-weight: 800;
   color: #1e3a8a;
 }
 
@@ -4272,7 +4332,6 @@ body.modal-open {
 }
 
 .quiz-option-tile.tile-correct .quiz-option-text {
-  font-weight: 800;
   color: #14532d;
 }
 
@@ -4300,7 +4359,6 @@ body.modal-open {
 }
 
 .quiz-option-tile.tile-wrong .quiz-option-text {
-  font-weight: 800;
   color: #7f1d1d;
 }
 
@@ -5102,7 +5160,7 @@ body.modal-open {
 
 .calm-summary-section-label {
   font-size: 0.85rem;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--text-muted, #71717a);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -5117,7 +5175,7 @@ body.modal-open {
   background-color: #fef3c7;
   color: #92400e;
   font-size: 0.85rem;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .calm-summary-perf-badge .material-symbols-outlined {
@@ -5145,7 +5203,7 @@ body.modal-open {
 .calm-summary-grade-label {
   font-size: 0.95rem;
   color: var(--text-muted, #71717a);
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .calm-summary-grade-row {
@@ -5199,7 +5257,7 @@ body.modal-open {
   border: 1px solid #fed7aa;
   border-radius: 10px;
   font-size: 0.95rem;
-  font-weight: 700;
+  font-weight: 400;
   color: #9a3412;
   width: fit-content;
   white-space: nowrap;
@@ -5212,8 +5270,8 @@ body.modal-open {
 
 .calm-summary-score-row strong {
   color: var(--primary, #ea580c);
-  font-weight: 800;
-  font-size: 1.05rem;
+  font-weight: 400;
+  font-size: 1.02rem;
 }
 
 .calm-summary-timer-row {
@@ -5236,7 +5294,7 @@ body.modal-open {
 
 .calm-summary-timer-row strong {
   color: var(--text-main, #1b1b1e);
-  font-weight: 700;
+  font-weight: 400;
 }
 
 /* 3. Oszlop: Kör alakú százalékos tartalom (tiszta, szellős megjelenés) */
@@ -5426,9 +5484,14 @@ body.modal-open {
 
 .calm-summary-q-title {
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--text-main, #1b1b1e);
-  line-height: 1.35;
+  line-height: 1.4;
+}
+
+.calm-summary-q-title b,
+.calm-summary-q-title strong {
+  font-weight: 800;
 }
 
 /* Kattintható segítség (? ikon) és felugró helyes válasz popover a kérdés szövegének végén */
@@ -5527,10 +5590,15 @@ body.modal-open {
 
 .calm-summary-tooltip-body {
   font-size: 0.95rem;
-  font-weight: 800;
+  font-weight: 400;
   color: #1b1b1e;
   line-height: 1.35;
   word-break: break-word;
+}
+
+.calm-summary-tooltip-body b,
+.calm-summary-tooltip-body strong {
+  font-weight: 800;
 }
 
 .calm-summary-tooltip-explanation {
@@ -5548,8 +5616,14 @@ body.modal-open {
   line-height: 1.35;
 }
 
-.calm-summary-q-ans strong {
+.calm-summary-q-ans-val {
   color: var(--text-main, #1b1b1e);
+  font-weight: 400;
+}
+
+.calm-summary-q-ans-val b,
+.calm-summary-q-ans-val strong {
+  font-weight: 800;
 }
 
 .calm-summary-q-badge {
@@ -5557,7 +5631,7 @@ body.modal-open {
   align-items: center;
   gap: 4px;
   font-size: 0.85rem;
-  font-weight: 700;
+  font-weight: 400;
   white-space: nowrap;
   padding: 4px 10px;
   border-radius: 8px;
@@ -6685,6 +6759,11 @@ body.modal-open {
   gap: 12px;
 }
 
+.settings-action-tile .btn,
+.settings-action-tile-bottom .btn {
+  font-weight: 400;
+}
+
 /* 2. Értékelési határok rács */
 .settings-thresholds-grid {
   display: grid;
@@ -6739,7 +6818,7 @@ body.modal-open {
   height: 30px;
   border-radius: 8px;
   color: #ffffff;
-  font-weight: 800;
+  font-weight: 400;
   font-size: 1rem;
   display: flex;
   align-items: center;
@@ -6768,7 +6847,7 @@ body.modal-open {
 
 .threshold-label {
   font-size: 0.85rem;
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .grade-5 .threshold-label {
@@ -6799,7 +6878,7 @@ body.modal-open {
 
 .threshold-input-group label {
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 400;
   color: #64748b;
 }
 
@@ -6814,7 +6893,7 @@ body.modal-open {
   height: 38px;
   border-radius: 8px;
   font-size: 1rem;
-  font-weight: 800;
+  font-weight: 400;
   text-align: center;
   padding-right: 24px;
   border: 1px solid #cbd5e1;
@@ -6831,14 +6910,14 @@ body.modal-open {
   position: absolute;
   right: 10px;
   font-size: 0.85rem;
-  font-weight: 700;
+  font-weight: 400;
   color: #94a3b8;
   pointer-events: none;
 }
 
 .threshold-range-desc {
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 400;
   color: #64748b;
   text-align: center;
   background-color: rgba(255, 255, 255, 0.75);
@@ -7009,6 +7088,10 @@ body.modal-open {
   border-radius: 14px;
   border: 1px solid #e2e8f0;
   background-color: #ffffff;
+}
+
+.settings-action-bar .btn {
+  font-weight: 400;
 }
 
 /* ==========================================================================

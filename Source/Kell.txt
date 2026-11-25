@@ -1,3 +1,0 @@
-1. Mi a helyes nyelvtanilag a magyar helyesírás szerint a feleletválasztós válaszok megadásál? Arra gondolok, hoyg kell-e pont a beírt válasz után, nagy kezdőbetűvel kell-e kezdeni?
-
-2. A diák felüelt teszt kitüöltése esetén is legyen egységes. Baloldalon legyen egy kép helyőrző akkor is, ha nincsen kép az adott kérdéshez, így mindig  ajobb oldalon lesz a tesztkérdés és a válaszok megadásának lehetősége. Most úgy működik, hogy ha nincsen kép, akkor egy szép animációval összeszűkül a kérdés kártyája. Szerintem érdemes ezt is egységesre hozni.

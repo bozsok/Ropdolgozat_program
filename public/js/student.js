@@ -1451,7 +1451,7 @@
       if (!activeSession) {
         sessionInfoBox.style.display = 'flex';
         sessionInfoContent.innerHTML = `
-          <div style="color: var(--warning); font-weight: 700; font-size: 1.15rem; line-height: 1.5; text-align: center; padding: 16px; background: rgba(245, 158, 11, 0.12); border-radius: 12px; border: 1.5px solid rgba(245, 158, 11, 0.25);">
+          <div style="color: var(--warning); font-weight: 400; font-size: 1.15rem; line-height: 1.5; text-align: center; padding: 16px; background: rgba(245, 158, 11, 0.12); border-radius: 12px; border: 1.5px solid rgba(245, 158, 11, 0.25);">
             ⚠️ Jelenleg nincs aktív dolgozat ehhez az évfolyamhoz (${gradeLevel}. évfolyam).<br>
             Kérlek, várj türelemmel, amíg a tanár elindítja!
           </div>
@@ -1464,8 +1464,8 @@
       // Van aktív dolgozat!
       sessionInfoBox.style.display = 'flex';
       sessionInfoContent.innerHTML = `
-        <div style="color: var(--success); font-weight: 700; font-size: 1.2rem; line-height: 1.5; text-align: center; padding: 16px; background: rgba(34, 197, 94, 0.12); border-radius: 12px; border: 1.5px solid rgba(34, 197, 94, 0.25);">
-          🟢 Aktív dolgozat elérhető: <strong>${escapeHtml(activeSession.quiz_title)}</strong>
+        <div style="color: var(--success); font-weight: 400; font-size: 1.15rem; line-height: 1.5; text-align: center; padding: 16px; background: rgba(34, 197, 94, 0.12); border-radius: 12px; border: 1.5px solid rgba(34, 197, 94, 0.25);">
+          🟢 Aktív dolgozat elérhető: ${escapeHtml(activeSession.quiz_title)}
         </div>
       `;
 
@@ -3143,15 +3143,21 @@
     // 3. Kérdésszöveg és opcionális ábra
     questionText.innerHTML = formatCode(q.question_text);
 
+    const questionImageContainer = document.getElementById('question-image-container');
+    const questionImagePlaceholder = document.getElementById('question-image-placeholder');
     if (q.image_path) {
       questionImage.src = q.image_path;
-      questionImageBox.style.display = 'flex';
+      questionImageBox.classList.remove('is-empty');
+      if (questionImageContainer) questionImageContainer.style.display = 'flex';
+      if (questionImagePlaceholder) questionImagePlaceholder.style.display = 'none';
       if (quizCardsRow) quizCardsRow.classList.add('has-image');
       if (studentEntryInner) studentEntryInner.classList.add('has-image');
       if (quizMainCard) quizMainCard.classList.add('has-image');
     } else {
-      questionImage.src = '';
-      questionImageBox.style.display = 'none';
+      questionImage.removeAttribute('src');
+      questionImageBox.classList.add('is-empty');
+      if (questionImageContainer) questionImageContainer.style.display = 'none';
+      if (questionImagePlaceholder) questionImagePlaceholder.style.display = 'flex';
       if (quizCardsRow) quizCardsRow.classList.remove('has-image');
       if (studentEntryInner) studentEntryInner.classList.remove('has-image');
       if (quizMainCard) quizMainCard.classList.remove('has-image');
@@ -4243,7 +4249,7 @@
                   </button>
                 </span>
               ` : ''}</span>
-              <span class="calm-summary-q-ans">Válaszod: <strong>${formatCode(submittedText)}</strong></span>
+              <span class="calm-summary-q-ans">Válaszod: <span class="calm-summary-q-ans-val">${formatCode(submittedText)}</span></span>
             </div>
           </div>
           <div class="calm-summary-q-badge ${badgeClass}">

@@ -77,6 +77,103 @@ const INTER_NULL_GLYPH_FALLBACK = new Map([
 ]);
 
 /**
+ * Kérdésszöveg tipográfiai egységesítése (AkH. 12.):
+ * - 3+ egymást követő aláhúzásjel (_{3,}) egységesítése fix 5 db aláhúzásra (_____)
+ *   (a 2 db aláhúzást, azaz a __aláhúzott__ formázást érintetlenül hagyja).
+ * - Mondat végi három pont (... / …) előtti felesleges szóköz eltávolítása és egységes „…” használata.
+ */
+function normalizeQuestionTypography(questionText) {
+  if (!questionText) return '';
+  return String(questionText)
+    .replace(/_{3,}/g, '_____')
+    .replace(/\s*(?:\.{3}|…)\s*$/, '…')
+    .trim();
+}
+
+/**
+ * Konzervatív magyar helyesírási (AkH. 12.) normalizálás ABCD válaszlehetőségekhez:
+ * - Válasz eleji felesleges ... / … eltávolítása (a kérdés végi … folytatásánál nem kell duplázni).
+ * - Teljes kérdőmondat (? végű, nem kiegészítendő) után a kisbetűs opciók első betűjét nagybetűsíti (védett minták kivételével).
+ * - 1–2 szavas, nem rövidítés / nem sorszámnév opciók végéről leveszi a felesleges pontot.
+ * - Teljes mondatos (4+ szavas) opcióknál, ha a többség ponttal végződik, pótolja a lemaradt záró pontot.
+ */
+function normalizeAbcdOptions(questionText, options) {
+  if (!Array.isArray(options) || options.length === 0) return options;
+  const qTrim = String(questionText || '').trim();
+  const isFullQuestion = /\?$/.test(qTrim) && !/(?:_{3,}|\.{3}|…)/.test(qTrim);
+
+  const EXACT_ACRONYMS = new Map([
+    ['usb', 'USB'],
+    ['cpu', 'CPU'],
+    ['ram', 'RAM'],
+    ['rom', 'ROM'],
+    ['pdf', 'PDF'],
+    ['html', 'HTML'],
+    ['css', 'CSS'],
+    ['ip', 'IP'],
+    ['url', 'URL'],
+    ['lan', 'LAN'],
+    ['wan', 'WAN']
+  ]);
+
+  const isProtectedStart = (txt) => (
+    /^[.=<]/.test(txt) ||
+    /^(?:https?:\/\/|www\.|ftp:\/\/)/i.test(txt) ||
+    /^(?:stb|pl|kb|db|vö|ld)\./i.test(txt) ||
+    /^(?:px|mm|cm|dm|km|mg|kg|ml|dl|ms|kB|dpi|ppi|fps|bps|kbps|Mbps|Gbps)(?:\b|$)/.test(txt)
+  );
+
+  const isProtectedTrailingDot = (txt) => (
+    /\.\.\.$/.test(txt) ||
+    /\d\.$/.test(txt) ||
+    /\b(?:stb|pl|kb|db|o|évf|sz|u|krt|tel|fax|dr|prof|id|ifj|ún|vö|ld)\.$/i.test(txt)
+  );
+
+  const countWords = (txt) => txt.trim().split(/\s+/).filter(Boolean).length;
+
+  let result = options.map((raw) => {
+    let t = String(raw || '').trim();
+    if (!t) return t;
+
+    // 0. Válasz eleji felesleges ... / … eltávolítása
+    t = t.replace(/^(?:\.{2,}|…)\s*/, '');
+    if (!t) return t;
+
+    // 1. Teljes szavas kisbetűs informatikai mozaikszavak javítása (pl. usb -> USB)
+    if (EXACT_ACRONYMS.has(t)) {
+      t = EXACT_ACRONYMS.get(t);
+    }
+
+    // 2. Kezdőbetű nagybetűsítése teljes kérdőmondat után
+    if (isFullQuestion && /^[a-záéíóöőúüű]/.test(t) && !isProtectedStart(t)) {
+      t = t.charAt(0).toLocaleUpperCase('hu-HU') + t.slice(1);
+    }
+
+    // 3. 1–2 szavas válasz végéről felesleges pont levétele (kivéve, ha ... folytatásos mondatvége)
+    const isEllipsisContinuation = /…$/.test(qTrim);
+    if (!isEllipsisContinuation && countWords(t) <= 2 && t.endsWith('.') && !isProtectedTrailingDot(t)) {
+      t = t.slice(0, -1).trimEnd();
+    }
+
+    return t;
+  });
+
+  // 4. Kérdésen belüli egységesség 4+ szavas teljes mondatos opcióknál
+  const longOpts = result.filter(t => countWords(t) >= 4);
+  const longWithPeriod = longOpts.filter(t => /\.$/.test(t));
+  if (longOpts.length >= 2 && longWithPeriod.length >= 2 && longWithPeriod.length >= longOpts.length / 2) {
+    result = result.map((t) => {
+      if (countWords(t) >= 4 && !/[.?!…:]$/.test(t) && !isProtectedStart(t)) {
+        return `${t}.`;
+      }
+      return t;
+    });
+  }
+
+  return result;
+}
+
+/**
  * Socrative PDF fájl bináris elemzése és tartalomkinyerése
  * @param {Buffer} pdfBuffer - A feltöltött PDF fájl tartalma
  * @returns {Object} { quizTitle, questions: Array }
@@ -616,11 +713,13 @@ function parseSocrativePdf(pdfBuffer) {
 
   // 8. Végső kérdésobjektumok összeállítása (ABCD, TF, SHORT felismerés + egyedi question_order)
   const parsedQuestions = rawQuestions.map((q, idx) => {
-    const qBody = q.questionLines
-      .join(' ')
-      .replace(/\s*Válaszd ki az egyetlen helyes megoldást!/gi, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const qBody = normalizeQuestionTypography(
+      q.questionLines
+        .join(' ')
+        .replace(/\s*Válaszd ki az egyetlen helyes megoldást!/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+    );
     const explanationRaw = q.explanationLines.join(' ').replace(/\s+/g, ' ').trim();
 
     // Opcionális régi magyar megoldókulcs-szöveg a magyarázatban ("A helyes válasz: ...")
@@ -695,15 +794,24 @@ function parseSocrativePdf(pdfBuffer) {
       };
     }
 
-    // ABCD (feleletválasztós)
+    // ABCD (feleletválasztós) – konzervatív helyesírási normalizálás (opciók és correct_answer szinkronban)
+    const normalizedOptStrings = normalizeAbcdOptions(qBody, optTexts.map(o => o.text));
+    optTexts.forEach((o, i) => {
+      o.rawText = o.text;
+      o.text = normalizedOptStrings[i];
+    });
+
     let correctText = '';
     const markedOpt = optTexts.find(o => o.isCorrectMarked);
     if (markedOpt) {
       correctText = markedOpt.text;
     } else if (keyFromExplanation) {
+      const keyLower = keyFromExplanation.toLowerCase();
       for (const o of optTexts) {
-        if (o.text.toLowerCase() === keyFromExplanation.toLowerCase()
-          || (o.text.length >= 6 && keyFromExplanation.toLowerCase().startsWith(o.text.toLowerCase().slice(0, 20)))) {
+        const curLower = o.text.toLowerCase();
+        const rawLower = o.rawText.toLowerCase();
+        if (curLower === keyLower || rawLower === keyLower
+          || (o.text.length >= 6 && (keyLower.startsWith(curLower.slice(0, 20)) || keyLower.startsWith(rawLower.slice(0, 20))))) {
           correctText = o.text;
           break;
         }
@@ -736,5 +844,7 @@ function parseSocrativePdf(pdfBuffer) {
 
 module.exports = {
   createPng,
+  normalizeQuestionTypography,
+  normalizeAbcdOptions,
   parseSocrativePdf
 };
