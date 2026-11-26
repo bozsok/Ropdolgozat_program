@@ -6721,7 +6721,7 @@ body.modal-open {
   justify-content: center;
   padding: 6px 14px;
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 400;
   border-radius: var(--radius-md, 10px);
   border: 1px solid var(--border-color, #e4e1e5);
   background-color: #ffffff;
@@ -6782,7 +6782,7 @@ body.modal-open {
   min-width: 28px;
   height: 24px;
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 400;
   color: var(--text-muted, #64748b);
   background-color: #ffffff;
   border: 1px solid var(--border-color, #e2e8f0);
@@ -6790,12 +6790,20 @@ body.modal-open {
 }
 
 .roster-student-name {
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text-main, #1e293b);
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#tab-roster .btn,
+#tab-roster .badge,
+#tab-roster .form-label,
+#tab-roster .quiz-breadcrumb-item,
+#tab-roster .quiz-breadcrumb-up-btn {
+  font-weight: 400;
 }
 
 /* ==========================================================================
@@ -7731,4 +7739,118 @@ body.modal-open {
   border-radius: 6px;
   background-color: rgba(15, 23, 42, 0.05);
   border: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+/* Hierarchikus, kattintható mappafa-választó (Mappa / Teszt áthelyezése modál) */
+.folder-tree-picker {
+  max-height: 290px;
+  overflow-y: auto;
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  background-color: #ffffff;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.folder-tree-loading {
+  padding: 14px 12px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.folder-tree-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background-color: transparent;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.93rem;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.folder-tree-item:hover {
+  background-color: #f8fafc;
+}
+
+.folder-tree-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.folder-tree-item.is-root-folder {
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  padding-bottom: 9px;
+}
+
+.folder-tree-item.is-top-folder {
+  font-weight: 700;
+  color: var(--text-main);
+  margin-top: 2px;
+}
+
+.folder-tree-item.is-sub-folder {
+  font-weight: 400;
+  color: var(--text-main);
+}
+
+.folder-tree-item.is-selected {
+  background-color: rgba(154, 69, 34, 0.1);
+  border-color: rgba(154, 69, 34, 0.35);
+  color: var(--primary);
+}
+
+.folder-tree-item-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.folder-tree-icon {
+  font-size: 18px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.folder-tree-item.is-top-folder .folder-tree-icon,
+.folder-tree-item.is-root-folder .folder-tree-icon {
+  color: var(--primary);
+}
+
+.folder-tree-item.is-selected .folder-tree-icon {
+  color: var(--primary);
+}
+
+.folder-tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-tree-check {
+  font-size: 18px;
+  color: var(--primary);
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.folder-tree-item.is-selected .folder-tree-check {
+  opacity: 1;
 }

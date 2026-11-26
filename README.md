@@ -1,178 +1,196 @@
-# Okoskodó – Röpdolgozat program (v1.19.0)
+# Okoskodó – Röpdolgozat program (v1.37.13)
 
 > **100% Offline Helyi Hálózatos Iskolai Röpdolgozat Rendszer (Socrative-klón)**  
-> Kifejezetten általános iskolai 3–8. évfolyamos oktatási környezetre (Digitális kultúra, Technika és Fejlesztő foglalkozás tantárgyakhoz) tervezve.  
-> Részletes verziótörténet és módosítási napló: [`CHANGELOG.md`](file:///d:/dev/Röpdolgozat%20program/CHANGELOG.md)
+> Általános iskolai oktatási környezetre tervezve: **Digitális kultúra** és **Technika** (`3–8. évfolyam`), valamint **Fejlesztő foglalkozás** (`1–8. évfolyam`).  
+> Részletes verziótörténet: [`CHANGELOG.md`](./CHANGELOG.md) · Részletes szervertelepítési útmutató: [`telepítés.md`](./telepítés.md)
 
 ---
 
-## 1. Rendszeráttekintés és Célkitűzés
+## 1. Rendszeráttekintés és Főbb Képességek
 
-A **Röpdolgozat program** egy helyi hálózaton (LAN) futó, internetkapcsolatot egyáltalán nem igénylő tantermi értékelő alkalmazás. Célja a felhőalapú Socrative rendszer és a papíralapú röpdolgozatok teljes körű, modern kiváltása tantermi környezetben (1 db központi Windows Server 2016 / 2019 / 2022 kiszolgáló, 42 db Windows 10 kliensgép és párhuzamos tanári munkaállomások).
+Az **Okoskodó – Röpdolgozat program** egy helyi hálózaton (LAN) futó, internetkapcsolatot egyáltalán nem igénylő tantermi mérő- és értékelőrendszer. Célja a felhőalapú Socrative és a papíralapú röpdolgozatok kiváltása iskolai környezetben (**1 db központi Windows Server 2016 kiszolgáló**, akár **42 db Windows 10/11 tanulói kliensgép** és párhuzamos tanári munkaállomások).
 
 ### Főbb előnyök a tanteremben
-* **100% Offline működés:** Nincs külső internetfüggőség, nincsenek külső CDN-ek, az alkalmazás teljesen izolált helyi hálózaton működik.
-* **0 Gépelés – 3 Kattintásos Belépés:** A diákok hivatalos osztálynévsorból választják ki a nevüket legördülő listából. Ezzel teljesen kiküszöbölhetők a gyermekek elgépelései (*„kovacs peti”*, *„Batman”*), és azonnal biztosított a KRÉTA naplóval való hibátlan összerendelés.
-* **Tantermi Gépváltás Adatvesztés Nélkül:** Ha a diák gépe elromlik vagy lefagy a dolgozat közben, a tanár a vezérlőpulton egyetlen kattintással engedélyezi a gépváltást (`authorizeSeatChange`). A diák egy új gépre átülve **egyetlen korábbi válaszának és pontjának elvesztése nélkül** ott folytathatja a tesztet, ahol abbahagyta.
-* **Téves Névfoglalás Kezelése (Reset):** Ha egy diák véletlenül a padtársa nevére kattint, a tanár a `Név törlése` funkcióval tiszta lappal visszaállíthatja a nevet az aktív névsorba.
-* **Valós idejű Tanári Vezérlőpult:** WebSocket (Socket.io) alapú élő eredménytábla (Live Matrix), amely másodpercenként mutatja a 42 munkaállomás állapotát, fókuszvesztéseit és válaszait.
-* **1-Kattintásos Tanári Felülbírálás (Override):** A tanár a felületen bármelyik diákválaszra kattintva azonnal átbillentheti a státuszt: Zöld (Helyes), Sárga (Részpont), Piros (Hibás).
+* **100% Offline működés (Zero-Build, Zero-CDN):** Nincs internetfüggőség, a betűkészletek (`Nunito Sans`, `Material Symbols`) és minden erőforrás helyben, a szerveren tárolódik.
+* **0 Gépelés – 3 Kattintásos Diák Belépés:** A tanulók tantárgyat, osztályt (Fejlesztő foglalkozásnál `1.a`–`8.c`, egyébként `3.a`–`8.c`), majd a hivatalos osztálynévsorból nevet választanak – nincs elgépelés, hibátlan a KRÉTA-illesztés.
+* **Párhuzamos tantárgy–évfolyam csatornák:** Több tantárgy és évfolyam dolgozatai futhatnak egyszerre egymástól teljesen függetlenül (pl. egy több napig nyitva tartott fejlesztő felmérő nem zavarja a tanórai Digitális kultúra dolgozatokat).
+* **Tantermi Gépváltás Adatvesztés Nélkül:** Ha egy tanulói gép elromlik, a tanár a vezérlőpulton egy kattintással engedélyezi a gépváltást. A diák másik gépre átülve minden korábbi válaszát és pontját megőrzi.
+* **Téves Névfoglalás Törlése:** Ha egy diák véletlenül más nevére kattintott, a tanár egy kattintással visszaállíthatja a nevet az aktív névsorba.
+* **Valós idejű Élő Mátrix és 1-Kattintásos Felülbírálás:** Socket.io alapú élő eredménytábla fókuszvesztés-figyeléssel, anonimizáló kivetítő-kapcsolóval és egykattintásos tanári pontfelülbírálással (Helyes / Részpont / Hibás).
 
 ---
 
-## 2. Dolgozatmódok és Pedagógiai Sajátosságok
+## 2. Dolgozatmódok
 
-A rendszer a Socrative jól bevált koncepciójára épülve háromféle módban futtatható:
+A rendszer négyféle tantermi módban indítható:
 
-1. 🏃 **Saját tempójú (Student Paced):**
-   * A tanulók önálló tempóban haladnak kérdésről kérdésre.
-   * Beállítható globális időkorlát (pl. 15 perc), amelynél a szerver szigorú határidőt (`deadline_at`) kényszerít ki.
-   * Diákonkénti véletlenszerű kérdés- és válaszlehetőség-keverés (Shuffle) a puskázás megelőzésére.
-2. 👨‍🏫 **Tanár által vezérelt (Teacher Paced):**
-   * A tanár központilag lépteti a kérdéseket az egész osztály számára, támogatva a közös feladatmegbeszélést és magyarázatot.
-3. 🚀 **Csapatverseny (Space Race):**
-   * A tanulók csapatszíneket választanak (Kék, Piros, Sárga, Zöld), és a helyes válaszok függvényében a rakétáik valós időben haladnak előre a kivetítőn (`/projector`).
-
-### Formatív pedagógiai visszajelzés
-A tanuló minden kérdés beküldésekor azonnal látja a minősítést: helyes válasz esetén zöld, hibás válasz esetén piros kiemelést a helyes válasz megjelölésével. Ez a tudatos pedagógiai döntés a formatív általános iskolai oktatást, a hibák azonnali felismerését és javítását szolgálja.
+1. **Saját tempójú (`Student Paced`):** A tanulók önálló tempóban haladnak kérdésről kérdésre. Opcionális szerveroldali időkorlát (`deadline_at`), kérdés- és opciókeverés, valamint ki- vagy bekapcsolható azonnali visszajelzés.
+2. **Szabad navigáció (`Open Navigation`):** A diákok szabadon lépkedhetnek oda-vissza a kérdések között a kérdéstérkép segítségével, a rendszer verziózott piszkozatként folyamatosan menti a válaszaikat, és csak a végső beadáskor (vagy tanári lezáráskor) történik meg a végleges kiértékelés.
+3. **Tanár által vezérelt (`Teacher Paced`):** A tanár központilag lépteti a kérdéseket az egész osztály számára, támogatva a közös feladatmegbeszélést és kétlépcsős lezárást.
+4. **Csapatverseny (`Space Race`):** A tanulók csapatszínt választanak, a helyes válaszok pedig valós időben mozgatják a csapatok rakétáit a kivetítőn (`/projector`).
 
 ---
 
-## 3. Technológiai Architektúra és Adatintegritás
+## 3. Tesztszerkesztő és Kérdéstípusok
 
-| Réteg | Alkalmazott technológia és sajátosságok |
+* **Szabad Tesztszerkesztő (pillanatkép-védelemmel):** A futó és lezárt dolgozatok rögzített pillanatképből (`quiz_snapshot_json`) dolgoznak, ezért a feladatsorok a Tesztszerkesztőben bármikor szabadon szerkeszthetők, javíthatók, duplikálhatók vagy egyesíthetők.
+* **Mapparendszer és hierarchikus mappafa-áthelyezés:** Korlátlan mélységű mappák és almappák létrehozása, átnevezése, törlése, valamint **mappák és tesztek áthelyezése** (teljes belső almappa- és tesztstruktúrával együtt, duplázásmentes mappafa-választóval és kétoldali ciklusvédelemmel).
+* **Valódi WYSIWYG szövegformázás:** Félkövér, dőlt, aláhúzott, inline kód, felső és alsó index (`B`, `I`, `U`, `</>`, `x²`, `x₂`) közvetlen vizuális megjelenítéssel és üres sorok megőrzésével.
+* **Támogatott kérdéstípusok:**
+  - **Feleletválasztós (ABCD):** 1 helyes válasz vagy **több helyes válasz (többválasztós ABCD)** szigorú (minden vagy semmi) pontozással.
+  - **Képes ABCD válaszlehetőségek:** Minden válaszhoz csatolható kép (feltöltéssel vagy `Ctrl+V` vágólapos beillesztéssel), a diákfelületen görgetésmentes `2×2` (2–4 válasz) vagy `3×2` (5–6 válasz) rácsban, képenkénti nagyító gombbal (Lightbox).
+  - **Igaz / Hamis (TF)** és **Rövid válasz (SHORT)** több elfogadott válasszal.
+* **Socrative PDF-import:** Meglévő Socrative PDF feladatsorok automatikus beolvasása kérdésekkel, opciókkal, megoldókulccsal, ábrákkal és AkH. 12. szerinti helyesírási/tipográfiai normalizálással.
+
+---
+
+## 4. Technológiai Architektúra és Adatintegritás
+
+| Réteg | Alkalmazott technológia |
 |---|---|
-| **Kiszolgáló (Backend)** | Node.js (v22+ LTS) + Express + Socket.io + Cookie-Parser + Multer + ExcelJS + Archiver |
-| **Felhasználói felület (Frontend)** | Zero-Build Vanilla HTML5, modern CSS3 (Flexbox/Grid, szigorúan `!important` nélkül), Vanilla ES6 JavaScript, beágyazott inline SVG ikonok |
-| **Adatbázis** | SQLite3 (`better-sqlite3`) szigorúan **WAL (Write-Ahead Logging)** módban és bekapcsolt idegen kulcsokkal (`foreign_keys = ON`) |
+| **Kiszolgáló (Backend)** | Node.js (**v22.x LTS**, `>= 22.11.0`) + Express + Socket.io + Cookie-Parser + Multer + ExcelJS + Archiver |
+| **Kliensfelület (Frontend)** | Zero-Build Vanilla HTML5, modern CSS3 (Flexbox/Grid, `!important` nélkül), Vanilla ES6 JavaScript |
+| **Adatbázis** | SQLite3 (`better-sqlite3`), **WAL** mód, `foreign_keys = ON`, sémaverzió `13700` |
 | **Alapértelmezett port** | `3000` (`http://localhost:3000` vagy `http://szerver_ip:3000`) |
 
-### Adatbázisszintű garanciák (22 db SQL Trigger)
-* **Tartós Tesztzárolás (`locked_at`):** Amint egy teszthez elindul egy dolgozat, a teszt automatikusan zárolódik. Zárolt teszt kérdései és alapadatai nem módosíthatók; módosítási szándék esetén az **[ 📋 Másolat készítése és szerkesztése ]** funkció készít független új példányt.
-* **Lezárt dolgozatok védelme:** Lezárt (`FINISHED`) dolgozathoz tilos új választ vagy résztvevőt beszúrni, beállításai és lezárási ideje nem módosíthatók, fizikai törlés ellen védettek.
-* **Pontozási CHECK megszorítás és pontplafon triggerek:** 
-  - `WRONG` státusznál szigorúan 0 pont és `is_correct = 0`.
-  - `PARTIAL` státusznál kötelezően pozitív pontszám (`points_earned > 0.0`) és `is_correct = 1`.
-  - [`trg_validate_answer_points_limit`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql#L354) és [`trg_validate_answer_points_limit_update`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql#L364): A kapott vagy felülbírált pontszám nem haladhatja meg a kérdés adatbázisban tárolt maximális pontértékét.
-* **OWASP Munkamenet-biztonság:** A tanuló azonosítása a szerver által kiadott kriptográfiai tokenhez (`session_token`) kötött, idegen böngészőből vagy gépről a név nem vehető át.
+* **Munkamenet- és puskázásgátló védelem:** A diák felé soha nem kerül le a helyes válasz (`correct_answer`) és a magyarázat; a munkamenetek kriptográfiai tokenhez (`session_token`) kötöttek.
+* **Adatbázisszintű integritás:** Szerveroldali UTC időkorlát, tranzakcionális válaszmentés és idempotencia (`UNIQUE(participant_id, question_id)`), pontplafon-ellenőrzés és lezárt dolgozatok módosítás elleni védelme.
+* **Teljes rendszermentés (Backup / Restore) és helyi diagnosztika:** Egykattintásos ZIP mentés és visszaállítás (`PRAGMA integrity_check` vizsgálattal), valamint alapértelmezetten bekapcsolható helyi diagnosztikai naplózás (`DIAGNOSTICS_ENABLED=true`).
 
 ---
 
-## 4. Rendszerkövetelmények és Telepítés
+## 5. Iskolai Éles Telepítés – Windows Server 2016 (Zero-Install)
 
-> Részletes pendrive-os és Windows Server 2022 éles üzembe helyezési útmutató: [`telepítés.md`](file:///d:/dev/Röpdolgozat%20program/telep%C3%ADt%C3%A9s.md)
+> Részletes, lépésről lépésre szóló üzembe helyezési kézikönyv (tűzfal, automatikus indítás, diák parancsikonok, frissítés): [`telepítés.md`](./telepítés.md)
 
-### Előfeltételek
-* **Operációs rendszer:** Windows Server 2022, Windows 10/11, vagy Linux disztribúció
-* **Node.js:** v20.0.0 vagy újabb (LTS ajánlott)
+### Előfeltételek a szerveren
+* **Operációs rendszer:** **Windows Server 2016** (64 bites; kompatibilis Windows Server 2019 / 2022 és Windows 10/11 rendszerekkel is).
+* **Node.js:** **Kötelezően Node.js v22.x LTS (Windows x64 `.msi`)** – minimum `v22.11.0`. Régebbi (pl. v20) verzióval a `start_server.bat` el sem indul a `better-sqlite3` bináris kompatibilitás miatt!
 
-### Telepítés lépései
-1. Klónozd vagy másold a projekt könyvtárát a szervergépre:
-   ```bash
-   cd "d:\dev\Röpdolgozat program"
+### Mit hová kell másolni? (Pendrive-os Zero-Install elv)
+
+Mivel az iskolai szerver offline, **a szerveren NEM futtatunk `npm install`-t!** A fejlesztői (64 bites Windows) gépen már előkészített és tesztelt projektet a kész `node_modules` mappával együtt másold át a szerver **`C:\Ropdolgozat\`** mappájába:
+
+**Átmásolandó mappák és fájlok ➔ `C:\Ropdolgozat\`:**
+* `node_modules/` *(kötelező átmásolni – tartalmazza az előre lefordított SQLite binárist)*
+* `public/` *(teljes kliensfelület, CSS, JS, offline betűkészletek, ikonok)*
+* `src/` *(teljes szerveroldali forráskód)*
+* `data/` *(adatbázis és `data/uploads/` mappa – tiszta indításhoz a `ropdolgozat.db` kihagyható; meglévő tesztek/névsorok átviteléhez a `data/ropdolgozat.db` és a `data/uploads/` tartalma is másolandó)*
+* `server.js`, `config.js`, `package.json`, `package-lock.json`, `start_server.bat`, `DATABASE_SCHEMA.sql`
+* Dokumentáció *(ajánlott)*: `README.md`, `CHANGELOG.md`, `telepítés.md`, `project-context.md`
+
+**Mit NEM kell / nem szabad átmásolni az éles szerverre:**
+* ❌ `scratch/` *(fejlesztői tesztszkriptek)*
+* ❌ `.git/` *(verziókezelő belső adatai)*
+* ❌ `Source/` *(helyi forrás/nyersanyag mappa, ha létezik)*
+
+### Üzembe helyezés lépései a Windows Server 2016 gépen
+1. Telepítsd a pendrive-ról a **Node.js v22.x LTS (x64)** telepítőt, majd ellenőrizd Parancssorban: `node -v` (elvárt: `v22.x.x`).
+2. Másold be a fenti fájlokat a **`C:\Ropdolgozat\`** könyvtárba.
+3. Engedélyezd a **3000-es TCP portot** rendszergazdai PowerShellben:
+   ```powershell
+   New-NetFirewallRule -DisplayName "Okoskodó Szerver (Port 3000)" -Direction Inbound -LocalPort 3000 -Protocol TCP -Action Allow
    ```
-2. Telepítsd a szükséges Node.js csomagokat:
-   ```bash
-   npm install
-   ```
-3. Inicializáld az adatbázist a beépített minta Digitális kultúra teszttel és a minta osztálynévsorral:
-   ```bash
-   npm run init-db
-   ```
+4. Indítsd el a szervert a **`C:\Ropdolgozat\start_server.bat`** dupla kattintásával.
+   * A szkript automatikusan ellenőrzi a Node.js v22 meglétét, a `node_modules` mappát, létrehozza a hiányzó `data/` és `data/uploads/` könyvtárakat, inicializálja/migrálja az adatbázist (`node src/db/init.js`), bekapcsolja a helyi diagnosztikát, majd elindítja a szervert a `3000`-es porton.
+   * Egyedi tanári PIN és süti-titkosítási kulcs a [`start_server.bat`](./start_server.bat) (`ADMIN_PIN`, `COOKIE_SECRET`) vagy a [`config.js`](./config.js) fájlban állítható be.
+
+### Későbbi programfrissítés (1 kattintás otthon + 1 kattintás a szerveren)
+
+Ha a későbbiekben hibajavítás vagy új funkció készül a programhoz, **nem kell kézzel válogatni a fájlokat**:
+
+1. **Otthoni (fejlesztői) gépen:** Futtasd a főkönyvtárban található [`csomagolj_frissitest.bat`](./csomagolj_frissitest.bat) fájlt. Ez kiolvassa a `package.json` verziószámát, és létrehoz egyetlen, verziószámozott csomagot (pl. `Okoskodo_frissites_v1.37.13.zip`), amely **kizárólag a programfájlokat** tartalmazza (`src/`, `public/`, `server.js`, stb.), a `data/`, `node_modules/`, `config.js` és `start_server.bat` kihagyásával.
+2. **Iskolai szerveren:** Állítsd le a futó szervert, másold be a `.zip` fájlt a `C:\Ropdolgozat\` főkönyvtárba, majd futtasd a [`frissitsd_a_szervert.bat`](./frissitsd_a_szervert.bat) fájlt:
+   - Automatikusan kiválasztja a legmagasabb verziószámú `Okoskodo_frissites_v*.zip` csomagot (vagy ráhúzható egérrel a `.bat` ikonra).
+   - **Verzióvédelem:** régebbi verziójú csomag esetén biztonsági okból leáll (nem ír felül semmit); megegyező verzió esetén külön megerősítést kér; újabb verzió esetén jóváhagyás után frissít.
+   - A `data/` mappa (adatbázis, eredmények, 196+ feltöltött kép), a `node_modules/`, valamint a szerver egyedi `config.js` és `start_server.bat` beállításai **100%-osan érintetlenek maradnak**.
+   - A frissítés végén lefuttatja a `node src/db/init.js` sémaellenőrzést, és **kizárólag 100%-ban hibamentes futás esetén** automatikusan törli a felhasznált `.zip` fájlt.
+
+*(Megjegyzés: ha az otthoni gépen elkészített új **teszteket, mappákat és képeket** szeretnéd átvinni, azt továbbra is a tanári felület **Beállítások és mentés → Teljes rendszermentés (.zip) / Visszaállítás** funkciójával, vagy leállított szerver mellett a `data/ropdolgozat.db` **és** a teljes `data/uploads/` mappa együttes másolásával végezd.)*
 
 ---
 
-## 5. Indítás és Használat
+## 6. Kliensfelületek Elérése és Exportok
 
-### 1. Szerver indítása
-* **Parancssorból:**
-  ```bash
-  npm start
-  ```
-* **Vagy Windows környezetben dupla kattintással:**
-  Futtasd a gyökérkönyvtárban található [`start_server.bat`](file:///d:/dev/Röpdolgozat%20program/start_server.bat) parancsfájlt.
+### Kliensfelületek (böngészőből)
+* **Diák munkaállomások (`1–42. gép`):** `http://szerver_ip:3000/?gep=12`
+* **Tanári vezérlőpult (1. monitor):** `http://szerver_ip:3000/admin` *(alapértelmezett PIN: `admin123`, módosítása éles üzemben ajánlott)*
+* **Tantermi kivetítő / Space Race (2. monitor):** `http://szerver_ip:3000/projector`
 
-### 2. Kliensfelületek elérése
-* **Diák munkaállomások (`1–42. gép`):**
-  Nyisd meg a böngészőt a gépszám paraméterrel (célszerűen Windows Kioszk módban):
-  ```
-  http://szerver_ip:3000/?gep=12
-  ```
-* **Tanári 1. monitor (Privát Vezérlőpult és Élő Mátrix):**
-  ```
-  http://szerver_ip:3000/admin
-  ```
-  *Alapértelmezett tanári PIN:* `admin123` (a [`config.js`](file:///d:/dev/Röpdolgozat%20program/config.js) fájlban módosítható).
-* **Tanári 2. monitor (Kivetítő és Space Race projektor):**
-  ```
-  http://szerver_ip:3000/projector
-  ```
+### Exportálási lehetőségek és KRÉTA-illesztés
+1. **Csoportos Excel (`.xlsx`):** Színezett cellák, válaszok, összpontszám, százalék, osztályátlag és KRÉTA-érdemjegyek.
+2. **Interaktív Csoportos HTML (`.html`):** Önálló offline fájl, szűrhető, rendezhető, anonimizálható nézettel.
+3. **Egyéni Értékelőlapok (`.zip`):** Minden diáknak külön díszes HTML értékelőlap.
+4. **Nyomtatható A4 PDF sablon:** Böngészőből azonnal nyomtatható nézet (oldalanként egy tanuló).
 
----
-
-## 6. Exportálási Lehetőségek és KRÉTA Illesztés
-
-A dolgozat befejezésekor (vagy az archívumból utólag bármikor) 4 professzionális formátumban tölthetők le az eredmények:
-1. 📊 **Csoportos Excel (.xlsx):** Teljes KRÉTA-kompatibilis munkafüzet, színezett cellákkal (zöld/sárga/piros), kérdésenkénti válaszokkal, összpontszámmal, százalékkal, hivatalos osztályátlaggal és érdemjegyekkel.
-2. 🌐 **Interaktív Csoportos HTML (.html):** Egyetlen önálló offline fájl, szűrhető, rendezhető, anonimizálható statisztikákkal.
-3. 📦 **Egyéni Értékelőlapok (.zip):** Minden diáknak külön egyéni díszes értékelőlap ZIP-be csomagolva.
-4. 🖨️ **Nyomtatható A4 PDF Sablon:** Böngészőből azonnal nyomtatható nézet (`@media print` szabályokkal, oldalanként pontosan egy tanulóval) azonnali PDF mentéshez.
-
-### Alapértelmezett KRÉTA ponthatárok (Százalék)
-* **0–29%:** Elégtelen (1)
-* **30–54%:** Elégséges (2)
-* **55–74%:** Közepes (3)
-* **75–89%:** Jó (4)
-* **90–100%:** Jeles (5)
+*Alapértelmezett KRÉTA ponthatárok (a Beállításokban testreszabhatók):* `0–29%: 1`, `30–54%: 2`, `55–74%: 3`, `75–89%: 4`, `90–100%: 5`.
 
 ---
 
 ## 7. Projekt Könyvtárstruktúra
 
 ```text
-├── CHANGELOG.md              # Részletes verziótörténet és változási napló (v1.19.0)
-├── config.js                 # Központi konfiguráció (port: 3000, PIN, elérési utak, ponthatárok)
-├── DATABASE_SCHEMA.sql       # Teljes relációs adatbázis séma 7 táblával és 22 triggerrel
-├── package.json              # Node.js projektleíró és környezeti követelmények (Node >= 22.11.0)
+├── CHANGELOG.md              # Verziótörténet és változási napló (v1.37.13)
+├── config.js                 # Központi konfiguráció (port: 3000, PIN, elérési utak, diagnosztika)
+├── DATABASE_SCHEMA.sql       # Relációs adatbázisséma és integritási triggerek
+├── package.json              # Node.js projektleíró (Node >= 22.11.0)
+├── package-lock.json         # Verziózárolt függőséglista
 ├── project-context.md        # Rendszermegállapodás és működési szabályzat
-├── server.js                 # Express szerver és Socket.io belépési pont
-├── start_server.bat          # Intelligens Windows indítószkript önellenőrző diagnosztikával
-├── telepítés.md              # Zero-Install Best Practice üzembe helyezési útmutató (Windows Server 2016+)
-├── data/                     # SQLite adatbázis és feltöltött képek (gitignore védi)
-│   └── uploads/              # Feltöltött médiafájlok (.gitkeep)
+├── README.md                 # Rendszerleírás (ez a fájl)
+├── server.js                 # Express webszerver és Socket.io belépési pont
+├── start_server.bat          # Önellenőrző Windows Server 2016 indítószkript
+├── csomagolj_frissitest.bat  # Offline frissítési ZIP csomag készítő (fejlesztői gépre)
+├── frissitsd_a_szervert.bat  # Verzióvédett offline szerverfrissítő szkript (éles szerverre)
+├── telepítés.md              # Részletes Zero-Install szervertelepítési útmutató
+├── data/                     # SQLite adatbázis, mentések, diagnosztika és feltöltött képek
+│   ├── backups/              # Automatikus és manuális biztonsági mentések
+│   ├── diagnostics/          # Helyi diagnosztikai naplók
+│   └── uploads/              # Kérdésekhez és válaszokhoz feltöltött képek
 ├── public/                   # 100% Offline kliensoldali fájlok (Zero-Build)
-│   ├── student.html          # Közös belépési (tanári loginnal) és tanulói vizsgafelület („Calm Learner”)
-│   ├── admin.html            # Tanári vezérlőpult és szerkesztő
-│   ├── projector.html        # Tantermi kivetítő (Space Race és statisztikák)
+│   ├── student.html          # Diák belépési és feladatmegoldó felület
+│   ├── admin.html            # Tanári vezérlőpult, élő mátrix és tesztszerkesztő
+│   ├── projector.html        # Tantermi kivetítő (Space Race és statisztika)
+│   ├── print-report.html     # Nyomtatható A4 értékelőlap-sablon
 │   ├── css/
-│   │   └── style.css         # Egységes stíluslap (tilos az !important)
-│   ├── fonts/                # 100% Offline helyi betűkészletek (Nunito Sans & Material Symbols)
+│   │   ├── style.css         # Egységes stíluslap (!important nélkül)
+│   │   └── print.css         # Nyomtatási stíluslap
+│   ├── fonts/                # Helyi betűkészletek (Nunito Sans, Material Symbols)
+│   ├── img/                  # Logó és favicon
 │   └── js/
-│       ├── student.js        # Diákoldali logika és Session Recovery
-│       ├── admin.js          # Tanári élő mátrix, szerkesztők és felülbírálás
-│       ├── projector.js      # Kivetítő animációk és verseny grafika
-│       └── utils.js          # Offline segédfüggvények (XSS szűrés, kódkiemelés)
+│       ├── student.js        # Diákoldali logika, Session Recovery, Open Nav, Lightbox
+│       ├── admin.js          # Tanári mátrix, mappakezelés, WYSIWYG tesztszerkesztő
+│       ├── projector.js      # Kivetítő és Space Race animációk
+│       └── utils.js          # Közös XSS-védelem, szövegformázó, válasz-segédfüggvények
 ├── src/                      # Szerveroldali modulok
 │   ├── db/
-│   │   ├── init.js           # Adatbázis inicializálás és beépített mintaadatok
-│   │   ├── quizRepo.js       # Tesztek és kérdések adattára (zárolás, duplikálás)
+│   │   ├── init.js           # Adatbázis inicializálás és sémamigráció (13700)
+│   │   ├── quizRepo.js       # Tesztek, kérdések és mappafa adattára
 │   │   ├── rosterRepo.js     # Osztálynévsorok adattára
-│   │   └── sessionRepo.js    # Dolgozatok, belépés, gépváltás, mátrix és pontozás
+│   │   ├── sessionRepo.js    # Dolgozatok, belépés, piszkozatok, mátrix, felülbírálás
+│   │   └── settingsRepo.js   # Rendszerbeállítások és ponthatárok adattára
 │   ├── middleware/
-│   │   └── auth.js           # Tanári PIN hitelesítés és Cookie kezelés
+│   │   └── auth.js           # Tanári PIN hitelesítés és süti-kezelés
 │   ├── routes/
-│   │   └── api.js            # REST API végpontok (admin és student)
-│   └── services/
-│       ├── backup.js         # Teljes SQLite adatbázis archiválás és ZIP mentés
-│       ├── exporter.js       # KRÉTA Excel, HTML és ZIP értékelőlap generáló
-│       └── grader.js         # Automatikus pontozó motor (ABCD, TF, SHORT)
-└── scratch/                  # Integrációs és regressziós tesztkészlet (41 teszteset)
+│   │   ├── api.js            # REST API végpontok (admin és student)
+│   │   └── views.js          # Oldalútvonalak kiszolgálása
+│   ├── services/
+│   │   ├── backup.js         # Teljes adatbázis + média ZIP mentés és visszaállítás
+│   │   ├── diagnostics.js    # Helyi diagnosztikai naplózás és export
+│   │   ├── exporter.js       # KRÉTA Excel, interaktív HTML és ZIP értékelőlap generáló
+│   │   ├── grader.js         # Automatikus kiértékelő (egy- és többválasztós ABCD, TF, SHORT)
+│   │   ├── presenceService.js # Aktív diák- és névfoglalás-nyilvántartás
+│   │   └── socrativePdfParser.js # Socrative PDF-import és helyesírási normalizálás
+│   └── sockets/
+│       └── liveHandler.js    # Socket.io valós idejű eseménykezelő
+└── scratch/                  # Elszigetelt integrációs és regressziós tesztcsomag (npm test)
 ```
 
 ---
 
-## 8. Licenc és Fejlesztési Információk
+## 8. Fejlesztői Tesztelés
 
-* **Készült:** Általános iskolai helyi hálózatos oktatási célra.
-* **Szabványok:** W3C HTML5/CSS3, ECMAScript 2022 (ES13), MTA 12. kiadása szerinti magyar helyesírás.
+A teljes integrációs és regressziós tesztcsomag (teljesen elszigetelt, ideiglenes adatbázison) a fejlesztői gépen futtatható:
 
+```powershell
+npm test
+```

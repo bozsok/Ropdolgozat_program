@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="preload" href="/fonts/nunito-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/nunito-sans-latin-ext.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/style.css?v=1.37.12">
+  <link rel="stylesheet" href="/css/style.css?v=1.37.13">
   <style>
     /* Admin specifikus elrendezés (Tilos az !important) */
     .admin-container {
@@ -670,7 +670,7 @@
             <span class="material-symbols-outlined" style="color: var(--primary, #ea580c); font-size: 20px;">school</span>
             <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-main);">Válassz osztályt:</h4>
           </div>
-          <span id="roster-class-count-badge" class="badge" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 9999px; background-color: var(--surface-low, #f1f5f9); color: var(--text-muted, #64748b); font-weight: 700;">
+          <span id="roster-class-count-badge" class="badge" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 9999px; background-color: var(--surface-low, #f1f5f9); color: var(--text-muted, #64748b); font-weight: 400;">
             0 osztály
           </span>
         </div>
@@ -684,7 +684,7 @@
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color, #e2e8f0); flex-wrap: wrap; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 12px;">
             <h3 id="roster-class-title" style="margin: 0; font-size: 1.25rem; font-weight: 800; color: var(--text-main);">Osztály névsora</h3>
-            <span id="roster-student-count-pill" class="badge" style="font-size: 0.85rem; padding: 4px 10px; border-radius: 9999px; background-color: var(--primary-light, #ffedd5); color: var(--primary, #ea580c); font-weight: 700;">
+            <span id="roster-student-count-pill" class="badge" style="font-size: 0.85rem; padding: 4px 10px; border-radius: 9999px; background-color: var(--primary-light, #ffedd5); color: var(--primary, #ea580c); font-weight: 400;">
               0 tanuló
             </span>
           </div>
@@ -1514,15 +1514,40 @@
           Teszt: <strong id="move-quiz-title" style="color: var(--primary);">-</strong>
         </p>
         <div class="form-group" style="margin-bottom: 0;">
-          <label class="form-label" for="move-quiz-target-folder">Célmappa kiválasztása:</label>
-          <select id="move-quiz-target-folder" class="form-control">
-            <option value="">📁 Főmappa (Gyökér)</option>
-          </select>
+          <label class="form-label">Célmappa kiválasztása:</label>
+          <input type="hidden" id="move-quiz-target-folder" value="">
+          <div id="move-quiz-folder-tree" class="folder-tree-picker" role="listbox" aria-label="Célmappa kiválasztása"></div>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modal-move-quiz')">Mégse</button>
         <button type="button" id="btn-submit-move-quiz" class="btn btn-primary">📁 Áthelyezés</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mappa Áthelyezése Modal -->
+  <div id="modal-move-folder" class="modal-backdrop">
+    <div class="modal-window" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title">📁 Mappa áthelyezése</h3>
+      </div>
+      <div style="padding: 14px 0; color: var(--text-main); font-size: 0.95rem; line-height: 1.5;">
+        <p style="margin-bottom: 12px;">
+          Mappa: <strong id="move-folder-name" style="color: var(--primary);">-</strong>
+        </p>
+        <p style="margin-bottom: 12px; font-size: 0.85rem; color: var(--text-muted);">
+          A mappa a teljes benne lévő almappa- és tesztstruktúrával együtt kerül át a kiválasztott célmappába.
+        </p>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label">Célmappa kiválasztása:</label>
+          <input type="hidden" id="move-folder-target-parent" value="">
+          <div id="move-folder-parent-tree" class="folder-tree-picker" role="listbox" aria-label="Célmappa kiválasztása"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-move-folder')">Mégse</button>
+        <button type="button" id="btn-submit-move-folder" class="btn btn-primary">📁 Áthelyezés</button>
       </div>
     </div>
   </div>
@@ -1873,8 +1898,8 @@
 
   <!-- Szkriptek -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/utils.js?v=1.37.12"></script>
-  <script src="/js/admin.js?v=1.37.12"></script>
+  <script src="/js/utils.js?v=1.37.13"></script>
+  <script src="/js/admin.js?v=1.37.13"></script>
 </body>
 </html>
 

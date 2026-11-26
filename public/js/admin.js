@@ -181,6 +181,7 @@
   let pendingDeleteSessionId = null;
   let pendingDeleteQuizId = null;
   let pendingMoveQuizId = null;
+  let pendingMoveFolderId = null;
 
   /**
    * Rendszerértesítés megjelenítése elegáns modálban (böngészős alert helyett)
@@ -1541,6 +1542,24 @@
     });
   }
 
+  const btnSubmitMoveFolder = document.getElementById('btn-submit-move-folder');
+  const moveFolderTargetParent = document.getElementById('move-folder-target-parent');
+  if (btnSubmitMoveFolder) {
+    btnSubmitMoveFolder.addEventListener('click', async () => {
+      closeModal('modal-move-folder');
+      if (!pendingMoveFolderId) return;
+
+      try {
+        const targetParentId = moveFolderTargetParent && moveFolderTargetParent.value ? moveFolderTargetParent.value : null;
+        await moveFolder(pendingMoveFolderId, targetParentId);
+      } catch (err) {
+        console.error('Hiba a mappa áthelyezésekor:', err);
+      } finally {
+        pendingMoveFolderId = null;
+      }
+    });
+  }
+
   // Űrhajós verseny indítása (RAJT gomb)
   if (btnAdminStartRace) {
     btnAdminStartRace.addEventListener('click', async () => {
@@ -2074,6 +2093,9 @@
             </div>
           </div>
           <div class="folder-card-actions">
+            <button type="button" class="folder-btn-action btn-move-folder" title="Mappa áthelyezése">
+              <span class="material-symbols-outlined" style="font-size: 18px;">drive_file_move</span>
+            </button>
             <button type="button" class="folder-btn-action btn-rename-folder" title="Mappa átnevezése">
               <span class="material-symbols-outlined" style="font-size: 18px;">edit</span>
             </button>
@@ -2088,6 +2110,19 @@
           if (e.target.closest('.folder-card-actions') || e.target.closest('input') || e.target.closest('button')) return;
           loadQuizzes(f.id);
         });
+
+        // Áthelyezés
+        const btnMoveFolder = card.querySelector('.btn-move-folder');
+        if (btnMoveFolder) {
+          btnMoveFolder.addEventListener('click', (e) => {
+            e.stopPropagation();
+            pendingMoveFolderId = f.id;
+            const targetEl = document.getElementById('move-folder-name');
+            if (targetEl) targetEl.textContent = f.name;
+            loadMoveParentFolderOptions(f.id, f.parent_id);
+            openModal('modal-move-folder');
+          });
+        }
 
         // Átnevezés
         const btnRename = card.querySelector('.btn-rename-folder');
@@ -2675,58 +2710,171 @@
   }
 
   /**
-   * Célmappa választó legördülő mező feltöltése és ellenőrzése az áthelyezési modálban
+   * Hierarchikus, kattintható mappafa-választó kirajzolása (duplázás nélkül:
+   * a gyökérszintű mappák félkövérek, az almappák szintenként behúzva, normál betűvel jelennek meg)
+   */
+  function renderFolderTreePicker(treeEl, hiddenInputEl, allFolders, { selectedId = null, excludedFolderId = null } = {}) {
+    if (!treeEl || !hiddenInputEl) return;
+    treeEl.innerHTML = '';
+
+    const normalizedSelected = (selectedId !== null && selectedId !== undefined && selectedId !== '')
+      ? String(Number(selectedId))
+      : '';
+    hiddenInputEl.value = normalizedSelected;
+
+    const excludedNum = (excludedFolderId !== null && excludedFolderId !== undefined && excludedFolderId !== '')
+      ? Number(excludedFolderId)
+      : null;
+
+    // Gyermekmappák csoportosítása parent_id alapján
+    const childrenMap = new Map();
+    const validIds = new Set();
+    (Array.isArray(allFolders) ? allFolders : []).forEach(f => validIds.add(Number(f.id)));
+    (Array.isArray(allFolders) ? allFolders : []).forEach(f => {
+      const pKey = (f.parent_id !== null && f.parent_id !== undefined && validIds.has(Number(f.parent_id)))
+        ? Number(f.parent_id)
+        : 0;
+      if (!childrenMap.has(pKey)) childrenMap.set(pKey, []);
+      childrenMap.get(pKey).push(f);
+    });
+    childrenMap.forEach(list => {
+      list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'hu', { numeric: true }));
+    });
+
+    const selectOption = (btn) => {
+      treeEl.querySelectorAll('.folder-tree-item').forEach(el => {
+        el.classList.remove('is-selected');
+        el.setAttribute('aria-selected', 'false');
+      });
+      btn.classList.add('is-selected');
+      btn.setAttribute('aria-selected', 'true');
+      hiddenInputEl.value = btn.dataset.folderId || '';
+    };
+
+    const appendTreeRow = ({ value, label, depth, isRoot = false }) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const classes = ['folder-tree-item'];
+      if (isRoot) classes.push('is-root-folder');
+      else if (depth === 0) classes.push('is-top-folder');
+      else classes.push('is-sub-folder');
+
+      const isSelected = value === normalizedSelected;
+      if (isSelected) classes.push('is-selected');
+
+      btn.className = classes.join(' ');
+      btn.setAttribute('role', 'option');
+      btn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      btn.dataset.folderId = value;
+      if (!isRoot && depth > 0) {
+        btn.style.paddingLeft = `${14 + depth * 22}px`;
+      }
+
+      const iconName = isRoot ? 'home' : (depth === 0 ? 'folder' : 'subdirectory_arrow_right');
+      btn.innerHTML = `
+        <span class="folder-tree-item-left">
+          <span class="material-symbols-outlined folder-tree-icon">${iconName}</span>
+          <span class="folder-tree-label">${escapeHtml(label)}</span>
+        </span>
+        <span class="material-symbols-outlined folder-tree-check" aria-hidden="true">check</span>
+      `;
+
+      btn.addEventListener('click', () => selectOption(btn));
+      treeEl.appendChild(btn);
+    };
+
+    // 1. Gyökér (Főmappa) mindig az első választható elem
+    appendTreeRow({ value: '', label: 'Főmappa (Gyökér)', depth: 0, isRoot: true });
+
+    // 2. Rekurzív bejárás ciklusvédelemmel és a tiltott részfa kihagyásával
+    const visited = new Set();
+    const walk = (parentIdKey, depth) => {
+      const list = childrenMap.get(parentIdKey) || [];
+      list.forEach(folder => {
+        const fid = Number(folder.id);
+        if (visited.has(fid)) return;
+        if (excludedNum !== null && fid === excludedNum) return; // Saját maga és az alatta lévő összes almappa kimarad
+        visited.add(fid);
+
+        appendTreeRow({ value: String(fid), label: folder.name, depth, isRoot: false });
+        walk(fid, depth + 1);
+      });
+    };
+
+    walk(0, 0);
+
+    // Ha a kiválasztott ID nem szerepel a listában, essünk vissza a gyökérre
+    const selectedEl = treeEl.querySelector('.folder-tree-item.is-selected');
+    if (selectedEl) {
+      selectedEl.scrollIntoView({ block: 'nearest' });
+    } else {
+      const firstEl = treeEl.querySelector('.folder-tree-item');
+      if (firstEl) selectOption(firstEl);
+    }
+  }
+
+  /**
+   * Célmappa választó mappafa feltöltése teszt áthelyezésekor
    */
   async function loadMoveFolderOptions(selectedFolderId = null) {
-    const targetSelect = document.getElementById('move-quiz-target-folder');
-    if (!targetSelect) return;
+    const targetInput = document.getElementById('move-quiz-target-folder');
+    const treeEl = document.getElementById('move-quiz-folder-tree');
+    if (!targetInput || !treeEl) return;
 
-    targetSelect.innerHTML = '<option value="">⏳ Mappák betöltése és ellenőrzése...</option>';
+    treeEl.innerHTML = '<div class="folder-tree-loading">Mappák betöltése…</div>';
 
     try {
       const res = await fetch('/api/admin/quiz-folders?all=true');
       const allFolders = await res.json();
-
-      targetSelect.innerHTML = '<option value="">📁 Főmappa (Gyökér)</option>';
-
-      const folderMap = new Map();
-      allFolders.forEach(f => folderMap.set(f.id, f));
-
-      function getPath(f) {
-        const parts = [f.name];
-        let curr = f;
-        const visited = new Set([curr.id]);
-        while (curr.parent_id && folderMap.has(curr.parent_id)) {
-          curr = folderMap.get(curr.parent_id);
-          if (visited.has(curr.id)) break;
-          visited.add(curr.id);
-          parts.unshift(curr.name);
-        }
-        return parts.join(' / ');
-      }
-
-      const sortedFolders = allFolders.map(f => ({
-        id: f.id,
-        name: f.name,
-        path: getPath(f)
-      })).sort((a, b) => a.path.localeCompare(b.path, 'hu'));
-
-      sortedFolders.forEach(f => {
-        const opt = document.createElement('option');
-        opt.value = f.id;
-        opt.textContent = `📁 ${f.path}`;
-        if (selectedFolderId !== null && selectedFolderId !== undefined && Number(selectedFolderId) === f.id) {
-          opt.selected = true;
-        }
-        targetSelect.appendChild(opt);
-      });
-
-      if (selectedFolderId === null || selectedFolderId === undefined || selectedFolderId === '') {
-        targetSelect.value = '';
-      }
+      renderFolderTreePicker(treeEl, targetInput, allFolders, { selectedId: selectedFolderId });
     } catch (err) {
       console.error('Hiba a mappák lekérésekor az áthelyezési modálhoz:', err);
-      targetSelect.innerHTML = '<option value="">📁 Főmappa (Gyökér)</option>';
+      renderFolderTreePicker(treeEl, targetInput, [], { selectedId: null });
+    }
+  }
+
+  /**
+   * Célmappa választó mappafa feltöltése mappa áthelyezésekor (saját maga és leszármazottai kiszűrve)
+   */
+  async function loadMoveParentFolderOptions(movingFolderId, currentParentId = null) {
+    const targetInput = document.getElementById('move-folder-target-parent');
+    const treeEl = document.getElementById('move-folder-parent-tree');
+    if (!targetInput || !treeEl) return;
+
+    treeEl.innerHTML = '<div class="folder-tree-loading">Mappák betöltése…</div>';
+
+    try {
+      const res = await fetch('/api/admin/quiz-folders?all=true');
+      const allFolders = await res.json();
+      renderFolderTreePicker(treeEl, targetInput, allFolders, {
+        selectedId: currentParentId,
+        excludedFolderId: movingFolderId
+      });
+    } catch (err) {
+      console.error('Hiba a mappák lekérésekor a mappa áthelyezéséhez:', err);
+      renderFolderTreePicker(treeEl, targetInput, [], { selectedId: null });
+    }
+  }
+
+  /**
+   * Mappa áthelyezése a szerveren
+   */
+  async function moveFolder(folderId, targetParentId) {
+    try {
+      const res = await fetch(`/api/admin/quiz-folders/${folderId}/move`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentId: targetParentId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('Mappa sikeresen áthelyezve!', 'success');
+        await loadQuizzes(currentFolderId);
+      } else {
+        showAdminAlert('⚠️ Áthelyezési hiba', data.error || 'Hiba a mappa áthelyezésekor!');
+      }
+    } catch (err) {
+      showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a mappa áthelyezésekor!');
     }
   }
 
@@ -4285,7 +4433,7 @@
       rosterColumnsView.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; padding: 32px 16px; color: var(--text-muted); background-color: var(--surface-low); border-radius: 12px; border: 1px dashed var(--border-color);">
           <span class="material-symbols-outlined" style="font-size: 32px; color: #94a3b8; display: block; margin-bottom: 6px;">person_off</span>
-          <strong>Még nincsenek tanulók ebben az osztályban.</strong>
+          <span>Még nincsenek tanulók ebben az osztályban.</span>
           <p style="margin: 4px 0 0 0; font-size: 0.85rem;">Kattints a fenti „Szöveges szerkesztés” gombra a nevek beillesztéséhez!</p>
         </div>
       `;

@@ -816,6 +816,57 @@ function deleteFolder(folderId) {
 }
 
 /**
+ * Mappa áthelyezése másik mappába (vagy a főmappába / gyökérbe)
+ * A teljes belső almappa- és tesztstruktúra együtt mozog a mappával.
+ * Szigorú ciklusvédelemmel tiltja a saját magába vagy saját almappájába történő áthelyezést.
+ * @param {number} folderId
+ * @param {number|null} targetParentId
+ * @returns {object}
+ */
+function moveFolder(folderId, targetParentId) {
+  const fId = Number(folderId);
+  const folder = db.prepare('SELECT id, parent_id, name FROM quiz_folders WHERE id = ?').get(fId);
+  if (!folder) {
+    throw new Error('Az áthelyezendő mappa nem található!');
+  }
+
+  const targetId = (targetParentId === null || targetParentId === undefined || targetParentId === '' || targetParentId === 'root')
+    ? null
+    : Number(targetParentId);
+
+  if (targetId !== null) {
+    if (!Number.isInteger(targetId) || targetId <= 0) {
+      throw new Error('Érvénytelen célmappa azonosító!');
+    }
+    if (targetId === fId) {
+      throw new Error('Egy mappát nem lehet saját magába áthelyezni!');
+    }
+
+    const targetFolder = db.prepare('SELECT id, parent_id FROM quiz_folders WHERE id = ?').get(targetId);
+    if (!targetFolder) {
+      throw new Error('A megadott célmappa nem létezik!');
+    }
+
+    // Ciklusvédelem: a célmappa egyik őse sem lehet a mozgatott mappa
+    const parentStmt = db.prepare('SELECT parent_id FROM quiz_folders WHERE id = ?');
+    let currId = targetFolder.parent_id;
+    const visited = new Set([targetId]);
+    while (currId !== null && currId !== undefined) {
+      if (Number(currId) === fId) {
+        throw new Error('Egy mappát nem lehet saját almappájába áthelyezni!');
+      }
+      if (visited.has(Number(currId))) break;
+      visited.add(Number(currId));
+      const parentRow = parentStmt.get(currId);
+      currId = parentRow ? parentRow.parent_id : null;
+    }
+  }
+
+  db.prepare('UPDATE quiz_folders SET parent_id = ? WHERE id = ?').run(targetId, fId);
+  return { id: fId, parent_id: targetId, name: folder.name };
+}
+
+/**
  * Teszt áthelyezése másik mappába (vagy gyökérbe)
  * @param {number} quizId
  * @param {number|null} targetFolderId
@@ -926,6 +977,7 @@ module.exports = {
   getFolderBreadcrumbs,
   createFolder,
   renameFolder,
+  moveFolder,
   deleteFolder,
   cleanExpiredTempImages,
   cleanQuizOrphanImages

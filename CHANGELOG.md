@@ -4,6 +4,37 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.13] – 2026-11-26
+
+### Mappák áthelyezése teljes belső struktúrával és hierarchikus, kattintható mappafa-választó
+
+Tesztszerkesztői mappaszervezési fejlesztés SQLite-sémamódosítás nélkül (`13700`), kétoldali ciklusvédelemmel és egységes fa-nézetű célmappa-választóval.
+
+#### Hozzáadva (Added)
+* **Mappák áthelyezése a teljes belső almappa- és tesztstruktúrával együtt (`src/db/quizRepo.js`, `src/routes/api.js`, `public/admin.html`, `public/js/admin.js`):**
+  - **Fájlok:** [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Új `quizRepo.moveFolder(folderId, targetParentId)` adatbázis-művelet és `PUT /api/admin/quiz-folders/:id/move` hitelesített admin végpont, amely egyetlen lépésben áthelyez bármely mappát egy másik mappába vagy vissza a főmappába (gyökérbe), a benne lévő összes almappával és teszttel együtt.
+  - Szigorú kétoldali ciklusvédelem: sem a felületen, sem a szerveren nem engedélyezett egy mappa saját magába vagy bármelyik saját almappájába történő áthelyezése.
+  - A Tesztszerkesztő mappakártyáin az Átnevezés és Törlés gomb mellett megjelent az **Áthelyezés** (`drive_file_move`) gomb és a hozzá tartozó `#modal-move-folder` modál.
+
+* **Egykattintásos offline szerverfrissítő szkriptpár és naprakész `README.md` (`csomagolj_frissitest.bat`, `frissitsd_a_szervert.bat`, `README.md`):**
+  - **Fájlok:** [`csomagolj_frissitest.bat`](file:///d:/dev/Röpdolgozat%20program/csomagolj_frissitest.bat), [`frissitsd_a_szervert.bat`](file:///d:/dev/Röpdolgozat%20program/frissitsd_a_szervert.bat), [`README.md`](file:///d:/dev/Röpdolgozat%20program/README.md)
+  - A `csomagolj_frissitest.bat` a `package.json` verziószáma alapján egyetlen `Okoskodo_frissites_vX.Y.Z.zip` csomagba gyűjti a programfájlokat (`src/`, `public/`, `server.js`, dokumentációk), szigorúan kihagyva a `data/`, `node_modules/`, `config.js`, `start_server.bat` és fejlesztői mappákat.
+  - A `frissitsd_a_szervert.bat` automatikusan megkeresi a legmagasabb verziószámú frissítési csomagot, ellenőrzi a 3000-es portot (futó szerver figyelmeztetés), valódi szemantikus verzió-összehasonlítással tiltja a visszafelé frissítést (downgrade), megegyező verziónál megerősítést kér, az adatok és helyi konfiguráció érintetlenül hagyásával frissít, lefuttatja a `node src/db/init.js` sémaellenőrzést, és csak 100%-ban sikeres futás után törli automatikusan a felhasznált `.zip` fájlt.
+  - A `README.md` teljes körűen frissült a `v1.37.13` rendszerállapotra és a Windows Server 2016 Zero-Install üzembe helyezési menetére.
+
+#### Módosítva (Changed)
+* **Hierarchikus, kattintható mappafa-választó a Mappa és a Teszt áthelyezése ablakban (`public/admin.html`, `public/js/admin.js`, `public/css/style.css`):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - Az ömlesztett legördülő lista helyett a `#modal-move-folder` és a `#modal-move-quiz` ablakban is közös, görgethető, akadálymentes mappafa-választó (`.folder-tree-picker`, `renderFolderTreePicker()`) működik.
+  - Duplázásmentes, átlátható hierarchia: legfelül a **Főmappa (Gyökér)**, alatta minden gyökérszintű mappa (pl. **Digitális kultúra**, **Fejlesztő foglalkozás**) félkövéren és közvetlenül kattinthatóan, alatta pedig az almappák szintenként behúzva, normál betűvel és természetes magyar rendezéssel (`1., 2., 3., …`) jelennek meg.
+
+* **Hivatalos osztálynévsorok (`#tab-roster`) tipográfiai letisztítása (`public/admin.html`, `public/js/admin.js`, `public/css/style.css`):**
+  - **Fájlok:** [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A főcím (`.admin-toolbar-title`), a *Válassz osztályt:* felirat és a kártyafejlécben megjelenő *„x.x osztály névsora”* cím kivételével minden gomb, jelvény, osztályválasztó chip, sorszám, tanulónév, morzsaútvonal és címke normál (`font-weight: 400`) vastagságot kapott.
+
+---
+
 ## [1.37.12] – 2026-11-25
 
 ### Képes ABCD válaszok, többválasztós (szigorú pontozású) kérdések, válaszkép-nagyítás és diák/szerkesztői javítások

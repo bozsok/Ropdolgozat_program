@@ -409,6 +409,19 @@ router.put('/admin/quiz-folders/:id', requireAdminAuth, (req, res) => {
   }
 });
 
+// Mappa áthelyezése másik mappába (vagy gyökérbe)
+router.put('/admin/quiz-folders/:id/move', requireAdminAuth, (req, res) => {
+  try {
+    const targetParentId = req.body.parentId !== undefined
+      ? req.body.parentId
+      : (req.body.targetParentId !== undefined ? req.body.targetParentId : req.body.folderId);
+    const updated = quizRepo.moveFolder(req.params.id, targetParentId);
+    res.json({ success: true, folder: updated });
+  } catch (err) {
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+  }
+});
+
 // Mappa törlése (benne lévő tesztek a szülő mappába kerülnek át)
 router.delete('/admin/quiz-folders/:id', requireAdminAuth, (req, res) => {
   try {
