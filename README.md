@@ -1,4 +1,4 @@
-# Okoskodó – Röpdolgozat program (v1.37.13)
+# Okoskodó – Röpdolgozat program (v1.37.14)
 
 > **100% Offline Helyi Hálózatos Iskolai Röpdolgozat Rendszer (Socrative-klón)**  
 > Általános iskolai oktatási környezetre tervezve: **Digitális kultúra** és **Technika** (`3–8. évfolyam`), valamint **Fejlesztő foglalkozás** (`1–8. évfolyam`).  
@@ -34,7 +34,7 @@ A rendszer négyféle tantermi módban indítható:
 ## 3. Tesztszerkesztő és Kérdéstípusok
 
 * **Szabad Tesztszerkesztő (pillanatkép-védelemmel):** A futó és lezárt dolgozatok rögzített pillanatképből (`quiz_snapshot_json`) dolgoznak, ezért a feladatsorok a Tesztszerkesztőben bármikor szabadon szerkeszthetők, javíthatók, duplikálhatók vagy egyesíthetők.
-* **Mapparendszer és hierarchikus mappafa-áthelyezés:** Korlátlan mélységű mappák és almappák létrehozása, átnevezése, törlése, valamint **mappák és tesztek áthelyezése** (teljes belső almappa- és tesztstruktúrával együtt, duplázásmentes mappafa-választóval és kétoldali ciklusvédelemmel).
+* **Mapparendszer, hierarchikus áthelyezés és Drag & Drop sorrendezés:** Korlátlan mélységű mappák és almappák létrehozása, átnevezése, törlése, áthelyezése (teljes belső almappa- és tesztstruktúrával, duplázásmentes mappafa-választóval és ciklusvédelemmel), valamint a **mappa- és tesztkártyák húzható (Drag & Drop) egyéni sorrendezése**, amely a Dolgozatindítóban és a mappafa-választóban is érvényesül.
 * **Valódi WYSIWYG szövegformázás:** Félkövér, dőlt, aláhúzott, inline kód, felső és alsó index (`B`, `I`, `U`, `</>`, `x²`, `x₂`) közvetlen vizuális megjelenítéssel és üres sorok megőrzésével.
 * **Támogatott kérdéstípusok:**
   - **Feleletválasztós (ABCD):** 1 helyes válasz vagy **több helyes válasz (többválasztós ABCD)** szigorú (minden vagy semmi) pontozással.
@@ -99,7 +99,7 @@ Mivel az iskolai szerver offline, **a szerveren NEM futtatunk `npm install`-t!**
 
 Ha a későbbiekben hibajavítás vagy új funkció készül a programhoz, **nem kell kézzel válogatni a fájlokat**:
 
-1. **Otthoni (fejlesztői) gépen:** Futtasd a főkönyvtárban található [`csomagolj_frissitest.bat`](./csomagolj_frissitest.bat) fájlt. Ez kiolvassa a `package.json` verziószámát, és létrehoz egyetlen, verziószámozott csomagot (pl. `Okoskodo_frissites_v1.37.13.zip`), amely **kizárólag a programfájlokat** tartalmazza (`src/`, `public/`, `server.js`, stb.), a `data/`, `node_modules/`, `config.js` és `start_server.bat` kihagyásával.
+1. **Otthoni (fejlesztői) gépen:** Futtasd a főkönyvtárban található [`csomagolj_frissitest.bat`](./csomagolj_frissitest.bat) fájlt. Ez kiolvassa a `package.json` verziószámát, és létrehoz egyetlen, verziószámozott csomagot (pl. `Okoskodo_frissites_v1.37.14.zip`), amely **kizárólag a programfájlokat** tartalmazza (`src/`, `public/`, `server.js`, stb.), a `data/`, `node_modules/`, `config.js` és `start_server.bat` kihagyásával.
 2. **Iskolai szerveren:** Állítsd le a futó szervert, másold be a `.zip` fájlt a `C:\Ropdolgozat\` főkönyvtárba, majd futtasd a [`frissitsd_a_szervert.bat`](./frissitsd_a_szervert.bat) fájlt:
    - Automatikusan kiválasztja a legmagasabb verziószámú `Okoskodo_frissites_v*.zip` csomagot (vagy ráhúzható egérrel a `.bat` ikonra).
    - **Verzióvédelem:** régebbi verziójú csomag esetén biztonsági okból leáll (nem ír felül semmit); megegyező verzió esetén külön megerősítést kér; újabb verzió esetén jóváhagyás után frissít.
@@ -130,7 +130,7 @@ Ha a későbbiekben hibajavítás vagy új funkció készül a programhoz, **nem
 ## 7. Projekt Könyvtárstruktúra
 
 ```text
-├── CHANGELOG.md              # Verziótörténet és változási napló (v1.37.13)
+├── CHANGELOG.md              # Verziótörténet és változási napló (v1.37.14)
 ├── config.js                 # Központi konfiguráció (port: 3000, PIN, elérési utak, diagnosztika)
 ├── DATABASE_SCHEMA.sql       # Relációs adatbázisséma és integritási triggerek
 ├── package.json              # Node.js projektleíró (Node >= 22.11.0)

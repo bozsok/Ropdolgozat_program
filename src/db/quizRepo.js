@@ -31,6 +31,7 @@ function getQuizzes(subjectId = null, gradeLevel = null, folderId = undefined) {
       q.title,
       q.subject_grade,
       q.default_time_limit_min,
+      COALESCE(q.sort_order, 0) AS sort_order,
       q.locked_at,
       q.created_at,
       q.updated_at,
@@ -63,7 +64,7 @@ function getQuizzes(subjectId = null, gradeLevel = null, folderId = undefined) {
     }
   }
 
-  query += ' GROUP BY q.id ORDER BY q.updated_at DESC, q.id DESC';
+  query += ' GROUP BY q.id ORDER BY CASE WHEN COALESCE(q.sort_order, 0) > 0 THEN 0 ELSE 1 END ASC, COALESCE(q.sort_order, 0) ASC, q.updated_at DESC, q.id DESC';
 
   const stmt = db.prepare(query);
   return stmt.all(...params);
@@ -87,6 +88,7 @@ function getQuizById(quizId, isStudentView = false, includeDeleted = false) {
       q.title,
       q.subject_grade,
       q.default_time_limit_min,
+      COALESCE(q.sort_order, 0) AS sort_order,
       q.locked_at,
       q.created_at,
       q.updated_at
@@ -720,12 +722,13 @@ function getFolders(parentId = null) {
       f.id,
       f.parent_id,
       f.name,
+      COALESCE(f.sort_order, 0) AS sort_order,
       f.created_at,
       (SELECT COUNT(*) FROM quiz_folders sub WHERE sub.parent_id = f.id) AS subfolder_count,
       (SELECT COUNT(*) FROM quizzes q WHERE q.folder_id = f.id) AS quiz_count
     FROM quiz_folders f
     WHERE ${parentId === null ? 'f.parent_id IS NULL' : 'f.parent_id = ?'}
-    ORDER BY f.name COLLATE NOCASE ASC
+    ORDER BY CASE WHEN COALESCE(f.sort_order, 0) > 0 THEN 0 ELSE 1 END ASC, COALESCE(f.sort_order, 0) ASC, f.name COLLATE NOCASE ASC
   `;
   const stmt = db.prepare(query);
   return parentId === null ? stmt.all() : stmt.all(Number(parentId));
@@ -736,9 +739,9 @@ function getFolders(parentId = null) {
  */
 function getAllFolders() {
   const stmt = db.prepare(`
-    SELECT id, parent_id, name, created_at
+    SELECT id, parent_id, name, COALESCE(sort_order, 0) AS sort_order, created_at
     FROM quiz_folders
-    ORDER BY name COLLATE NOCASE ASC
+    ORDER BY CASE WHEN COALESCE(sort_order, 0) > 0 THEN 0 ELSE 1 END ASC, COALESCE(sort_order, 0) ASC, name COLLATE NOCASE ASC
   `);
   return stmt.all();
 }
@@ -867,6 +870,66 @@ function moveFolder(folderId, targetParentId) {
 }
 
 /**
+ * Mappák egyéni megjelenítési sorrendjének mentése (Drag & Drop rendezéshez)
+ * @param {number[]} orderedFolderIds - A kívánt sorrendben lévő mappaazonosítók
+ * @returns {{ success: boolean, count: number }}
+ */
+function reorderFolders(orderedFolderIds = []) {
+  if (!Array.isArray(orderedFolderIds) || orderedFolderIds.length === 0) {
+    throw new Error('A rendezendő mappák listája nem lehet üres!');
+  }
+
+  const cleanIds = [];
+  for (const rawId of orderedFolderIds) {
+    const id = Number(rawId);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new Error('Érvénytelen mappaazonosító a sorrendlistában!');
+    }
+    if (!cleanIds.includes(id)) cleanIds.push(id);
+  }
+
+  const updateStmt = db.prepare('UPDATE quiz_folders SET sort_order = ? WHERE id = ?');
+  const tx = db.transaction((ids) => {
+    ids.forEach((id, idx) => {
+      updateStmt.run(idx + 1, id);
+    });
+  });
+
+  tx(cleanIds);
+  return { success: true, count: cleanIds.length };
+}
+
+/**
+ * Tesztek egyéni megjelenítési sorrendjének mentése (mappán belüli Drag & Drop rendezéshez)
+ * @param {number[]} orderedQuizIds - A kívánt sorrendben lévő tesztazonosítók
+ * @returns {{ success: boolean, count: number }}
+ */
+function reorderQuizzes(orderedQuizIds = []) {
+  if (!Array.isArray(orderedQuizIds) || orderedQuizIds.length === 0) {
+    throw new Error('A rendezendő tesztek listája nem lehet üres!');
+  }
+
+  const cleanIds = [];
+  for (const rawId of orderedQuizIds) {
+    const id = Number(rawId);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new Error('Érvénytelen tesztazonosító a sorrendlistában!');
+    }
+    if (!cleanIds.includes(id)) cleanIds.push(id);
+  }
+
+  const updateStmt = db.prepare('UPDATE quizzes SET sort_order = ? WHERE id = ?');
+  const tx = db.transaction((ids) => {
+    ids.forEach((id, idx) => {
+      updateStmt.run(idx + 1, id);
+    });
+  });
+
+  tx(cleanIds);
+  return { success: true, count: cleanIds.length };
+}
+
+/**
  * Teszt áthelyezése másik mappába (vagy gyökérbe)
  * @param {number} quizId
  * @param {number|null} targetFolderId
@@ -972,12 +1035,14 @@ module.exports = {
   mergeQuizzes,
   deleteQuiz,
   moveQuiz,
+  reorderQuizzes,
   getFolders,
   getAllFolders,
   getFolderBreadcrumbs,
   createFolder,
   renameFolder,
   moveFolder,
+  reorderFolders,
   deleteFolder,
   cleanExpiredTempImages,
   cleanQuizOrphanImages

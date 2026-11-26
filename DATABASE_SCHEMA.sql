@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS quiz_folders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     parent_id INTEGER DEFAULT NULL,             -- NULL = legfelső (gyökér) szint, egyébként a szülő mappa ID-ja
     name TEXT NOT NULL,                         -- A mappa neve (pl. "6. évfolyam", "1. félév")
+    sort_order INTEGER NOT NULL DEFAULT 0,      -- Egyéni megjelenítési sorrend a Tesztszerkesztőben és a mappafa-választóban (0 = ABC)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (parent_id) REFERENCES quiz_folders(id) ON DELETE CASCADE
 );
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS quizzes (
     title TEXT NOT NULL,                        -- A teszt címe (pl. "6. osztály - Hálózatok alapjai")
     subject_grade TEXT DEFAULT '',              -- Évfolyam / kategória (pl. "6. évfolyam")
     default_time_limit_min INTEGER DEFAULT 0,   -- Alapértelmezett időkorlát percben (0 = nincs korlát)
+    sort_order INTEGER NOT NULL DEFAULT 0,      -- Egyéni megjelenítési sorrend a Tesztszerkesztőben és a Dolgozatindítóban (0 = alapértelmezett)
     is_deleted INTEGER NOT NULL DEFAULT 0 CHECK(is_deleted IN (0, 1)), -- Soft-delete sablonmegőrzéshez (Report 16 / 2. fejezet)
     locked_at DATETIME DEFAULT NULL,            -- Zárolás UTC időpontja (első indításkor automatikusan kitöltődik)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

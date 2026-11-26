@@ -193,10 +193,16 @@ function migrateDatabase(targetDb = currentDb) {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             parent_id INTEGER DEFAULT NULL,
             name TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (parent_id) REFERENCES quiz_folders(id) ON DELETE CASCADE
         );
       `);
+
+      const folderColumns = targetDb.prepare('PRAGMA table_info(quiz_folders)').all();
+      if (!folderColumns.some(c => c.name === 'sort_order')) {
+        targetDb.prepare('ALTER TABLE quiz_folders ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0').run();
+      }
 
       const quizzesTable = targetDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='quizzes'").get();
       if (quizzesTable) {
@@ -217,6 +223,9 @@ function migrateDatabase(targetDb = currentDb) {
         if (!quizColumns.some(c => c.name === 'updated_at')) {
           targetDb.prepare('ALTER TABLE quizzes ADD COLUMN updated_at DATETIME DEFAULT NULL').run();
           targetDb.prepare("UPDATE quizzes SET updated_at = datetime('now') WHERE updated_at IS NULL").run();
+        }
+        if (!quizColumns.some(c => c.name === 'sort_order')) {
+          targetDb.prepare('ALTER TABLE quizzes ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0').run();
         }
       }
 

@@ -4,6 +4,26 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.14] – 2026-11-26
+
+### Mappák és tesztek egyéni (Drag & Drop) sorrendezése a Tesztszerkesztőben, a mappafa-választóban és a Dolgozatindítóban
+
+Tesztszerkesztői és dolgozatindítási rendszerezési fejlesztés automatikus, adatvesztésmentes oszlopmigrációval (`sort_order`), teljes visszafelé kompatibilitással.
+
+#### Hozzáadva (Added)
+* **Tesztkártyák húzható (Drag & Drop) egyéni sorrendezése (`DATABASE_SCHEMA.sql`, `src/db/init.js`, `src/db/quizRepo.js`, `src/routes/api.js`, `public/js/admin.js`, `public/css/style.css`):**
+  - **Fájlok:** [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql), [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js), [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A `quizzes` tábla új `sort_order INTEGER NOT NULL DEFAULT 0` oszlopot kapott (meglévő adatbázisokon automatikus migrációval), valamint elkészült a tranzakcionális `quizRepo.reorderQuizzes()` és a `PUT /api/admin/quizzes/reorder` végpont.
+  - A Tesztszerkesztő tesztkártyáin megjelent a húzási fogantyú (`drag_indicator`), elengedéskor az új sorrend azonnal mentődik, és későbbi szerkesztéskor sem ugranak el a kártyák a helyükről.
+  - Az *Új dolgozat indítása* modál évfolyam-csoportjain belül is automatikusan a Tesztszerkesztőben beállított egyéni `sort_order` sorrend érvényesül.
+
+* **Mappakártyák húzható (Drag & Drop) egyéni sorrendezése (`DATABASE_SCHEMA.sql`, `src/db/init.js`, `src/db/quizRepo.js`, `src/routes/api.js`, `public/js/admin.js`, `public/css/style.css`):**
+  - **Fájlok:** [`DATABASE_SCHEMA.sql`](file:///d:/dev/Röpdolgozat%20program/DATABASE_SCHEMA.sql), [`src/db/init.js`](file:///d:/dev/Röpdolgozat%20program/src/db/init.js), [`src/db/quizRepo.js`](file:///d:/dev/Röpdolgozat%20program/src/db/quizRepo.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js), [`public/css/style.css`](file:///d:/dev/Röpdolgozat%20program/public/css/style.css)
+  - A `quiz_folders` tábla új `sort_order INTEGER NOT NULL DEFAULT 0` oszlopot kapott, valamint elkészült a `quizRepo.reorderFolders()` és a `PUT /api/admin/quiz-folders/reorder` végpont.
+  - A mappakártyák kizárólag mappakártyák között húzhatók át (nem keverednek a tesztkártyákkal), a nem átrendezett szinteken megmarad a természetes magyar ABC-sorrend, a rögzített egyéni mappasorrend pedig a hierarchikus mappafa-választóban (`.folder-tree-picker`) is érvényesül.
+
+---
+
 ## [1.37.13] – 2026-11-26
 
 ### Mappák áthelyezése teljes belső struktúrával és hierarchikus, kattintható mappafa-választó

@@ -1931,8 +1931,17 @@
         const groupEl = document.createElement('optgroup');
         groupEl.label = isPreferredGroup ? `★ ${gradeKey} (kiválasztott évfolyam)` : `▼ ${gradeKey}`;
 
-        // Csoporton belül cím szerint rendezve
-        groupData.items.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'hu'));
+        // Csoporton belül a Tesztszerkesztőben beállított egyéni sorrend (sort_order), nem rendezetteknél cím szerint
+        groupData.items.sort((a, b) => {
+          const ordA = Number(a.sort_order) || 0;
+          const ordB = Number(b.sort_order) || 0;
+          const hasA = ordA > 0;
+          const hasB = ordB > 0;
+          if (hasA && hasB && ordA !== ordB) return ordA - ordB;
+          if (hasA && !hasB) return -1;
+          if (!hasA && hasB) return 1;
+          return (a.title || '').localeCompare(b.title || '', 'hu');
+        });
 
         groupData.items.forEach(q => {
           const opt = document.createElement('option');
@@ -2062,11 +2071,20 @@
       return;
     }
 
-    // 1. Mappakártyák kirajzolása
+    // 1. Mappakártyák kirajzolása (Drag & Drop sorrendezéssel)
     if (Array.isArray(folders)) {
+      let draggedFolderCard = null;
+      let initialFolderOrderKey = '';
+
+      const getDomFolderOrderIds = () => Array.from(quizzesListContainer.querySelectorAll('.folder-card'))
+        .map(el => Number(el.dataset.folderId))
+        .filter(id => Number.isInteger(id) && id > 0);
+
       folders.forEach(f => {
         const card = document.createElement('div');
         card.className = 'folder-card';
+        card.dataset.folderId = String(f.id);
+        card.setAttribute('draggable', 'true');
         card.title = `${f.name} mappa megnyitása`;
 
         const subCount = f.subfolder_count || 0;
@@ -2084,6 +2102,7 @@
 
         card.innerHTML = `
           <div class="folder-card-header">
+            <span class="folder-card-drag-handle material-symbols-outlined" title="Húzd el a mappát a sorrend módosításához">drag_indicator</span>
             <div class="folder-card-icon">
               <span class="material-symbols-outlined">folder</span>
             </div>
@@ -2105,9 +2124,73 @@
           </div>
         `;
 
+        card.addEventListener('dragstart', (e) => {
+          if (e.target && (e.target.closest('button') || e.target.closest('input'))) {
+            e.preventDefault();
+            return;
+          }
+          draggedFolderCard = card;
+          initialFolderOrderKey = getDomFolderOrderIds().join(',');
+          card.classList.add('is-dragging');
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', `folder:${f.id}`);
+          }
+        });
+
+        card.addEventListener('dragover', (e) => {
+          if (!draggedFolderCard || draggedFolderCard === card) return;
+          e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+          const rect = card.getBoundingClientRect();
+          const insertAfter = e.clientX > (rect.left + rect.width / 2);
+          if (insertAfter) {
+            if (card.nextSibling !== draggedFolderCard) {
+              quizzesListContainer.insertBefore(draggedFolderCard, card.nextSibling);
+            }
+          } else {
+            if (card !== draggedFolderCard.nextSibling) {
+              quizzesListContainer.insertBefore(draggedFolderCard, card);
+            }
+          }
+        });
+
+        card.addEventListener('drop', (e) => {
+          if (!draggedFolderCard) return;
+          e.preventDefault();
+        });
+
+        card.addEventListener('dragend', async () => {
+          card.classList.remove('is-dragging');
+          if (!draggedFolderCard) return;
+          draggedFolderCard = null;
+
+          const newOrderIds = getDomFolderOrderIds();
+          const newOrderKey = newOrderIds.join(',');
+          if (!newOrderKey || newOrderKey === initialFolderOrderKey) return;
+
+          try {
+            const res = await fetch('/api/admin/quiz-folders/reorder', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ folderIds: newOrderIds })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              showToast('Mappák sorrendje elmentve!', 'success');
+            } else {
+              showAdminAlert('⚠️ Sorrend mentési hiba', (data && data.error) || 'Nem sikerült elmenteni a mappák sorrendjét!');
+              await loadQuizzes(currentFolderId);
+            }
+          } catch (err) {
+            showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a mappák sorrendjének mentésekor!');
+            await loadQuizzes(currentFolderId);
+          }
+        });
+
         // Belépés a mappába
         card.addEventListener('click', (e) => {
-          if (e.target.closest('.folder-card-actions') || e.target.closest('input') || e.target.closest('button')) return;
+          if (e.target.closest('.folder-card-actions') || e.target.closest('.folder-card-drag-handle') || e.target.closest('input') || e.target.closest('button')) return;
           loadQuizzes(f.id);
         });
 
@@ -2149,14 +2232,24 @@
       });
     }
 
-    // 2. Tesztkártyák kirajzolása
+    // 2. Tesztkártyák kirajzolása (Drag & Drop sorrendezéssel)
     if (Array.isArray(quizzes)) {
+      let draggedQuizCard = null;
+      let initialQuizOrderKey = '';
+
+      const getDomQuizOrderIds = () => Array.from(quizzesListContainer.querySelectorAll('.quiz-card'))
+        .map(el => Number(el.dataset.quizId))
+        .filter(id => Number.isInteger(id) && id > 0);
+
       quizzes.forEach(q => {
         const card = document.createElement('div');
         card.className = 'quiz-card';
+        card.dataset.quizId = String(q.id);
+        card.setAttribute('draggable', 'true');
 
         card.innerHTML = `
           <div class="quiz-card-header">
+            <span class="quiz-card-drag-handle material-symbols-outlined" title="Húzd el a kártyát a sorrend módosításához">drag_indicator</span>
             <h4 class="quiz-card-title">${escapeHtml(q.title)}</h4>
           </div>
           <p class="quiz-card-meta">
@@ -2181,6 +2274,70 @@
             </button>
           </div>
         `;
+
+        card.addEventListener('dragstart', (e) => {
+          if (e.target && e.target.closest('button')) {
+            e.preventDefault();
+            return;
+          }
+          draggedQuizCard = card;
+          initialQuizOrderKey = getDomQuizOrderIds().join(',');
+          card.classList.add('is-dragging');
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(q.id));
+          }
+        });
+
+        card.addEventListener('dragover', (e) => {
+          if (!draggedQuizCard || draggedQuizCard === card) return;
+          e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+          const rect = card.getBoundingClientRect();
+          const insertAfter = e.clientX > (rect.left + rect.width / 2);
+          if (insertAfter) {
+            if (card.nextSibling !== draggedQuizCard) {
+              quizzesListContainer.insertBefore(draggedQuizCard, card.nextSibling);
+            }
+          } else {
+            if (card !== draggedQuizCard.nextSibling) {
+              quizzesListContainer.insertBefore(draggedQuizCard, card);
+            }
+          }
+        });
+
+        card.addEventListener('drop', (e) => {
+          if (!draggedQuizCard) return;
+          e.preventDefault();
+        });
+
+        card.addEventListener('dragend', async () => {
+          card.classList.remove('is-dragging');
+          if (!draggedQuizCard) return;
+          draggedQuizCard = null;
+
+          const newOrderIds = getDomQuizOrderIds();
+          const newOrderKey = newOrderIds.join(',');
+          if (!newOrderKey || newOrderKey === initialQuizOrderKey) return;
+
+          try {
+            const res = await fetch('/api/admin/quizzes/reorder', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ quizIds: newOrderIds })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              showToast('Tesztek sorrendje elmentve!', 'success');
+            } else {
+              showAdminAlert('⚠️ Sorrend mentési hiba', (data && data.error) || 'Nem sikerült elmenteni a sorrendet!');
+              await loadQuizzes(currentFolderId);
+            }
+          } catch (err) {
+            showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a tesztek sorrendjének mentésekor!');
+            await loadQuizzes(currentFolderId);
+          }
+        });
 
         const btnEdit = card.querySelector('.btn-edit');
         if (btnEdit) {
@@ -2738,7 +2895,16 @@
       childrenMap.get(pKey).push(f);
     });
     childrenMap.forEach(list => {
-      list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'hu', { numeric: true }));
+      list.sort((a, b) => {
+        const ordA = Number(a.sort_order) || 0;
+        const ordB = Number(b.sort_order) || 0;
+        const hasA = ordA > 0;
+        const hasB = ordB > 0;
+        if (hasA && hasB && ordA !== ordB) return ordA - ordB;
+        if (hasA && !hasB) return -1;
+        if (!hasA && hasB) return 1;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'hu', { numeric: true });
+      });
     });
 
     const selectOption = (btn) => {

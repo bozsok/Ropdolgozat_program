@@ -399,6 +399,17 @@ router.post('/admin/quiz-folders', requireAdminAuth, (req, res) => {
   }
 });
 
+// Mappák egyéni megjelenítési sorrendjének mentése (Drag & Drop)
+router.put('/admin/quiz-folders/reorder', requireAdminAuth, (req, res) => {
+  try {
+    const { folderIds } = req.body || {};
+    const result = quizRepo.reorderFolders(folderIds);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+  }
+});
+
 // Mappa átnevezése
 router.put('/admin/quiz-folders/:id', requireAdminAuth, (req, res) => {
   try {
@@ -446,6 +457,17 @@ router.post('/admin/quizzes', requireAdminAuth, (req, res) => {
   try {
     const created = quizRepo.createQuiz(req.body);
     res.json({ success: true, quiz: created });
+  } catch (err) {
+    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+  }
+});
+
+// Tesztek egyéni megjelenítési sorrendjének mentése (Drag & Drop)
+router.put('/admin/quizzes/reorder', requireAdminAuth, (req, res) => {
+  try {
+    const { quizIds } = req.body || {};
+    const result = quizRepo.reorderQuizzes(quizIds);
+    res.json({ success: true, ...result });
   } catch (err) {
     res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
