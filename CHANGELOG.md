@@ -4,6 +4,38 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.19] – 2026-11-27
+
+### Dolgozat-exportálások megújítása: beágyazott képek, sorszámozott hover-nézet és tiszta A4 nyomtatás
+
+Mind a négy dolgozat-exportálási forma (Teljes értékelő csomag, Webes dokumentum, Nyomtatható verzió, Excel táblázat) átfogó tartalmi, vizuális és nyomtatási javítása, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Javítva (Fixed)
+* **Teljes értékelő csomag – beágyazott offline képek, letisztult pontjelzés és A4 nyomtatás (`src/services/exporter.js`):**
+  - **Fájl:** [`src/services/exporter.js`](file:///d:/dev/Röpdolgozat%20program/src/services/exporter.js)
+  - Az egyéni `.html` értékelőlapok a kérdések főképét, a képes adott válaszokat és a képes helyes válaszokat `base64` Data URI-ként beágyazva jelenítik meg nyers `/uploads/...` útvonalak helyett, így internet és szerver nélkül is teljes értékűen megnyithatók.
+  - A státuszsorban a felesleges „Kapott pont:” szöveg helyett a tömör `(1p)` / `(0p)` jelölés jelenik meg, a kérdésblokkok pedig nagyobb felső eltartást kaptak az elválasztó vonaltól.
+  - A `Ctrl+P` nyomtatáshoz teljes `@media print` és `@page { size: A4 portrait; margin: 0; }` szabályrendszer került beépítésre: a fejléc egy sorban marad (`flex-wrap: nowrap`), a böngésző felső/alsó margó-feliratai (dátum, cím, fájlelérési út) pedig nem jelennek meg.
+
+* **Webes dokumentum – sorszámozott fejléc, képes hover részletező és kártyán belüli görgetés (`src/services/exporter.js`):**
+  - **Fájl:** [`src/services/exporter.js`](file:///d:/dev/Röpdolgozat%20program/src/services/exporter.js)
+  - A kérdésoszlopok fejlécében a `K1`, `K2` jelölés helyett kizárólag a sorszám (`1`, `2`, `3`…) szerepel.
+  - Bármely sorszámra vagy eredménycellára húzva az egeret (hover) lebegő kártyán jelenik meg a kérdés (beágyazott főképével együtt), a helyes válasz (beágyazott képekkel együtt), valamint eltérő vagy hiányzó válasznál a tanuló adott válasza is.
+  - A táblázat `.table-wrapper` (`overflow-x: auto`) konténerbe és rögzített bal oldali névoszloppal került, így sok kérdés esetén sem lóg ki jobb oldalon a kártyáról.
+
+* **Nyomtatható verzió – egységes fejléc, képmegjelenítés és tiszta A4 margók (`public/print-report.html`, `public/css/print.css`):**
+  - **Fájlok:** [`public/print-report.html`](file:///d:/dev/Röpdolgozat%20program/public/print-report.html), [`public/css/print.css`](file:///d:/dev/Röpdolgozat%20program/public/css/print.css)
+  - A `/print` nézet megkapta a Teljes értékelő csomaggal azonos fejlécet, kék összegző dobozt, `(1p)` / `(0p)` pontjelölést és megnövelt kérdésközti eltartást.
+  - Megjeleníti a kérdések főképét, valamint a `renderAnswerDisplayHtml()` segítségével a képes adott és helyes válaszokat is.
+  - Az `@page { size: A4 portrait; margin: 0; }` és `padding: 14mm 15mm` beállítással a böngésző felső/alsó margó-feliratai itt is elrejtésre kerültek (`!important` nélkül).
+
+* **Excel táblázat – sorszámozott fejléc és hover cellamegjegyzések (`src/services/exporter.js`):**
+  - **Fájl:** [`src/services/exporter.js`](file:///d:/dev/Röpdolgozat%20program/src/services/exporter.js)
+  - A `K1`, `K2` oszlopfejlécek helyett kizárólag a sorszám (`1`, `2`, `3`…) szerepel kompakt oszlopszélességgel.
+  - A fejléc sorszám cellák és a diákok válaszcellái Excel cellamegjegyzést (`note`) kaptak: hoverre megjelenik a kérdés szövege, a helyes válasz (nyers `/uploads/...` útvonal nélkül), és eltérő vagy hiányzó válasznál a tanuló adott válasza is.
+
+---
+
 ## [1.37.18] – 2026-11-27
 
 ### Hordozható teszt- és mappacsomag export/import (.zip) az eredmények érintése nélkül

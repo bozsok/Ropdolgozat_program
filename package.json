@@ -1,6 +1,6 @@
 {
   "name": "ropdolgozat-program",
-  "version": "1.37.18",
+  "version": "1.37.19",
   "description": "Offline Iskolai Helyi Hálózatos Röpdolgozat Rendszer",
   "main": "server.js",
   "scripts": {

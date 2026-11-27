@@ -18,16 +18,202 @@ body.print-report-body {
   gap: 10px;
 }
 
+.print-page {
+  max-width: 760px;
+  margin: 0 auto 24px auto;
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.print-header {
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 14px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: nowrap;
+}
+
+.print-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.print-header-logo {
+  height: 42px;
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.print-title {
+  margin: 0 0 4px 0;
+  font-size: 1.35rem;
+  color: #1e40af;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.print-meta {
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.print-header-right {
+  text-align: right;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.print-student-name {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.print-score-box {
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.print-score-main {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #1d4ed8;
+}
+
+.print-score-grade {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-top: 6px;
+  color: #1e293b;
+}
+
+.print-section-title {
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.print-question-item {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 22px 0 16px 0;
+}
+
+.print-question-item:first-of-type {
+  padding-top: 8px;
+}
+
+.print-question-item:last-child {
+  border-bottom: none;
+}
+
+.print-q-title {
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.print-status-row {
+  margin-top: 6px;
+  font-weight: 700;
+}
+
+.print-q-image {
+  margin: 6px 0 8px 0;
+}
+
+.print-q-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  object-fit: contain;
+  background-color: #f8fafc;
+}
+
+.print-answer-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.print-correct-row {
+  color: #4b5563;
+}
+
+.print-correct {
+  color: #15803d;
+  font-weight: bold;
+}
+
+.print-partial {
+  color: #b45309;
+  font-weight: bold;
+}
+
+.print-wrong {
+  color: #b91c1c;
+  font-weight: bold;
+}
+
+.print-report-body .summary-answer-thumb {
+  max-height: 68px;
+  max-width: 130px;
+  border-radius: 5px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.print-report-body .summary-answer-with-img {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.print-report-body .summary-answer-multi {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.print-report-body .summary-answer-multi-item {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  padding: 2px 6px;
+  background-color: #f8fafc;
+}
+
 @page {
   size: A4 portrait;
-  margin: 15mm 15mm 15mm 15mm;
+  margin: 0;
 }
 
 @media print {
   body.print-report-body {
     background-color: #ffffff;
     color: #000000;
-    font-size: 11pt;
+    font-size: 10.5pt;
     line-height: 1.4;
     padding: 0;
     margin: 0;
@@ -43,8 +229,11 @@ body.print-report-body {
   }
 
   .print-page {
+    max-width: none;
+    border-radius: 0;
+    box-shadow: none;
     page-break-after: always;
-    padding: 0;
+    padding: 14mm 15mm;
     margin: 0;
   }
 
@@ -53,38 +242,70 @@ body.print-report-body {
   }
 
   .print-header {
-    border-bottom: 2px solid #000000;
+    border-bottom: 2px solid #cbd5e1;
     padding-bottom: 10px;
-    margin-bottom: 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-  }
-
-  .print-title {
-    font-size: 16pt;
-    font-weight: bold;
-  }
-
-  .print-meta {
-    font-size: 10pt;
-    color: #333333;
-  }
-
-  .print-score-box {
-    border: 1px solid #000000;
-    padding: 10px 15px;
-    margin-bottom: 15px;
-    border-radius: 4px;
+    margin-bottom: 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
+    flex-wrap: nowrap;
+  }
+
+  .print-header-logo {
+    height: 36px;
+  }
+
+  .print-title {
+    font-size: 13.5pt;
+    font-weight: bold;
+    color: #1e40af;
+  }
+
+  .print-student-name {
+    font-size: 12.5pt;
+  }
+
+  .print-meta {
+    font-size: 9pt;
+    color: #475569;
+  }
+
+  .print-score-box {
+    background-color: #eff6ff;
+    border: 1px solid #bfdbfe;
+    padding: 12px 16px;
+    margin-bottom: 18px;
+    border-radius: 6px;
+    text-align: center;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-score-main {
+    font-size: 16pt;
+    font-weight: bold;
+    color: #1d4ed8;
+  }
+
+  .print-score-grade {
+    font-size: 12pt;
+    font-weight: bold;
+    margin-top: 4px;
   }
 
   .print-question-item {
-    border-bottom: 1px dashed #cccccc;
-    padding: 8px 0;
+    border-bottom: 1px solid #cbd5e1;
+    padding: 16px 0 12px 0;
     page-break-inside: avoid;
+  }
+
+  .print-question-item:first-of-type {
+    padding-top: 6px;
+  }
+
+  .print-question-item:last-child {
+    border-bottom: none;
   }
 
   .print-q-title {
@@ -102,9 +323,24 @@ body.print-report-body {
     font-weight: bold;
   }
 
+  .print-partial {
+    color: #92400e;
+    font-weight: bold;
+  }
+
   .print-wrong {
     color: #990000;
     font-weight: bold;
+  }
+
+  .print-q-image img {
+    max-height: 55mm;
+    break-inside: avoid;
+  }
+
+  .print-report-body .summary-answer-thumb {
+    max-height: 20mm;
+    max-width: 38mm;
   }
 }
 

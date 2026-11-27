@@ -38,6 +38,14 @@
       return formatCode(raw);
     }
 
+    function renderPrintCorrectAnswer(q) {
+      if (!q || !q.correct_answer) return '–';
+      if (q.question_type === 'ABCD') {
+        return renderAnswerDisplayHtml(q.correct_answer, q.options || []);
+      }
+      return formatPrintAnswer(q.correct_answer);
+    }
+
     (async function() {
       const container = document.getElementById('print-pages-container');
       const urlParams = new URLSearchParams(window.location.search);
@@ -91,46 +99,45 @@
           page.className = 'print-page';
 
           page.innerHTML = `
-            <div class="print-header" style="display: flex; justify-content: space-between; align-items: center;">
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <img src="/img/logo.png" alt="Okoskodó" style="height: 38px; width: auto; object-fit: contain;">
+            <div class="print-header">
+              <div class="print-header-left">
+                <img src="/img/logo.png" alt="Okoskodó" class="print-header-logo">
                 <div>
-                  <div class="print-title">${escapeHtml(session.quiz_title)}</div>
-                  <div class="print-meta">Tantárgy: ${escapeHtml(session.subject_name)} | Évfolyam: ${escapeHtml(session.grade_level)}. évfolyam</div>
+                  <h2 class="print-title">${escapeHtml(session.quiz_title)}</h2>
+                  <div class="print-meta">Tantárgy: <strong>${escapeHtml(session.subject_name)}</strong> | Évfolyam: <strong>${escapeHtml(session.grade_level)}. évfolyam</strong></div>
                 </div>
               </div>
-              <div style="text-align: right;">
-                <div style="font-size: 14pt; font-weight: bold;">${escapeHtml(p.student_name)}</div>
-                <div class="print-meta">${p.pc_number ? p.pc_number + '. gép' : 'Diák'} | Dátum: ${new Date().toLocaleDateString('hu-HU')}</div>
+              <div class="print-header-right">
+                <div class="print-student-name">${escapeHtml(p.student_name)}</div>
+                <div class="print-meta">${p.pc_number ? escapeHtml(p.pc_number) + '. gép' : 'Diák'} | Dátum: <strong>${new Date().toLocaleDateString('hu-HU')}</strong></div>
               </div>
             </div>
 
             <div class="print-score-box">
-              <div>
-                <span style="font-size: 12pt; font-weight: bold;">Elért összpontszám:</span>
-                <span style="font-size: 14pt; font-weight: bold; color: #1e40af; margin-left: 8px;">${p.total_points} / ${totalMaxPoints} pont (${p.percentage}%)</span>
-              </div>
-              <div>
-                <span style="font-size: 12pt; font-weight: bold;">KRÉTA érdemjegy:</span>
-                <span style="font-size: 14pt; font-weight: bold; margin-left: 8px;">${p.gradeText}</span>
-              </div>
+              <div class="print-score-main">${escapeHtml(p.total_points)} / ${escapeHtml(totalMaxPoints)} pont (${escapeHtml(p.percentage)}%)</div>
+              <div class="print-score-grade">Érdemjegy: ${escapeHtml(p.gradeText)}</div>
             </div>
 
-            <div style="margin-top: 15px;">
-              <div style="font-size: 11pt; font-weight: bold; margin-bottom: 8px;">Részletes válaszok és értékelés:</div>
+            <div class="print-questions-section">
+              <h3 class="print-section-title">Kérdések és válaszok:</h3>
               ${questions.map((q, idx) => {
                 const a = answerMap.get(p.id + ':' + q.id);
-                const isCor = a && a.is_correct === 1;
+                const isCor = a && a.eval_status === 'CORRECT';
+                const isPartial = a && a.eval_status === 'PARTIAL';
+                const statusCls = isCor ? 'print-correct' : (isPartial ? 'print-partial' : 'print-wrong');
+                const statusText = isCor ? '✓ Helyes' : (isPartial ? '◐ Részpontszám' : '✗ Hibás');
+                const submittedHtml = a ? renderAnswerDisplayHtml(a.submitted_answer, q.options || []) : '–';
+                const correctHtml = renderPrintCorrectAnswer(q);
                 return `
                   <div class="print-question-item">
-                    <div class="print-q-title">${idx + 1}. ${formatCode(q.question_text)} (${q.points} pont)</div>
+                    <div class="print-q-title">${idx + 1}. ${formatCode(q.question_text)} (${q.points}p)</div>
+                    ${q.image_path ? `<div class="print-q-image"><img src="${escapeHtml(q.image_path)}" alt="Kérdés képe"></div>` : ''}
                     <div class="print-answer-row">
-                      Adott válasz: <strong>${a ? formatCode(a.submitted_answer) : '–'}</strong>
-                      <span class="${isCor ? 'print-correct' : 'print-wrong'}" style="margin-left: 12px;">
-                        ${isCor ? '✓ Helyes' : '✗ Hibás'} (${a ? a.points_earned : 0} pont)
-                      </span>
+                      <span>Adott válasz:</span>
+                      <strong>${submittedHtml}</strong>
                     </div>
-                    ${!isCor ? `<div class="print-answer-row" style="color: #4b5563;">Helyes megoldás: <strong>${formatPrintAnswer(q.correct_answer)}</strong></div>` : ''}
+                    <div class="print-status-row ${statusCls}">${statusText} (${a ? a.points_earned : 0}p)</div>
+                    ${!isCor ? `<div class="print-answer-row print-correct-row"><span>Helyes válasz:</span> <strong>${correctHtml}</strong></div>` : ''}
                   </div>
                 `;
               }).join('')}
