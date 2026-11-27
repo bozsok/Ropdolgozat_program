@@ -4,6 +4,29 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.15] – 2026-11-27
+
+### Windows Server 2016 backup-visszaállítás, szerverfrissítő szkript és többválasztós képes válasz javítások
+
+Kritikus éles tantermi és Windows Server 2016 kompatibilitási hibajavítások, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Javítva (Fixed)
+* **Windows Server 2016 kiterjesztés nélküli backup-visszaállítás (`src/services/backup.js`):**
+  - **Fájl:** [`src/services/backup.js`](file:///d:/dev/Röpdolgozat%20program/src/services/backup.js)
+  - A `tar.exe` nélküli Windows Server 2016 szervereken a `multer` kiterjesztés nélküli ideiglenes fájlján elbukó PowerShell `Expand-Archive` helyett a .NET beépített `[System.IO.Compression.ZipFile]::ExtractToDirectory()` metódusa fut (célmappa-takarítással), így a `.zip` mentések az adatbázissal és az összes `data/uploads/` képpel együtt 100%-osan megbízhatóan visszaállíthatók.
+
+* **Szerverfrissítő szkript (`frissitsd_a_szervert.bat`) CMD és PowerShell 5.1 javításai (`frissitsd_a_szervert.bat`):**
+  - **Fájl:** [`frissitsd_a_szervert.bat`](file:///d:/dev/Röpdolgozat%20program/frissitsd_a_szervert.bat)
+  - Az `if (...)` blokkokon belüli zárójelek miatti korai kilépés javítva biztonságos `goto` címkékre.
+  - A PowerShell 5.1 egyelemes találatának tömbkezelése javítva (`@(...)`).
+  - A futó `frissitsd_a_szervert.bat` felkerült a védett listára (`$protected`), így futás közben nem írja felül önmagát és nem csúszik el a CMD bájtpozíciója.
+
+* **Többválasztós képes ABCD válaszok megjelenítése visszajelzéskor és összegzőben (`public/js/student.js`):**
+  - **Fájl:** [`public/js/student.js`](file:///d:/dev/Röpdolgozat%20program/public/js/student.js)
+  - Eltávolítva a felesleges `.join(', ')` összefűzés az azonnali visszajelző sávnál és a dolgozat végi értékelőlapon, így a több helyes képes válasz nem összeragasztott hibás URL-ként (`404`), hanem külön bélyegképekként jelenik meg a `renderAnswerDisplayHtml()` révén.
+
+---
+
 ## [1.37.14] – 2026-11-26
 
 ### Mappák és tesztek egyéni (Drag & Drop) sorrendezése a Tesztszerkesztőben, a mappafa-választóban és a Dolgozatindítóban

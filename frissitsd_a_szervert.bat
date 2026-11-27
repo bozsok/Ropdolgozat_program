@@ -17,14 +17,18 @@ if not exist "package.json" (
 
 :: 1. Fut-e jelenleg a szerver a 3000-es porton?
 netstat -ano | findstr ":3000 " | findstr "LISTENING" >nul 2>nul
-if %errorlevel% equ 0 (
-  echo [FIGYELEM] A szerver jelenleg FUT a 3000-es porton!
-  echo Kerlek elobb allitsd le a futo szervert (zard be a start_server.bat ablakot),
-  echo majd inditsd ujra ezt a frissito szkriptet!
-  echo.
-  pause
-  exit /b 1
-)
+if %errorlevel% equ 0 goto server_running
+goto check_update
+
+:server_running
+echo [FIGYELEM] A szerver jelenleg FUT a 3000-es porton!
+echo Kerlek elobb allitsd le a futo szervert ^(zard be a start_server.bat ablakot^),
+echo majd inditsd ujra ezt a frissito szkriptet!
+echo.
+pause
+exit /b 1
+
+:check_update
 
 :: 2. Frissitesi csomag keresese, verzio-ellenorzes es biztonsagos frissites
 set "DROP_ZIP=%~1"
@@ -41,13 +45,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  $selectedZip = Get-Item -LiteralPath $dropZip; " ^
   "  if ($selectedZip.Name -match 'Okoskodo_frissites_v(\d+\.\d+\.\d+)\.zip$') { $zipVerStr = $Matches[1] } " ^
   "} else { " ^
-  "  $candidates = Get-ChildItem -LiteralPath $root -Filter 'Okoskodo_frissites_v*.zip' -File | ForEach-Object { " ^
+  "  $candidates = @(Get-ChildItem -LiteralPath $root -Filter 'Okoskodo_frissites_v*.zip' -File | ForEach-Object { " ^
   "    if ($_.Name -match '^Okoskodo_frissites_v(\d+\.\d+\.\d+)\.zip$') { " ^
   "      [PSCustomObject]@{ File = $_; VerStr = $Matches[1]; Ver = [version]$Matches[1] } " ^
   "    } " ^
-  "  } | Sort-Object Ver -Descending; " ^
-  "  if ($candidates -and $candidates.Count -gt 0) { " ^
-  "    $top = $candidates | Select-Object -First 1; " ^
+  "  } | Sort-Object Ver -Descending); " ^
+  "  if ($candidates.Count -gt 0) { " ^
+  "    $top = $candidates[0]; " ^
   "    $selectedZip = $top.File; " ^
   "    $zipVerStr = $top.VerStr; " ^
   "  } " ^
@@ -86,7 +90,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  Write-Host '1/3 Csomag kicsomagolasa...'; " ^
   "  Expand-Archive -LiteralPath $selectedZip.FullName -DestinationPath $stage -Force; " ^
   "  Write-Host '2/3 Programfajlok frissitese (data/, node_modules/, config.js, start_server.bat erintetlen marad)...'; " ^
-  "  $protected = @('data', 'node_modules', 'config.js', 'start_server.bat'); " ^
+  "  $protected = @('data', 'node_modules', 'config.js', 'start_server.bat', 'frissitsd_a_szervert.bat'); " ^
   "  Get-ChildItem -LiteralPath $stage -Force | ForEach-Object { " ^
   "    if ($protected -contains $_.Name.ToLower()) { return }; " ^
   "    $dest = Join-Path $root $_.Name; " ^
@@ -109,13 +113,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
 
 set "UPD_ERR=%errorlevel%"
 echo.
-if "%UPD_ERR%"=="0" (
-  echo Most mar elindithatod a szervert a start_server.bat fajllal!
-) else if "%UPD_ERR%"=="4" (
-  echo A felhasznalo megszakitotta a muveletet.
-) else (
-  echo A frissites nem tortent meg (hibakod: %UPD_ERR%). A .zip fajl megmaradt.
-)
+if "%UPD_ERR%"=="0" goto upd_ok
+if "%UPD_ERR%"=="4" goto upd_cancel
+echo A frissites nem tortent meg ^(hibakod: %UPD_ERR%^). A .zip fajl megmaradt.
+goto upd_end
+
+:upd_ok
+echo Most mar elindithatod a szervert a start_server.bat fajllal!
+goto upd_end
+
+:upd_cancel
+echo A felhasznalo megszakitotta a muveletet.
+
+:upd_end
 echo.
 pause
 exit /b %UPD_ERR%

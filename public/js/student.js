@@ -3850,13 +3850,6 @@
       const norm = String(result.correctAnswer || '').trim().toLowerCase();
       if (['igaz', 'true', 'i', 't', '1'].includes(norm)) displayCorrectAnswer = 'Igaz';
       else if (['hamis', 'false', 'h', 'f', '0'].includes(norm)) displayCorrectAnswer = 'Hamis';
-    } else if (q && q.question_type === 'ABCD') {
-      try {
-        const parsed = JSON.parse(result.correctAnswer);
-        if (Array.isArray(parsed)) displayCorrectAnswer = parsed.join(', ');
-      } catch {
-        // maradhat az eredeti result.correctAnswer
-      }
     } else if (q && q.question_type === 'SHORT') {
       try {
         const parsed = JSON.parse(result.correctAnswer);
@@ -4324,13 +4317,6 @@
             const norm = String(rawCorrect || '').trim().toLowerCase();
             if (['igaz', 'true', 'i', 't', '1'].includes(norm)) formattedCorrectAnswer = 'Igaz';
             else if (['hamis', 'false', 'h', 'f', '0'].includes(norm)) formattedCorrectAnswer = 'Hamis';
-          } else if (q.question_type === 'ABCD') {
-            try {
-              const parsed = JSON.parse(rawCorrect);
-              if (Array.isArray(parsed)) formattedCorrectAnswer = parsed.join(', ');
-            } catch {
-              // nyersen maradhat
-            }
           } else if (q.question_type === 'SHORT') {
             try {
               const parsed = JSON.parse(rawCorrect);

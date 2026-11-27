@@ -89,11 +89,16 @@ function restoreSystemBackup(zipFilePath) {
   fs.mkdirSync(tempExtractDir, { recursive: true });
 
   try {
-    // 1. Kicsomagolás (beépített bsdtar vagy powershell fallback)
+    // 1. Kicsomagolás (beépített bsdtar vagy .NET ZipFile PowerShell fallback - kiterjesztéstől függetlenül, Windows Server 2016 kompatibilis!)
     try {
       execSync(`tar -xf "${zipFilePath}" -C "${tempExtractDir}"`, { stdio: 'pipe' });
     } catch {
-      execSync(`powershell -Command "Expand-Archive -Path '${zipFilePath}' -DestinationPath '${tempExtractDir}' -Force"`, { stdio: 'pipe' });
+      const safeZip = String(zipFilePath).replace(/'/g, "''");
+      const safeDest = String(tempExtractDir).replace(/'/g, "''");
+      execSync(
+        `powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; if (Test-Path -LiteralPath '${safeDest}') { Remove-Item -LiteralPath '${safeDest}' -Recurse -Force }; [System.IO.Compression.ZipFile]::ExtractToDirectory('${safeZip}', '${safeDest}')"`,
+        { stdio: 'pipe' }
+      );
     }
 
     // 2. ropdolgozat.db felderítése a kicsomagolt állományban

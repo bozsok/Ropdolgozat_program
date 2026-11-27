@@ -37,9 +37,11 @@ Másold át a teljes projektkönyvtárat a pendrive-ra egy `Ropdolgozat` nevű m
 ├── 📄 package.json            # Függőségek és környezeti követelmények (Node >= 22.11.0)
 ├── 📄 package-lock.json       # Verziózárolt csomagleíró
 ├── 📄 start_server.bat        # Önellenőrző, diagnosztikai Windows indítószkript
+├── 📄 frissitsd_a_szervert.bat # Verzióvédett offline szerverfrissítő szkript
 ├── 📄 DATABASE_SCHEMA.sql     # Adatbázisséma és integritási triggerek definíciója
 ├── 📄 README.md               # Rendszerleírás és dokumentáció
 ├── 📄 CHANGELOG.md            # Verziótörténet és változási napló
+├── 📄 project-context.md      # Rendszermegállapodás és működési szabályzat
 └── 📄 telepítés.md            # Ez a részletes telepítési útmutató
 ```
 
@@ -49,6 +51,8 @@ Másold át a teljes projektkönyvtárat a pendrive-ra egy `Ropdolgozat` nevű m
 
 * ❌ **`scratch/` mappa:** A fejlesztői tesztszkriptek és ideiglenes kísérleti fájlok nem valók az éles szerverre.
 * ❌ **`.git/` rejtett mappa:** A Git verziókezelő belső tárolója nem szükséges a futáshoz.
+* ❌ **`Source/` mappa:** Helyi forrás- és nyersanyagmappa (ha létezik a fejlesztői gépen).
+* ❌ **`Okoskodo_frissites_*.zip` csomagok:** Csak a későbbi frissítésekhez kellenek.
 
 > [!TIP]
 > **Miért kötelező a `node_modules` átmásolása?**  
@@ -56,12 +60,13 @@ Másold át a teljes projektkönyvtárat a pendrive-ra egy `Ropdolgozat` nevű m
 
 ---
 
-### 1.4. Döntés az adatbázisról (`data/ropdolgozat.db`)
+### 1.4. Döntés az adatbázisról (`data/ropdolgozat.db`) és a képekről (`data/uploads/`)
 
-* **1. Lehetőség – Tiszta éles indítás (Ajánlott):**  
-  Ne másold át a fejlesztői `ropdolgozat.db` fájlt. A szerveren az első indításkor a `start_server.bat` automatikusan létrehozza a tiszta adatbázist a hivatalos tantárgyakkal és a minta osztálynévsorral.
-* **2. Lehetőség – Meglévő adatok és tesztek átvitele:**  
-  Amennyiben a fejlesztői gépen már rögzítettél feladatsorokat vagy osztálynévsorokat, amelyeket azonnal használni szeretnél, a `data/ropdolgozat.db` fájlt is másold át a pendrive-ra a `data/` almappába.
+* **1. Lehetőség – Tiszta éles indítás:**  
+  Ne másold át a fejlesztői `ropdolgozat.db`, `ropdolgozat.db-wal`, `ropdolgozat.db-shm` fájlokat és a `data/uploads/` tartalmát. A szerveren az első indításkor a `start_server.bat` automatikusan létrehozza a tiszta adatbázist a hivatalos tantárgyakkal és a minta osztálynévsorral.
+* **2. Lehetőség – Meglévő tesztek, mappaszerkezet, sorrend, névsorok és képek átvitele (Ajánlott: Teljes rendszermentés):**  
+  - **Legegyszerűbb és legbiztonságosabb módszer:** A fejlesztői gépen a tanári felület **Beállítások és mentés → Teljes rendszermentés (.zip)** gombjával készíts egy mentést, majd a szerver elindítása után a **Visszaállítás** gombbal töltsd be. Ez egyetlen konzisztens csomagban átviszi az adatbázist, a mappák és tesztek sorrendjét **és az összes feltöltött képet** is.
+  - **Kézi másolással:** Először **állítsd le a futó szervert** a fejlesztői gépen (ekkor az SQLite összefésüli a `-wal` és `-shm` fájlokat a `ropdolgozat.db`-be), majd **együtt** másold át a `data/ropdolgozat.db` fájlt **ÉS a teljes `data/uploads/` mappát** minden almappájával együtt! *(Ha a `data/uploads/` kimarad, a tesztekben törött képikonok jelennek meg!)*
 
 ---
 
@@ -196,7 +201,24 @@ A tanár a tantermi gépről vagy laptopról bármelyik böngészőből eléri a
 
 ---
 
-## 5. Hibaelhárítási Útmutató (Gyakori Kérdések és Esetek)
+## 5. Későbbi Programfrissítés a Szerveren (1 kattintás)
+
+Ha a későbbiekben hibajavítás vagy új funkció készül, **nem kell kézzel válogatni a fájlokat**:
+
+1. **Fejlesztői (otthoni) gépen:** Kattints duplán a `csomagolj_frissitest.bat` fájlra. Ez a `package.json` verziószáma alapján létrehoz egyetlen, verziószámozott csomagot a főkönyvtárban (pl. `Okoskodo_frissites_v1.37.14.zip`), amely kizárólag a programfájlokat (`src/`, `public/`, `server.js`, stb.) tartalmazza.
+2. **Iskolai szerveren (`C:\Ropdolgozat\`):**
+   - Állítsd le a futó szervert (zárd be a `start_server.bat` ablakot).
+   - Másold be a `.zip` fájlt a `C:\Ropdolgozat\` főkönyvtárba.
+   - Kattints duplán a **`frissitsd_a_szervert.bat`** fájlra:
+     - Automatikusan kiválasztja a legmagasabb verziószámú `Okoskodo_frissites_v*.zip` csomagot.
+     - **Verzióvédelem:** régebbi csomagnál biztonsági okból leáll (nem ír felül semmit); megegyező verziónál külön megerősítést kér; újabb verziónál jóváhagyás után frissít.
+     - A `data/` mappa (adatbázis, eredmények, képek), a `node_modules/`, valamint a helyi `config.js` és `start_server.bat` beállításai **érintetlenek maradnak**.
+     - Lefuttatja a `node src/db/init.js` adatbázis-séma ellenőrzést és migrációt, majd **csak 100%-ban hibamentes futás esetén** automatikusan törli a felhasznált `.zip` fájlt.
+3. Indítsd el újra a szervert a `start_server.bat` fájllal.
+
+---
+
+## 6. Hibaelhárítási Útmutató (Gyakori Kérdések és Esetek)
 
 ### 1. A `start_server.bat` indításkor hibát jelez: „Nem megfelelő Node.js verzió”
 * **Ok:** A szerveren régebbi Node.js (pl. v20) vagy nem támogatott verzió van fent.
@@ -213,8 +235,13 @@ A tanár a tantermi gépről vagy laptopról bármelyik böngészőből eléri a
 * **Megoldás:** Nincs adatvesztés. A diák újra rákattint az Asztalon lévő parancsikonra (`/?gep=X`), a rendszer azonnal felismeri a tanulót a token alapján, és ott folytatja a dolgozatot, ahol abbahagyta.
 
 ### 4. Hogyan módosítható a tanári belépési PIN-kód?
-A szerveren nyisd meg a `C:\Ropdolgozat\config.js` fájlt:
+Kétféleképpen is módosítható (a `start_server.bat`-ban megadott beállítás a későbbi programfrissítéseknél is érintetlen marad):
+1. A `C:\Ropdolgozat\start_server.bat` fájlban vedd ki a `::` jelet az `ADMIN_PIN` és `COOKIE_SECRET` sorok elejéről, és add meg a saját jelszavadat.
+2. Vagy a `C:\Ropdolgozat\config.js` fájlban írd át az `'admin123'` szöveget:
 ```javascript
 adminPin: process.env.ADMIN_PIN || 'admin123',
 ```
-Írd át az `'admin123'` szöveget a saját jelszavadra, majd mentsd el a fájlt.
+
+### 5. Törött képikonok jelennek meg a tesztekben a szerveren
+* **Ok:** A `data/ropdolgozat.db` adatbázis csak a képek elérési útvonalát tárolja, maguk a képfájlok a `data/uploads/` mappában vannak. Ha csak a `.db` fájl lett átmásolva, a képek hiányoznak a szerverről.
+* **Megoldás:** Másold át a teljes `data/uploads/` mappát (minden almappájával együtt) a szerver `C:\Ropdolgozat\data\uploads\` könyvtárába, vagy használd a tanári felület **Beállítások és mentés → Teljes rendszermentés (.zip) / Visszaállítás** funkcióját, amely az adatbázist és az összes képet együtt viszi át.
