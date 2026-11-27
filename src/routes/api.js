@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { pipeline } = require('stream/promises');
 const multer = require('multer');
 const config = require('../../config');
 const { 
@@ -20,6 +21,7 @@ const grader = require('../services/grader');
 const db = require('../db/init');
 const exporter = require('../services/exporter');
 const backup = require('../services/backup');
+const quizTransfer = require('../services/quizTransfer');
 const presenceService = require('../services/presenceService');
 const settingsRepo = require('../db/settingsRepo');
 const socrativePdfParser = require('../services/socrativePdfParser');
@@ -552,6 +554,118 @@ router.post('/admin/quizzes/merge', requireAdminAuth, (req, res) => {
     res.json({ success: true, quiz: merged });
   } catch (err) {
     res.status(getRepoErrorHttpStatus(err)).json({ error: err.message, code: err && err.code ? err.code : undefined });
+  }
+});
+
+// Közös, ellenőrzött ideiglenes ZIP letöltő segéd (ZIP-02 & ZIP-03):
+// A kapcsolat lezárását MÉG a csomagépítés előtt figyeli, és pipeline + finally segítségével
+// garantálja a temp ZIP és könyvtárának azonnali kitakarítását megszakítás és hiba esetén is.
+async function sendCheckedExportZip(res, buildFn) {
+  if (res.destroyed || res.writableEnded) return;
+
+  let aborted = false;
+  let activeStream = null;
+  let prepared = null;
+  let cleaned = false;
+
+  const safeCleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    if (prepared && typeof prepared.cleanup === 'function') {
+      prepared.cleanup();
+    }
+  };
+
+  const onClose = () => {
+    if (!res.writableFinished) {
+      aborted = true;
+      if (activeStream && !activeStream.destroyed) {
+        activeStream.destroy();
+      }
+    }
+  };
+
+  res.once('close', onClose);
+
+  try {
+    prepared = await buildFn();
+    if (aborted || res.destroyed || res.writableEnded) {
+      return;
+    }
+
+    const { zipPath, filename } = prepared;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    activeStream = fs.createReadStream(zipPath);
+    await pipeline(activeStream, res);
+  } catch (err) {
+    // Ha a kliens közben bontotta a kapcsolatot, az nem szerverhiba és nem írunk a zárt válaszra
+    if (aborted || res.destroyed || res.writableEnded) {
+      return;
+    }
+    if (!res.headersSent) {
+      res.removeHeader('Content-Type');
+      res.removeHeader('Content-Disposition');
+      res.status(getRepoErrorHttpStatus(err)).json({
+        error: err.message,
+        code: err && err.code ? err.code : undefined,
+        quizId: err && err.quizId ? err.quizId : undefined,
+        quizTitle: err && err.quizTitle ? err.quizTitle : undefined,
+        questionOrder: err && err.questionOrder ? err.questionOrder : undefined,
+        optionIndex: err && err.optionIndex ? err.optionIndex : undefined
+      });
+    } else {
+      console.error('Hiba az exportált ZIP küldésekor:', err);
+      res.destroy(err);
+    }
+  } finally {
+    res.removeListener('close', onClose);
+    if (activeStream && !activeStream.closed) {
+      await new Promise((resolve) => {
+        activeStream.once('close', resolve);
+        if (!activeStream.destroyed) activeStream.destroy();
+        setTimeout(resolve, 250);
+      });
+    }
+    safeCleanup();
+  }
+}
+
+// Egyetlen teszt exportálása hordozható .zip csomagba (kérdések + képek, eredmények nélkül)
+router.get('/admin/quizzes/:id/export', requireAdminAuth, async (req, res) => {
+  await sendCheckedExportZip(res, () => quizTransfer.createQuizExportZipFile(req.params.id));
+});
+
+// Teljes mappa (almappák + tesztek + képek) exportálása hordozható .zip csomagba
+router.get('/admin/quiz-folders/:id/export', requireAdminAuth, async (req, res) => {
+  await sendCheckedExportZip(res, () => quizTransfer.createFolderExportZipFile(req.params.id));
+});
+
+// Hordozható teszt- vagy mappacsomag (.zip) additív importálása (a meglévő eredményeket NEM érinti!)
+router.post('/admin/quizzes/import-package', requireAdminAuth, uploadBackup.single('package'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Nem érkezett tesztcsomag (.zip) fájl!' });
+  }
+  try {
+    const targetFolderId = req.body && req.body.folderId !== undefined ? req.body.folderId : null;
+    const result = quizTransfer.importQuizPackage(req.file.path, { targetFolderId });
+    const parts = [];
+    if (result.importedFoldersCount > 0) parts.push(`${result.importedFoldersCount} mappa`);
+    parts.push(`${result.importedQuizzesCount} teszt`);
+    res.json({
+      success: true,
+      ...result,
+      message: `Sikeres importálás: ${parts.join(' és ')} hozzáadva (a meglévő eredmények érintetlenek maradtak).`
+    });
+  } catch (err) {
+    res.status(getRepoErrorHttpStatus(err)).json({ error: err.message, code: err && err.code ? err.code : undefined });
+  } finally {
+    try {
+      if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+    } catch {}
   }
 });
 

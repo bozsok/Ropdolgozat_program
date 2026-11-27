@@ -2143,6 +2143,9 @@
             </div>
           </div>
           <div class="folder-card-actions">
+            <button type="button" class="folder-btn-action btn-export-folder" title="Mappa exportálása (.zip)">
+              <span class="material-symbols-outlined" style="font-size: 18px;">download</span>
+            </button>
             <button type="button" class="folder-btn-action btn-move-folder" title="Mappa áthelyezése">
               <span class="material-symbols-outlined" style="font-size: 18px;">drive_file_move</span>
             </button>
@@ -2243,6 +2246,15 @@
           loadQuizzes(f.id);
         });
 
+        // Exportálás (.zip) – ZIP-02: fetch + Blob, hogy hiba esetén az UI-ban jelenjen meg a pontos hibaüzenet!
+        const btnExportFolder = card.querySelector('.btn-export-folder');
+        if (btnExportFolder) {
+          btnExportFolder.addEventListener('click', (e) => {
+            e.stopPropagation();
+            downloadQuizExportZip(`/api/admin/quiz-folders/${f.id}/export`, `mappa_${f.id}.zip`, `„${f.name}” mappa exportálva!`);
+          });
+        }
+
         // Áthelyezés
         const btnMoveFolder = card.querySelector('.btn-move-folder');
         if (btnMoveFolder) {
@@ -2317,6 +2329,9 @@
             </button>
             <button type="button" class="quiz-btn-icon quiz-btn-move btn-move" data-id="${q.id}" title="Teszt áthelyezése másik mappába">
               <span class="material-symbols-outlined">drive_file_move</span>
+            </button>
+            <button type="button" class="quiz-btn-icon btn-export-quiz" data-id="${q.id}" title="Teszt exportálása (.zip)">
+              <span class="material-symbols-outlined">download</span>
             </button>
             <button type="button" class="quiz-btn-icon quiz-btn-delete btn-delete" data-id="${q.id}" title="Teszt törlése">
               <span class="material-symbols-outlined">delete</span>
@@ -2436,6 +2451,13 @@
           });
         }
 
+        const btnExportQuiz = card.querySelector('.btn-export-quiz');
+        if (btnExportQuiz) {
+          btnExportQuiz.addEventListener('click', () => {
+            downloadQuizExportZip(`/api/admin/quizzes/${q.id}/export`, `teszt_${q.id}.zip`, `„${q.title}” exportálva!`);
+          });
+        }
+
         const btnDel = card.querySelector('.btn-delete');
         if (btnDel) {
           btnDel.addEventListener('click', () => {
@@ -2449,6 +2471,76 @@
         quizzesListContainer.appendChild(card);
       });
     }
+  }
+
+  // Közös, hibabiztos ZIP letöltő segéd teszt- és mappaexporthoz (ZIP-02)
+  async function downloadQuizExportZip(url, fallbackFilename, successMsg) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        let errMsg = 'Nem sikerült elkészíteni az exportcsomagot!';
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) errMsg = errData.error;
+        } catch {}
+        showAdminAlert('⚠️ Exportálási hiba', errMsg);
+        return;
+      }
+      const blob = await res.blob();
+      const disp = res.headers.get('Content-Disposition') || '';
+      const match = disp.match(/filename="([^"]+)"/i);
+      const filename = (match && match[1]) ? match[1] : fallbackFilename;
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objUrl), 3000);
+      if (successMsg) showToast(successMsg, 'success');
+    } catch (err) {
+      showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba történt az exportcsomag letöltése közben!');
+    }
+  }
+
+  // Hordozható teszt- és mappacsomag (.zip) additív importálása az aktuális mappába (eredmények megőrzésével)
+  const btnImportQuizPackage = document.getElementById('btn-import-quiz-package');
+  const inputImportQuizPackage = document.getElementById('input-import-quiz-package');
+  if (btnImportQuizPackage && inputImportQuizPackage) {
+    btnImportQuizPackage.addEventListener('click', () => {
+      inputImportQuizPackage.value = '';
+      inputImportQuizPackage.click();
+    });
+
+    inputImportQuizPackage.addEventListener('change', async () => {
+      const file = inputImportQuizPackage.files && inputImportQuizPackage.files[0];
+      if (!file) return;
+      btnImportQuizPackage.disabled = true;
+      try {
+        const formData = new FormData();
+        formData.append('package', file);
+        if (currentFolderId !== null && currentFolderId !== undefined) {
+          formData.append('folderId', String(currentFolderId));
+        }
+        const res = await fetch('/api/admin/quizzes/import-package', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast(data.message || 'Tesztcsomag sikeresen importálva!', 'success');
+          await loadQuizzes(currentFolderId);
+        } else {
+          showAdminAlert('⚠️ Importálási hiba', (data && data.error) || 'Nem sikerült importálni a tesztcsomagot!');
+        }
+      } catch (err) {
+        showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba történt a tesztcsomag importálása közben!');
+      } finally {
+        btnImportQuizPackage.disabled = false;
+        inputImportQuizPackage.value = '';
+      }
+    });
   }
 
   /**

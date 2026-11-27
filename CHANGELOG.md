@@ -4,6 +4,35 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.18] – 2026-11-27
+
+### Hordozható teszt- és mappacsomag export/import (.zip) az eredmények érintése nélkül
+
+Additív tesztátviteli funkció az otthoni és az iskolai szerver közötti biztonságos teszt- és mappaáthelyezéshez, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Hozzáadva (Added)
+* **Egyetlen teszt és teljes mappaszerkezet exportálása / additív importálása (`src/services/quizTransfer.js`, `src/routes/api.js`, `public/admin.html`, `public/js/admin.js`):**
+  - **Fájlok:** [`src/services/quizTransfer.js`](file:///d:/dev/Röpdolgozat%20program/src/services/quizTransfer.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/admin.html`](file:///d:/dev/Röpdolgozat%20program/public/admin.html), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - A Tesztszerkesztőben minden tesztkártyán és mappakártyán megjelent a letöltés (`download`) gomb, amely hordozható `.zip` csomagba exportálja a tesztet vagy a teljes almappaszerkezetet az összes kérdéssel, főkép- és ABCD opcióképfájllal, valamint képes megoldókulccsal együtt (`GET /api/admin/quizzes/:id/export`, `GET /api/admin/quiz-folders/:id/export`).
+  - A felső eszköztár új **„Tesztcsomag import (.zip)”** gombja (`POST /api/admin/quizzes/import-package`, Windows Server 2016 kompatibilis kicsomagolással) additív módon az aktuálisan nyitott mappába importálja a csomag tartalmát: a szerveren lévő korábbi teszteket, diákokat és dolgozateredményeket **egyáltalán nem módosítja**.
+
+#### Javítva (Fixed)
+* **Mappák és tesztek felületi sorrendjének megőrzése export/import során (`src/services/quizTransfer.js`):**
+  - **Fájl:** [`src/services/quizTransfer.js`](file:///d:/dev/Röpdolgozat%20program/src/services/quizTransfer.js)
+  - A mappacsomag exportja a tényleges felületi sorrend (`getFolders` / `getQuizzes`) alapján, `siblingPosition` mezővel menti az almappák és tesztek sorrendjét; importáláskor a rendszer ellenőrzi a mappafa szülőhivatkozásait, és a belső `sort_order` értékeket is az eredeti felületi sorrendnek megfelelően állítja vissza.
+
+* **Szigorú képfájl-előellenőrzés és véglegesített ideiglenes ZIP-letöltés (`src/services/quizTransfer.js`, `src/routes/api.js`, `public/js/admin.js`):**
+  - **Fájlok:** [`src/services/quizTransfer.js`](file:///d:/dev/Röpdolgozat%20program/src/services/quizTransfer.js), [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Exportálás előtt a szerver ellenőrzi minden hivatkozott helyi főkép- és ABCD opcióképfájl meglétét és olvashatóságát; hiányzó vagy sérült kép esetén csonka `.zip` helyett `400 MISSING_EXPORT_ASSET` hibát ad vissza a pontos teszt-, kérdés- és opciósorszámmal.
+  - A letöltés csak az ideiglenes `.zip` fájl teljes véglegesítése után indul el, a felület pedig `fetch` + `Blob` letöltéssel kezeli az exportot, így a szerveroldali hibaüzenetek érthető értesítésként jelennek meg.
+
+* **Ideiglenes exportkönyvtárak garantált takarítása megszakadt klienskapcsolatnál (`src/routes/api.js`, `src/services/quizTransfer.js`):**
+  - **Fájlok:** [`src/routes/api.js`](file:///d:/dev/Röpdolgozat%20program/src/routes/api.js), [`src/services/quizTransfer.js`](file:///d:/dev/Röpdolgozat%20program/src/services/quizTransfer.js)
+  - A `sendCheckedExportZip()` segédfüggvény már a csomagépítés elindítása előtt figyeli a klienskapcsolat bontását (`res.once('close')`), `stream/promises` `pipeline()` segítségével küldi a fájlt, és megszakítás vagy hiba esetén is a `finally` blokkban lezárja a streamet, majd törli az ideiglenes `okoskodo_qexp_*` mappát.
+  - A `cleanup()` eljárás Windows fájlzár (`EBUSY` / `EPERM`) esetére rövid újrapróbálást (legfeljebb 3×120 ms) és végleges sikertelenség esetén figyelmeztető naplózást kapott.
+
+---
+
 ## [1.37.17] – 2026-11-27
 
 ### Szabályos leállításkori SQLite WAL-lezárás és ABCD placeholder-egységesítés
