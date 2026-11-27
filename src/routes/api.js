@@ -38,17 +38,11 @@ const uploadBackup = multer({
   limits: { fileSize: 500 * 1024 * 1024 } // max 500 MB
 });
 
-// Multer feltöltési konfiguráció (kérdés-képekhez kvízenkénti almappákban)
+// Multer feltöltési konfiguráció: minden új képfeltöltés ideiglenes (temp) tárba kerül,
+// és csak a teszt/kérdés sikeres mentésekor publikálódik a kvíz végleges almappájába (K2 védelem).
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const rawQuizId = req.query.quizId || req.body?.quizId || req.params?.id;
-    const quizId = rawQuizId ? parseInt(rawQuizId, 10) : null;
-    let targetDir = path.join(config.uploadsDir, 'quizzes');
-    if (quizId && Number.isInteger(quizId) && quizId > 0) {
-      targetDir = path.join(targetDir, `quiz-${quizId}`);
-    } else {
-      targetDir = path.join(targetDir, 'temp');
-    }
+    const targetDir = path.join(config.uploadsDir, 'quizzes', 'temp');
     fs.mkdirSync(targetDir, { recursive: true });
     cb(null, targetDir);
   },
@@ -402,11 +396,18 @@ router.post('/admin/quiz-folders', requireAdminAuth, (req, res) => {
 // Mappák egyéni megjelenítési sorrendjének mentése (Drag & Drop)
 router.put('/admin/quiz-folders/reorder', requireAdminAuth, (req, res) => {
   try {
-    const { folderIds } = req.body || {};
-    const result = quizRepo.reorderFolders(folderIds);
+    const { folderIds, parentId, expectedOrderIds } = req.body || {};
+    if (expectedOrderIds === undefined) {
+      return res.status(400).json({
+        error: 'Az elvárt alap-sorrendlista (expectedOrderIds) megadása kötelező!',
+        code: 'INVALID_EXPECTED_ORDER'
+      });
+    }
+    const result = quizRepo.reorderFolders(folderIds, { parentId, expectedOrderIds });
     res.json({ success: true, ...result });
   } catch (err) {
-    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+    const status = (err && Number.isInteger(err.status)) ? err.status : 400;
+    res.status(status).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -458,27 +459,48 @@ router.post('/admin/quizzes', requireAdminAuth, (req, res) => {
     const created = quizRepo.createQuiz(req.body);
     res.json({ success: true, quiz: created });
   } catch (err) {
-    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+    res.status(getRepoErrorHttpStatus(err)).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
 // Tesztek egyéni megjelenítési sorrendjének mentése (Drag & Drop)
 router.put('/admin/quizzes/reorder', requireAdminAuth, (req, res) => {
   try {
-    const { quizIds } = req.body || {};
-    const result = quizRepo.reorderQuizzes(quizIds);
+    const { quizIds, folderId, expectedOrderIds } = req.body || {};
+    if (expectedOrderIds === undefined) {
+      return res.status(400).json({
+        error: 'Az elvárt alap-sorrendlista (expectedOrderIds) megadása kötelező!',
+        code: 'INVALID_EXPECTED_ORDER'
+      });
+    }
+    const result = quizRepo.reorderQuizzes(quizIds, { folderId, expectedOrderIds });
     res.json({ success: true, ...result });
   } catch (err) {
-    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+    const status = (err && Number.isInteger(err.status)) ? err.status : 400;
+    res.status(status).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
+
+function getRepoErrorHttpStatus(err) {
+  if (err && Number.isInteger(err.status) && err.status >= 400 && err.status <= 599) {
+    return err.status;
+  }
+  const code = err && typeof err.code === 'string' ? err.code : '';
+  if (
+    code.startsWith('SQLITE_') ||
+    ['EACCES', 'EPERM', 'ENOSPC', 'EIO', 'EROFS', 'EMFILE', 'EBUSY', 'ENOTDIR', 'EISDIR'].includes(code)
+  ) {
+    return 500;
+  }
+  return 400;
+}
 
 router.put('/admin/quizzes/:id', requireAdminAuth, (req, res) => {
   try {
     const updated = quizRepo.updateQuiz(req.params.id, req.body);
     res.json({ success: true, quiz: updated });
   } catch (err) {
-    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+    res.status(getRepoErrorHttpStatus(err)).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -491,7 +513,7 @@ router.put('/admin/quizzes/:id/questions/:questionId', requireAdminAuth, (req, r
     });
     res.json({ success: true, question: saved });
   } catch (err) {
-    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+    res.status(getRepoErrorHttpStatus(err)).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -500,7 +522,7 @@ router.post('/admin/quizzes/:id/questions', requireAdminAuth, (req, res) => {
     const saved = quizRepo.saveSingleQuestion(req.params.id, req.body || {});
     res.json({ success: true, question: saved });
   } catch (err) {
-    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+    res.status(getRepoErrorHttpStatus(err)).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -509,7 +531,7 @@ router.post('/admin/quizzes/:id/duplicate', requireAdminAuth, (req, res) => {
     const duplicated = quizRepo.duplicateQuiz(req.params.id, req.body.title || null);
     res.json({ success: true, quiz: duplicated });
   } catch (err) {
-    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+    res.status(getRepoErrorHttpStatus(err)).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -529,7 +551,7 @@ router.post('/admin/quizzes/merge', requireAdminAuth, (req, res) => {
     });
     res.json({ success: true, quiz: merged });
   } catch (err) {
-    res.status(400).json({ error: err.message, code: err && err.code ? err.code : undefined });
+    res.status(getRepoErrorHttpStatus(err)).json({ error: err.message, code: err && err.code ? err.code : undefined });
   }
 });
 
@@ -1195,18 +1217,21 @@ router.get('/student/session-data', (req, res) => {
             id: snap.id || participant.quiz_id,
             title: snap.title || participant.quiz_title,
             total_points: snap.total_points || 0,
-            questions: snap.questions.map(q => ({
-              id: q.id,
-              quiz_id: q.quiz_id,
-              question_order: q.question_order,
-              question_type: q.question_type,
-              question_text: q.question_text,
-              instructions: q.instructions || '',
-              image_path: q.image_path || null,
-              options: Array.isArray(q.options) ? q.options : [],
-              allow_multiple: grader.isMultipleChoiceCorrectAnswer(q.question_type, q.correct_answer),
-              points: Number(q.points) || 1.0
-            }))
+            questions: snap.questions.map(q => {
+              const qOpts = Array.isArray(q.options) ? q.options : [];
+              return {
+                id: q.id,
+                quiz_id: q.quiz_id,
+                question_order: q.question_order,
+                question_type: q.question_type,
+                question_text: q.question_text,
+                instructions: q.instructions || '',
+                image_path: q.image_path || null,
+                options: qOpts,
+                allow_multiple: grader.isMultipleChoiceCorrectAnswer(q.question_type, q.correct_answer, qOpts),
+                points: Number(q.points) || 1.0
+              };
+            })
           };
         }
       } catch {
@@ -1331,13 +1356,25 @@ router.get('/student/session-data', (req, res) => {
     const grade = grader.calculateGrade(percentage, thresholds);
     const gradeText = grader.getGradeText(grade);
 
-    // Megoldókulcs térkép előkészítése (csak jogosult ágakban használjuk)
+    // Megoldókulcs térkép előkészítése (csak jogosult ágakban használjuk; ABCD esetén az eredeti opciólistán feloldva, keverésbiztosan)
     const buildCorrectMap = () => {
       if (fullSnapshotQuestions.length > 0) {
-        return new Map(fullSnapshotQuestions.map(q => [q.id, q]));
+        return new Map(fullSnapshotQuestions.map(q => {
+          const origOpts = Array.isArray(q.options) ? q.options : (() => { try { return JSON.parse(q.options_json || '[]'); } catch { return []; } })();
+          return [q.id, {
+            ...q,
+            correct_answer: grader.resolveAbcdDisplayAnswer(q.question_type, q.correct_answer, origOpts)
+          }];
+        }));
       }
       return new Map(
-        db.prepare('SELECT id, correct_answer, explanation FROM questions WHERE quiz_id = ?').all(participant.quiz_id).map(r => [r.id, r])
+        db.prepare('SELECT id, question_type, options_json, correct_answer, explanation FROM questions WHERE quiz_id = ?').all(participant.quiz_id).map(r => {
+          const origOpts = (() => { try { return JSON.parse(r.options_json || '[]'); } catch { return []; } })();
+          return [r.id, {
+            ...r,
+            correct_answer: grader.resolveAbcdDisplayAnswer(r.question_type, r.correct_answer, origOpts)
+          }];
+        })
       );
     };
 

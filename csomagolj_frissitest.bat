@@ -23,7 +23,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "if (-not $ver) { throw 'Nem sikerult kiolvasni a verzioszamot a package.json fajlbol!' }; " ^
   "$zipName = 'Okoskodo_frissites_v' + $ver + '.zip'; " ^
   "$zipPath = Join-Path $root $zipName; " ^
-  "$stage = Join-Path $env:TEMP ('okoskodo_pkg_' + [guid]::NewGuid().ToString('N')); " ^
+  "$tempBase = (Get-Item -LiteralPath $env:TEMP).FullName.TrimEnd('\'); " ^
+  "$stage = Join-Path $tempBase ('okoskodo_pkg_' + [guid]::NewGuid().ToString('N')); " ^
   "New-Item -ItemType Directory -Path $stage -Force | Out-Null; " ^
   "try { " ^
   "  foreach ($dir in @('src', 'public')) { " ^

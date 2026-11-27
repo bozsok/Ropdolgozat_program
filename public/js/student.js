@@ -3435,7 +3435,9 @@
       if (restoredVal !== '') {
         if (q.question_type === 'ABCD') {
           const tiles = Array.from(document.querySelectorAll('.quiz-option-tile'));
-          const restoredValues = parseMultiAnswerValues(restoredVal);
+          const restoredValues = q.allow_multiple
+            ? parseMultiAnswerValues(restoredVal)
+            : parseMultiAnswerValues(restoredVal, Array.isArray(q.options) ? q.options : []);
           restoredValues.forEach(rv => {
             let matchedTile = tiles.find(t => t.dataset.value === rv) || null;
             if (!matchedTile) {
@@ -3782,11 +3784,16 @@
 
     // 1. Csempék megjelölése (ABCD és TF)
     if (q && q.question_type === 'ABCD') {
-      const accepted = parseMultiAnswerValues(result.correctAnswer).map(s => s.toLowerCase());
+      const qOpts = Array.isArray(q.options) ? q.options : [];
+      const acceptedExactSet = new Set(
+        parseMultiAnswerValues(result.correctAnswer, qOpts)
+          .map(ans => resolveAbcdOptionValueClient(ans, qOpts))
+          .filter(Boolean)
+      );
 
       document.querySelectorAll('.quiz-option-tile').forEach(tile => {
-        const val = (tile.dataset.value || '').trim().toLowerCase();
-        const isThisCorrect = accepted.includes(val);
+        const val = (tile.dataset.value || '').trim();
+        const isThisCorrect = acceptedExactSet.has(val);
         const isSelected = tile.classList.contains('selected');
 
         if (isThisCorrect) {
@@ -4344,7 +4351,7 @@
                   </button>
                 </span>
               ` : ''}</span>
-              <span class="calm-summary-q-ans">Válaszod: <span class="calm-summary-q-ans-val">${renderAnswerDisplayHtml(submittedText, q.options)}</span></span>
+              <span class="calm-summary-q-ans">Válaszod: <span class="calm-summary-q-ans-val">${renderAnswerDisplayHtml(submittedText, q.options, Boolean(q.allow_multiple))}</span></span>
             </div>
           </div>
           <div class="calm-summary-q-badge ${badgeClass}">

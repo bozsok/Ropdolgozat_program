@@ -285,6 +285,8 @@ function startSession({
     if (!currentQuiz.questions || currentQuiz.questions.length === 0) {
       throw new Error('Üres teszt nem indítható el dolgozatként!');
     }
+    // A1: Kétértelmű ABCD opciók ellenőrzése indítás előtt (régi/migrált kérdésekre is!)
+    quizRepo.validateAbcdQuestionsIntegrity(currentQuiz.questions);
     // Ellenőrizzük, hogy minden feladathoz tartozik-e érvényes megoldókulcs (Report 15 / 3. fejezet)
     for (const q of currentQuiz.questions) {
       if (!q.correct_answer || String(q.correct_answer).trim() === '') {
@@ -771,6 +773,41 @@ function submitAnswer({
     throw makeRejectError('Szabad navigáció módban a válaszok piszkozatként mentődnek, és a dolgozat beadásakor kerülnek kiértékelésre!', 'INVALID_SESSION_MODE');
   }
 
+  // Közös segéd az idempotens/duplikált válaszok feloldott megoldókulcsához (A1 védelem: első és ismételt beküldés egyezzen!)
+  const resolveFeedbackForQuestion = (snapshotJson, qId) => {
+    let qType = null;
+    let qCorrect = null;
+    let qExp = null;
+    let qOpts = [];
+    if (snapshotJson) {
+      try {
+        const snap = JSON.parse(snapshotJson);
+        const found = (snap.questions || []).find(q => String(q.id) === String(qId));
+        if (found) {
+          qType = found.question_type || null;
+          qCorrect = found.correct_answer;
+          qExp = found.explanation || '';
+          qOpts = Array.isArray(found.options)
+            ? found.options
+            : (() => { try { return JSON.parse(found.options || found.options_json || '[]'); } catch { return []; } })();
+        }
+      } catch {}
+    }
+    if (qCorrect === null) {
+      const qInfo = db.prepare('SELECT question_type, options_json, correct_answer, explanation FROM questions WHERE id = ?').get(qId);
+      if (qInfo) {
+        qType = qInfo.question_type || null;
+        qCorrect = qInfo.correct_answer;
+        qExp = qInfo.explanation || '';
+        qOpts = (() => { try { return JSON.parse(qInfo.options_json || '[]'); } catch { return []; } })();
+      }
+    }
+    return {
+      correctAnswer: grader.resolveAbcdDisplayAnswer(qType, qCorrect, qOpts),
+      explanation: qExp
+    };
+  };
+
   // Idempotens védelem: ha erre a kérdésre már mentve van válasz, azt hiba nélkül visszaadjuk (befejezett dolgozatnál is!)
   const existingAnswer = db.prepare(`
     SELECT * FROM answers
@@ -778,29 +815,13 @@ function submitAnswer({
   `).get(participant_id, question_id);
 
   if (existingAnswer) {
-    let qCorrect = null;
-    let qExp = null;
-    if (preCheck.quiz_snapshot_json) {
-      try {
-        const snap = JSON.parse(preCheck.quiz_snapshot_json);
-        const found = (snap.questions || []).find(q => String(q.id) === String(question_id));
-        if (found) {
-          qCorrect = found.correct_answer;
-          qExp = found.explanation;
-        }
-      } catch {}
-    }
-    if (qCorrect === null) {
-      const qInfo = db.prepare('SELECT correct_answer, explanation FROM questions WHERE id = ?').get(question_id);
-      qCorrect = qInfo ? qInfo.correct_answer : null;
-      qExp = qInfo ? qInfo.explanation : null;
-    }
+    const fb = resolveFeedbackForQuestion(preCheck.quiz_snapshot_json, question_id);
     return {
       alreadySubmitted: true,
       answer: existingAnswer,
       isFinished: preCheck.is_finished === 1,
-      correctAnswer: qCorrect,
-      explanation: qExp
+      correctAnswer: fb.correctAnswer,
+      explanation: fb.explanation
     };
   }
 
@@ -849,29 +870,13 @@ function submitAnswer({
     `).get(participant_id, question_id);
 
     if (existingAnswer) {
-      let qCorrect = null;
-      let qExp = null;
-      if (participant.quiz_snapshot_json) {
-        try {
-          const snap = JSON.parse(participant.quiz_snapshot_json);
-          const found = (snap.questions || []).find(q => String(q.id) === String(question_id));
-          if (found) {
-            qCorrect = found.correct_answer;
-            qExp = found.explanation;
-          }
-        } catch {}
-      }
-      if (qCorrect === null) {
-        const qInfo = db.prepare('SELECT correct_answer, explanation FROM questions WHERE id = ?').get(question_id);
-        qCorrect = qInfo ? qInfo.correct_answer : null;
-        qExp = qInfo ? qInfo.explanation : null;
-      }
+      const fb = resolveFeedbackForQuestion(participant.quiz_snapshot_json, question_id);
       result = {
         alreadySubmitted: true,
         answer: existingAnswer,
         isFinished: participant.is_finished === 1,
-        correctAnswer: qCorrect,
-        explanation: qExp
+        correctAnswer: fb.correctAnswer,
+        explanation: fb.explanation
       };
       return;
     }
@@ -998,7 +1003,7 @@ function submitAnswer({
       alreadySubmitted: false,
       answer: savedAnswer,
       isFinished: isNowFinished,
-      correctAnswer: question.correct_answer, // Azonnali Socrative visszajelzéshez a válasz beküldésekor
+      correctAnswer: grader.resolveAbcdDisplayAnswer(question.question_type, question.correct_answer, parsedOptions), // Azonnali Socrative visszajelzéshez (eredeti sorrend alapján feloldva)
       explanation: question.explanation
     };
   });
@@ -1570,8 +1575,13 @@ function finalizeOpenNavigationParticipantInTx(participantId) {
         return trimmedMatches.length === 1 ? trimmedMatches[0] : s;
       };
 
+      const isMultiQuestion = grader.isMultipleChoiceCorrectAnswer('ABCD', q.correct_answer, parsedOptions);
       let handledMulti = false;
-      if (rawDraft.trim().startsWith('[')) {
+      const isExactLiteralOption = !isMultiQuestion && (
+        optStrings.includes(rawDraft) ||
+        optStrings.some(o => o.trim() === rawDraft.trim())
+      );
+      if (!isExactLiteralOption && rawDraft.trim().startsWith('[')) {
         try {
           const parsedMulti = JSON.parse(rawDraft);
           if (Array.isArray(parsedMulti)) {
@@ -1759,8 +1769,23 @@ function saveDraftAnswer({ participant_id, question_id, draft_answer, base_versi
         try { validOpts = JSON.parse(questionObj.options).map(extractOptVal); } catch { validOpts = []; }
       }
 
+      const rawOptsForMulti = Array.isArray(questionObj.options)
+        ? questionObj.options
+        : (() => { try { return JSON.parse(questionObj.options || '[]'); } catch { return []; } })();
+      const isMultiDraftQ = grader.isMultipleChoiceCorrectAnswer('ABCD', questionObj.correct_answer, rawOptsForMulti);
+      const isExactLiteralDraft = !isMultiDraftQ && (
+        validOpts.includes(draft_answer) ||
+        (draft_answer.trim() !== '' && validOpts.filter(o => o.trim() === draft_answer.trim()).length === 1)
+      );
+
       if (draft_answer === '' || draft_answer.trim() === '') {
         valueToStore = '';
+      } else if (isExactLiteralDraft) {
+        if (validOpts.includes(draft_answer)) {
+          valueToStore = draft_answer;
+        } else {
+          valueToStore = validOpts.find(o => o.trim() === draft_answer.trim());
+        }
       } else if (draft_answer.trim().startsWith('[')) {
         // Többválasztós ABCD piszkozat (JSON tömb)
         let parsedMulti = null;

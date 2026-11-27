@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const config = require('../../config');
 const db = require('./init');
 const grader = require('../services/grader');
@@ -145,7 +146,7 @@ function getQuizById(quizId, isStudentView = false, includeDeleted = false) {
         instructions: q.instructions || '',
         image_path: q.image_path,
         options: parsedOptions,
-        allow_multiple: grader.isMultipleChoiceCorrectAnswer(q.question_type, q.correct_answer),
+        allow_multiple: grader.isMultipleChoiceCorrectAnswer(q.question_type, q.correct_answer, parsedOptions),
         points: q.points
       };
     }
@@ -179,89 +180,659 @@ function isQuizLocked(quizId) {
  */
 
 /**
- * Temp vagy korábbi mappában lévő képek áthelyezése a kvíz végleges almappájába
+ * Kérdéshez és ABCD opciókhoz tartozó képhivatkozások összegyűjtése (típushelyesen)
+ * Támogatja a DB sort (options_json string) és a snapshot objektumot (options tömb) is.
+ * @returns {{ paths: string[], parseError: boolean }}
  */
-function finalizeQuizTempImages(quizId) {
-  try {
-    const qRows = db.prepare('SELECT id, image_path FROM questions WHERE quiz_id = ? AND image_path IS NOT NULL').all(quizId);
-    if (!qRows || qRows.length === 0) return;
+function extractQuestionImagePaths(questionObj) {
+  const paths = [];
+  let parseError = false;
+  if (!questionObj || typeof questionObj !== 'object') {
+    return { paths, parseError };
+  }
 
-    const targetDir = path.join(config.uploadsDir, 'quizzes', `quiz-${quizId}`);
-    fs.mkdirSync(targetDir, { recursive: true });
+  if (typeof questionObj.image_path === 'string' && questionObj.image_path.trim()) {
+    paths.push(questionObj.image_path.trim());
+  }
 
-    const updateStmt = db.prepare('UPDATE questions SET image_path = ? WHERE id = ?');
-    for (const row of qRows) {
-      if (!row.image_path) continue;
-      const expectedPrefix = `/uploads/quizzes/quiz-${quizId}/`;
-      if (row.image_path.startsWith(expectedPrefix)) continue;
+  let opts = null;
+  if (Array.isArray(questionObj.options)) {
+    opts = questionObj.options;
+  } else if (typeof questionObj.options_json === 'string' && questionObj.options_json.trim()) {
+    try {
+      const parsed = JSON.parse(questionObj.options_json);
+      if (Array.isArray(parsed)) opts = parsed;
+    } catch {
+      parseError = true;
+    }
+  }
 
-      const filename = path.basename(row.image_path);
-      const tempPath = path.join(config.uploadsDir, 'quizzes', 'temp', filename);
-      const rootPath = path.join(config.uploadsDir, filename);
-      const newFilePath = path.join(targetDir, filename);
-
-      let found = false;
-      if (fs.existsSync(tempPath)) {
-        fs.renameSync(tempPath, newFilePath);
-        found = true;
-      } else if (fs.existsSync(rootPath)) {
-        fs.renameSync(rootPath, newFilePath);
-        found = true;
-      }
-
-      if (found || fs.existsSync(newFilePath)) {
-        const newRelativePath = `/uploads/quizzes/quiz-${quizId}/${filename}`;
-        updateStmt.run(newRelativePath, row.id);
+  if (Array.isArray(opts)) {
+    for (const opt of opts) {
+      if (opt && typeof opt === 'object' && typeof opt.image_path === 'string' && opt.image_path.trim()) {
+        paths.push(opt.image_path.trim());
       }
     }
+  }
 
-    // Árva (lecserélt vagy törölt) képek automatikus kitakarítása
-    cleanQuizOrphanImages(quizId);
-  } catch (err) {
-    console.error(`Hiba a kvíz (#${quizId}) ideiglenes képeinek véglegesítésekor:`, err);
+  return { paths, parseError };
+}
+
+/**
+ * Pontos képútvonal-csere a megoldókulcsban (egyértékű string és többválasztós JSON tömb esetén is)
+ * Szöveges opciók részsztringjeit nem módosítja.
+ */
+function remapCorrectAnswerImagePaths(correctAnswer, pathMap) {
+  if (!correctAnswer || !pathMap || pathMap.size === 0) return correctAnswer;
+  const raw = String(correctAnswer).trim();
+  if (!raw) return correctAnswer;
+
+  if (raw.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        let changed = false;
+        const mapped = parsed.map(item => {
+          const s = String(item ?? '').trim();
+          if (pathMap.has(s)) {
+            changed = true;
+            return pathMap.get(s);
+          }
+          return item;
+        });
+        return changed ? JSON.stringify(mapped) : correctAnswer;
+      }
+    } catch {
+      // Nem JSON tömb -> sima szövegként kezeljük
+    }
+  }
+
+  return pathMap.has(raw) ? pathMap.get(raw) : correctAnswer;
+}
+
+/**
+ * Az adatbázis összes kérdésében és munkamenet-pillanatképében hivatkozott temp/ képfájlnevek összegyűjtése
+ */
+function collectAllReferencedTempFilenames() {
+  const referenced = new Set();
+  let hasParseError = false;
+
+  const qRows = db.prepare('SELECT image_path, options_json FROM questions').all();
+  for (const row of qRows) {
+    const res = extractQuestionImagePaths(row);
+    if (res.parseError) hasParseError = true;
+    for (const p of res.paths) {
+      if (p.startsWith('/uploads/quizzes/temp/')) {
+        referenced.add(path.basename(p));
+      }
+    }
+  }
+
+  const sRows = db.prepare('SELECT quiz_snapshot_json FROM sessions WHERE quiz_snapshot_json IS NOT NULL').all();
+  for (const sRow of sRows) {
+    if (!sRow.quiz_snapshot_json) continue;
+    try {
+      const snapshot = JSON.parse(sRow.quiz_snapshot_json);
+      const snapQuestions = Array.isArray(snapshot) ? snapshot : (snapshot.questions || []);
+      if (Array.isArray(snapQuestions)) {
+        for (const sq of snapQuestions) {
+          const res = extractQuestionImagePaths(sq);
+          if (res.parseError) hasParseError = true;
+          for (const p of res.paths) {
+            if (p.startsWith('/uploads/quizzes/temp/')) {
+              referenced.add(path.basename(p));
+            }
+          }
+        }
+      }
+    } catch {
+      hasParseError = true;
+    }
+  }
+
+  return { referenced, hasParseError };
+}
+
+/**
+ * Fájl SHA-256 tartalmi ujjlenyomatának kiszámítása névütközés-ellenőrzéshez
+ */
+function computeFileSha256(filePath) {
+  const hash = crypto.createHash('sha256');
+  hash.update(fs.readFileSync(filePath));
+  return hash.digest('hex');
+}
+
+/**
+ * Helyi képfájl létezésének, típusának (rendes fájl) és olvashatóságának ellenőrzése
+ */
+function assertReadableLocalImageFile(fullPath, displayName) {
+  let stat = null;
+  try {
+    stat = fs.statSync(fullPath);
+  } catch {
+    throw Object.assign(
+      new Error(`A csatolt képfájl (${displayName}) nem található a szerveren! Kérlek csatold újra a képet.`),
+      { status: 400, code: 'MISSING_IMAGE_FILE' }
+    );
+  }
+  if (!stat.isFile()) {
+    throw Object.assign(
+      new Error(`A csatolt képútvonal (${displayName}) nem érvényes fájl a szerveren!`),
+      { status: 400, code: 'MISSING_IMAGE_FILE' }
+    );
+  }
+  try {
+    fs.accessSync(fullPath, fs.constants.R_OK);
+  } catch {
+    throw Object.assign(
+      new Error(`A csatolt képfájl (${displayName}) nem olvasható a szerveren!`),
+      { status: 500, code: 'IMAGE_READ_ERROR' }
+    );
   }
 }
 
 /**
- * A kvíz almappájában lévő árva (már nem használt / lecserélt / törölt) képek automatikus kitakarítása
+ * Hivatkozott helyi (temp, permanens kvízmappa vagy feltöltési gyökér) képfájlok meglétének
+ * és olvashatóságának előellenőrzése mentés ELŐTT (K1 & K2 védelem).
+ */
+/**
+ * A1: ABCD kérdések egyértelműségének ellenőrzése (kétértelmű, több másik opció JSON-tömb kombinációjával
+ * azonos szövegű opciók elutasítása mentéskor ÉS dolgozatindításkor is).
+ */
+function validateAbcdQuestionsIntegrity(questions = []) {
+  if (!Array.isArray(questions) || questions.length === 0) return;
+  questions.forEach((q, idx) => {
+    if ((q.question_type || 'ABCD') !== 'ABCD') return;
+    const rawOpts = Array.isArray(q.options)
+      ? q.options
+      : (() => { try { return JSON.parse(q.options_json || '[]'); } catch { return []; } })();
+    if (!Array.isArray(rawOpts) || rawOpts.length === 0) return;
+
+    const qOrder = q.question_order || (idx + 1);
+    const optVals = rawOpts.map(o => grader.getOptionValue(o)).filter(Boolean);
+    const optSet = new Set();
+
+    // 1. A1: Azonos beküldési értékű (duplikált) ABCD opciók tiltása (pl. két külön kép azonos felirattal)
+    for (const val of optVals) {
+      if (optSet.has(val)) {
+        throw Object.assign(
+          new Error(`Duplikált válaszlehetőség a(z) ${qOrder}. kérdésnél („${val}”): minden opció beküldési értékének egyedinek kell lennie!`),
+          { status: 400, code: 'DUPLICATE_ABCD_OPTION', questionId: q.id || null, questionOrder: qOrder }
+        );
+      }
+      optSet.add(val);
+    }
+
+    // 2. A1: Kétértelmű, más opciók JSON-tömb kombinációjával megegyező literal opció tiltása
+    if (optVals.length >= 3) {
+      for (const val of optVals) {
+        if (val.startsWith('[')) {
+          try {
+            const parsed = JSON.parse(val);
+            if (Array.isArray(parsed) && parsed.length >= 2) {
+              const items = parsed.map(x => String(x ?? '').trim()).filter(Boolean);
+              if (items.length >= 2 && items.every(it => it !== val && optSet.has(it))) {
+                throw Object.assign(
+                  new Error(`Kétértelmű válaszlehetőség a(z) ${qOrder}. kérdésnél („${val}”): egy opció szövege nem egyezhet meg ugyanannak a kérdésnek több másik opciója JSON-tömb alakú kombinációjával!`),
+                  { status: 400, code: 'AMBIGUOUS_ABCD_OPTIONS', questionId: q.id || null, questionOrder: qOrder }
+                );
+              }
+            }
+          } catch (e) {
+            if (e && e.code === 'AMBIGUOUS_ABCD_OPTIONS') throw e;
+          }
+        }
+      }
+    }
+
+    // 3. A1: Nem üres megoldókulcs minden elemének ténylegesen feloldhatónak (exact:) kell lennie az opciólistán
+    const rawCorrect = q.correct_answer !== undefined && q.correct_answer !== null ? String(q.correct_answer).trim() : '';
+    if (rawCorrect) {
+      const keyItems = grader.parseAnswerList(rawCorrect, rawOpts);
+      if (keyItems.length === 0) {
+        throw Object.assign(
+          new Error(`Érvénytelen (üresre feloldódó) megoldókulcs a(z) ${qOrder}. kérdésnél („${rawCorrect}”): legalább egy létező opciót meg kell jelölni!`),
+          { status: 400, code: 'INVALID_CORRECT_ANSWER', questionId: q.id || null, questionOrder: qOrder }
+        );
+      }
+      for (const keyItem of keyItems) {
+        const canon = grader.resolveAbcdCanonical(keyItem, rawOpts);
+        if (!canon || !canon.startsWith('exact:')) {
+          throw Object.assign(
+            new Error(`Érvénytelen vagy nem feloldható megoldókulcs a(z) ${qOrder}. kérdésnél („${keyItem}”): a helyes válasz nem feleltethető meg egyetlen opciólehetőségnek sem!`),
+            { status: 400, code: 'INVALID_CORRECT_ANSWER', questionId: q.id || null, questionOrder: qOrder }
+          );
+        }
+      }
+    }
+  });
+}
+
+function validateQuestionsLocalImagesExist(questions = []) {
+  if (!Array.isArray(questions) || questions.length === 0) return;
+  validateAbcdQuestionsIntegrity(questions);
+  const tempDir = path.join(config.uploadsDir, 'quizzes', 'temp');
+
+  for (const q of questions) {
+    const { paths } = extractQuestionImagePaths(q);
+    for (const relPath of paths) {
+      if (relPath.startsWith('/uploads/quizzes/temp/')) {
+        const fname = path.basename(relPath);
+        assertReadableLocalImageFile(path.join(tempDir, fname), fname);
+      } else if (/^\/uploads\/quizzes\/quiz-\d+\/[^/]+$/.test(relPath)) {
+        const parts = relPath.split('/').filter(Boolean); // ['uploads', 'quizzes', 'quiz-123', 'kep.jpg']
+        const quizFolder = parts[2];
+        const fname = parts[3];
+        assertReadableLocalImageFile(path.join(config.uploadsDir, 'quizzes', quizFolder, fname), fname);
+      } else if (/^\/uploads\/[^/]+$/.test(relPath)) {
+        const fname = path.basename(relPath);
+        assertReadableLocalImageFile(path.join(config.uploadsDir, fname), fname);
+      }
+    }
+  }
+}
+
+/**
+ * Temp/gyökér képek előkészítése és átmásolása a kvíz végleges mappájába MÉG a DB tranzakció ELŐTT (K1 védelem).
+ * Így I/O hiba esetén az adatbázis-tranzakció el sem indul, semmilyen félkész módosítás nem maradhat.
+ */
+function prepareQuestionsImagesForQuiz(quizId, questions = []) {
+  if (!Array.isArray(questions) || questions.length === 0) {
+    return { preparedQuestions: questions, stagedRemaps: new Map(), createdFiles: [] };
+  }
+
+  const targetDir = path.join(config.uploadsDir, 'quizzes', `quiz-${quizId}`);
+  const expectedPrefix = `/uploads/quizzes/quiz-${quizId}/`;
+  const tempDir = path.join(config.uploadsDir, 'quizzes', 'temp');
+
+  const stagedRemaps = new Map();
+  const createdFiles = [];
+
+  const ensureTargetFile = (relPath) => {
+    if (!relPath || typeof relPath !== 'string') return null;
+    const trimmed = relPath.trim();
+    if (!trimmed || trimmed.startsWith(expectedPrefix)) return null;
+
+    let sourceFullPath = null;
+    if (trimmed.startsWith('/uploads/quizzes/temp/')) {
+      sourceFullPath = path.join(tempDir, path.basename(trimmed));
+    } else if (/^\/uploads\/[^/]+$/.test(trimmed)) {
+      sourceFullPath = path.join(config.uploadsDir, path.basename(trimmed));
+    } else {
+      return null;
+    }
+
+    if (stagedRemaps.has(trimmed)) {
+      return stagedRemaps.get(trimmed).newRelativePath;
+    }
+
+    assertReadableLocalImageFile(sourceFullPath, path.basename(trimmed));
+
+    fs.mkdirSync(targetDir, { recursive: true });
+    const origName = path.basename(trimmed);
+    let destName = origName;
+    let newFilePath = path.join(targetDir, destName);
+
+    if (fs.existsSync(newFilePath)) {
+      const srcHash = computeFileSha256(sourceFullPath);
+      const dstHash = computeFileSha256(newFilePath);
+      if (srcHash !== dstHash) {
+        const ext = path.extname(origName);
+        const base = path.basename(origName, ext);
+        destName = `${base}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}${ext}`;
+        newFilePath = path.join(targetDir, destName);
+        fs.copyFileSync(sourceFullPath, newFilePath);
+        createdFiles.push(newFilePath);
+      }
+    } else {
+      fs.copyFileSync(sourceFullPath, newFilePath);
+      createdFiles.push(newFilePath);
+    }
+
+    const newRelativePath = `${expectedPrefix}${destName}`;
+    stagedRemaps.set(trimmed, { newRelativePath, sourceFullPath, sourceRelPath: trimmed });
+    return newRelativePath;
+  };
+
+  try {
+    const preparedQuestions = questions.map((q) => {
+      const cloned = { ...q };
+      const rowPathMap = new Map();
+
+      if (cloned.image_path) {
+        const mappedMain = ensureTargetFile(cloned.image_path);
+        if (mappedMain && mappedMain !== cloned.image_path) {
+          rowPathMap.set(String(cloned.image_path).trim(), mappedMain);
+          cloned.image_path = mappedMain;
+        }
+      }
+
+      let parsedOpts = null;
+      const hadArrayOptions = Array.isArray(cloned.options);
+      if (hadArrayOptions) {
+        parsedOpts = cloned.options;
+      } else if (typeof cloned.options_json === 'string' && cloned.options_json.trim()) {
+        try {
+          parsedOpts = JSON.parse(cloned.options_json);
+        } catch (parseErr) {
+          console.error('Figyelmeztetés: hibás options_json az előkészítésnél:', parseErr.message);
+        }
+      }
+
+      if (Array.isArray(parsedOpts)) {
+        let optsChanged = false;
+        const mappedOpts = parsedOpts.map(opt => {
+          if (opt && typeof opt === 'object' && typeof opt.image_path === 'string' && opt.image_path.trim()) {
+            const oldOptImg = opt.image_path.trim();
+            const mappedOpt = ensureTargetFile(oldOptImg);
+            if (mappedOpt && mappedOpt !== oldOptImg) {
+              rowPathMap.set(oldOptImg, mappedOpt);
+              optsChanged = true;
+              return { ...opt, image_path: mappedOpt };
+            }
+          }
+          return opt;
+        });
+        if (optsChanged) {
+          if (hadArrayOptions) {
+            cloned.options = mappedOpts;
+          } else {
+            cloned.options_json = JSON.stringify(mappedOpts);
+          }
+        }
+      }
+
+      if (rowPathMap.size > 0 && cloned.correct_answer) {
+        const remappedCorrect = remapCorrectAnswerImagePaths(cloned.correct_answer, rowPathMap);
+        if (remappedCorrect !== cloned.correct_answer) {
+          cloned.correct_answer = remappedCorrect;
+        }
+      }
+
+      return cloned;
+    });
+
+    return { preparedQuestions, stagedRemaps, createdFiles };
+  } catch (err) {
+    // Ha az előkészítés félbeszakadt, a most létrehozott új fájlokat best-effort kitakarítjuk
+    for (const f of createdFiles) {
+      try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch {}
+    }
+    throw err;
+  }
+}
+
+/**
+ * Sikeres adatbázis-tranzakció utáni best-effort forrás- és árvatakarítás
+ */
+function cleanupPreparedSources(quizId, stagedRemaps) {
+  try {
+    if (stagedRemaps && stagedRemaps.size > 0) {
+      const { referencedPaths, hasParseError } = collectAllReferencedImagePaths();
+      if (!hasParseError) {
+        for (const info of stagedRemaps.values()) {
+          if (info.sourceFullPath && fs.existsSync(info.sourceFullPath)) {
+            if (!referencedPaths.has(info.sourceRelPath)) {
+              try {
+                fs.unlinkSync(info.sourceFullPath);
+              } catch {}
+            }
+          }
+        }
+      }
+    }
+    cleanQuizOrphanImages(quizId);
+  } catch (cleanupErr) {
+    console.error(`Figyelmeztetés: utólagos képtakarítási hiba a #${quizId} kvíznél:`, cleanupErr.message);
+  }
+}
+
+/**
+ * Az adatbázis összes kérdésében és munkamenet-pillanatképében hivatkozott helyi képútvonalak globális gyűjtése
+ */
+function collectAllReferencedImagePaths() {
+  const referencedPaths = new Set();
+  let hasParseError = false;
+
+  const qRows = db.prepare('SELECT image_path, options_json FROM questions').all();
+  for (const row of qRows) {
+    const res = extractQuestionImagePaths(row);
+    if (res.parseError) hasParseError = true;
+    for (const p of res.paths) referencedPaths.add(p);
+  }
+
+  const sRows = db.prepare('SELECT quiz_snapshot_json FROM sessions WHERE quiz_snapshot_json IS NOT NULL').all();
+  for (const sRow of sRows) {
+    if (!sRow.quiz_snapshot_json) continue;
+    try {
+      const snapshot = JSON.parse(sRow.quiz_snapshot_json);
+      const snapQuestions = Array.isArray(snapshot) ? snapshot : (snapshot.questions || []);
+      if (Array.isArray(snapQuestions)) {
+        for (const sq of snapQuestions) {
+          const res = extractQuestionImagePaths(sq);
+          if (res.parseError) hasParseError = true;
+          for (const p of res.paths) referencedPaths.add(p);
+        }
+      }
+    } catch {
+      hasParseError = true;
+    }
+  }
+
+  return { referencedPaths, hasParseError };
+}
+
+/**
+ * Temp vagy gyökér uploads mappában lévő képek (kérdés fő képe + ABCD opcióképek + képes megoldókulcs)
+ * biztonságos átmásolása és véglegesítése a kvíz saját almappájába.
+ * Tartalom-alapú (SHA-256) ütközésvédelemmel: eltérő tartalmú azonos fájlnév új egyedi nevet kap!
+ */
+function finalizeQuizTempImages(quizId) {
+  const qRows = db.prepare('SELECT id, image_path, options_json, correct_answer FROM questions WHERE quiz_id = ?').all(quizId);
+  if (!qRows || qRows.length === 0) return;
+
+  const targetDir = path.join(config.uploadsDir, 'quizzes', `quiz-${quizId}`);
+  const expectedPrefix = `/uploads/quizzes/quiz-${quizId}/`;
+  const tempDir = path.join(config.uploadsDir, 'quizzes', 'temp');
+
+  // 1. Előkészítés és tartós fájl létrehozása pontos prefix-alapú forrásfeloldással
+  const stagedRemaps = new Map(); // oldRelativePath -> { newRelativePath, sourceFullPath, sourceRelPath }
+  const ensureTargetFile = (relPath) => {
+    if (!relPath || typeof relPath !== 'string') return null;
+    const trimmed = relPath.trim();
+    if (!trimmed || trimmed.startsWith(expectedPrefix)) return null;
+
+    let sourceFullPath = null;
+    if (trimmed.startsWith('/uploads/quizzes/temp/')) {
+      sourceFullPath = path.join(tempDir, path.basename(trimmed));
+    } else if (/^\/uploads\/[^/]+$/.test(trimmed)) {
+      sourceFullPath = path.join(config.uploadsDir, path.basename(trimmed));
+    } else {
+      // Másik kvíz saját mappájára vagy külső URL-re mutató hivatkozást nem mozgatunk el
+      return null;
+    }
+
+    if (stagedRemaps.has(trimmed)) {
+      return stagedRemaps.get(trimmed).newRelativePath;
+    }
+
+    if (!fs.existsSync(sourceFullPath)) {
+      throw Object.assign(
+        new Error(`A csatolt képfájl (${path.basename(trimmed)}) nem található a szerveren!`),
+        { status: 400, code: 'MISSING_IMAGE_FILE' }
+      );
+    }
+
+    fs.mkdirSync(targetDir, { recursive: true });
+    const origName = path.basename(trimmed);
+    let destName = origName;
+    let newFilePath = path.join(targetDir, destName);
+
+    if (fs.existsSync(newFilePath)) {
+      const srcHash = computeFileSha256(sourceFullPath);
+      const dstHash = computeFileSha256(newFilePath);
+      if (srcHash !== dstHash) {
+        // Azonos fájlnév, ELTÉRŐ tartalom -> új egyedi fájlnév, így a régi kép bájtait nem írjuk felül!
+        const ext = path.extname(origName);
+        const base = path.basename(origName, ext);
+        destName = `${base}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}${ext}`;
+        newFilePath = path.join(targetDir, destName);
+        fs.copyFileSync(sourceFullPath, newFilePath);
+      }
+    } else {
+      fs.copyFileSync(sourceFullPath, newFilePath);
+    }
+
+    const newRelativePath = `${expectedPrefix}${destName}`;
+    stagedRemaps.set(trimmed, { newRelativePath, sourceFullPath, sourceRelPath: trimmed });
+    return newRelativePath;
+  };
+
+    const pendingUpdates = [];
+    for (const row of qRows) {
+      let nextImagePath = row.image_path;
+      let nextOptionsJson = row.options_json;
+      let nextCorrectAnswer = row.correct_answer;
+      let rowChanged = false;
+      const rowPathMap = new Map();
+
+      if (row.image_path) {
+        const mappedMain = ensureTargetFile(row.image_path);
+        if (mappedMain && mappedMain !== row.image_path) {
+          rowPathMap.set(row.image_path.trim(), mappedMain);
+          nextImagePath = mappedMain;
+          rowChanged = true;
+        }
+      }
+
+      if (row.options_json) {
+        let parsedOpts = null;
+        try {
+          parsedOpts = JSON.parse(row.options_json);
+        } catch (parseErr) {
+          console.error(`Figyelmeztetés: hibás options_json a #${row.id} kérdésnél:`, parseErr.message);
+        }
+        if (Array.isArray(parsedOpts)) {
+          let optsChanged = false;
+          const mappedOpts = parsedOpts.map(opt => {
+            if (opt && typeof opt === 'object' && typeof opt.image_path === 'string' && opt.image_path.trim()) {
+              const oldOptImg = opt.image_path.trim();
+              const mappedOpt = ensureTargetFile(oldOptImg);
+              if (mappedOpt && mappedOpt !== oldOptImg) {
+                rowPathMap.set(oldOptImg, mappedOpt);
+                optsChanged = true;
+                return { ...opt, image_path: mappedOpt };
+              }
+            }
+            return opt;
+          });
+          if (optsChanged) {
+            nextOptionsJson = JSON.stringify(mappedOpts);
+            rowChanged = true;
+          }
+        }
+      }
+
+      if (rowPathMap.size > 0 && row.correct_answer) {
+        const remappedCorrect = remapCorrectAnswerImagePaths(row.correct_answer, rowPathMap);
+        if (remappedCorrect !== row.correct_answer) {
+          nextCorrectAnswer = remappedCorrect;
+          rowChanged = true;
+        }
+      }
+
+      if (rowChanged) {
+        pendingUpdates.push({
+          id: row.id,
+          image_path: nextImagePath,
+          options_json: nextOptionsJson,
+          correct_answer: nextCorrectAnswer
+        });
+      }
+    }
+
+    // 2. Adatbázisírás egyetlen tranzakcióban
+    if (pendingUpdates.length > 0) {
+      const updateStmt = db.prepare('UPDATE questions SET image_path = ?, options_json = ?, correct_answer = ? WHERE id = ?');
+      const tx = db.transaction((items) => {
+        for (const item of items) {
+          updateStmt.run(item.image_path, item.options_json, item.correct_answer, item.id);
+        }
+      });
+      tx(pendingUpdates);
+    }
+
+    // 3. Commit után a temp/gyökér forrásfájlok eltávolítása, ha már sehol máshol nincsenek hivatkozva
+    if (stagedRemaps.size > 0) {
+      const { referencedPaths, hasParseError } = collectAllReferencedImagePaths();
+      if (!hasParseError) {
+        for (const info of stagedRemaps.values()) {
+          if (info.sourceFullPath && fs.existsSync(info.sourceFullPath)) {
+            if (!referencedPaths.has(info.sourceRelPath)) {
+              try {
+                fs.unlinkSync(info.sourceFullPath);
+              } catch {}
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Árva (lecserélt vagy törölt) képek biztonságos kitakarítása
+    cleanQuizOrphanImages(quizId);
+}
+
+/**
+ * A kvíz almappájában lévő árva (már nem használt / lecserélt / törölt) képek automatikus kitakarítása.
+ * Globális hivatkozás-ellenőrzéssel: az ÖSSZES kvíz kérdéseit és az ÖSSZES munkamenet-pillanatképet megőrzi!
  */
 function cleanQuizOrphanImages(quizId) {
   try {
     const targetDir = path.join(config.uploadsDir, 'quizzes', `quiz-${quizId}`);
     if (!fs.existsSync(targetDir)) return;
 
-    // Lekérdezzük a kvízhez jelenleg tartozó összes érvényes képfájl nevét
-    const activeQuestions = db.prepare('SELECT image_path FROM questions WHERE quiz_id = ? AND image_path IS NOT NULL').all(quizId);
-    const activeFilenames = new Set(
-      activeQuestions
-        .map(q => q.image_path ? path.basename(q.image_path) : null)
-        .filter(Boolean)
-    );
+    const quizPrefix = `/uploads/quizzes/quiz-${quizId}/`;
+    const { referencedPaths, hasParseError } = collectAllReferencedImagePaths();
 
-    // Megőrizzük a korábbi dolgozatok (sessions) pillanatképeiben szereplő képeket is (Report 15 / 2. fejezet)
-    try {
-      const sessionRows = db.prepare('SELECT quiz_snapshot_json FROM sessions WHERE quiz_id = ? AND quiz_snapshot_json IS NOT NULL').all(quizId);
-      for (const sRow of sessionRows) {
-        if (!sRow.quiz_snapshot_json) continue;
-        try {
-          const snapshot = JSON.parse(sRow.quiz_snapshot_json);
-          const snapQuestions = Array.isArray(snapshot) ? snapshot : (snapshot.questions || []);
-          if (Array.isArray(snapQuestions)) {
-            for (const sq of snapQuestions) {
-              if (sq && sq.image_path) {
-                activeFilenames.add(path.basename(sq.image_path));
-              }
+    // Ha bármelyik JSON szerkezet sérült/olvashatatlan volt, biztonsági okból nem törlünk!
+    if (hasParseError) {
+      console.warn(`Figyelmeztetés: a #${quizId} kvíz árvatakarítása kihagyva olvashatatlan JSON szerkezet miatt.`);
+      return;
+    }
+
+    const activeFilenames = new Set();
+    for (const p of referencedPaths) {
+      if (p.startsWith(quizPrefix)) {
+        activeFilenames.add(path.basename(p));
+      }
+    }
+
+    // Kompatibilitás a régi/tesztelt pillanatképekkel: az adott quiz_id saját kérdéseinek és saját session snapshotjainak basename-jeit is megőrizzük
+    const ownQuestions = db.prepare('SELECT image_path, options_json FROM questions WHERE quiz_id = ?').all(quizId);
+    for (const q of ownQuestions) {
+      for (const p of extractQuestionImagePaths(q).paths) {
+        activeFilenames.add(path.basename(p));
+      }
+    }
+    const ownSessions = db.prepare('SELECT quiz_snapshot_json FROM sessions WHERE quiz_id = ? AND quiz_snapshot_json IS NOT NULL').all(quizId);
+    for (const sRow of ownSessions) {
+      try {
+        const snapshot = JSON.parse(sRow.quiz_snapshot_json);
+        const snapQuestions = Array.isArray(snapshot) ? snapshot : (snapshot.questions || []);
+        if (Array.isArray(snapQuestions)) {
+          for (const sq of snapQuestions) {
+            for (const p of extractQuestionImagePaths(sq).paths) {
+              activeFilenames.add(path.basename(p));
             }
           }
-        } catch {}
-      }
-    } catch {}
+        }
+      } catch {}
+    }
 
     // Végigmegyünk a mappában lévő összes fizikai fájlon
     const files = fs.readdirSync(targetDir);
     for (const file of files) {
       if (!activeFilenames.has(file)) {
-        // Árva fájl: egyetlen kérdés sem hivatkozik rá, biztonságosan letöröljük
         try {
           fs.unlinkSync(path.join(targetDir, file));
         } catch (unlinkErr) {
@@ -276,16 +847,24 @@ function cleanQuizOrphanImages(quizId) {
 
 /**
  * 24 óránál régebbi, elvetett ideiglenes képfeltöltések automatikus takarítása (Report 14 / 39. pont)
+ * Az adatbázisban vagy pillanatképekben még hivatkozott temp fájlokat SZIGORÚAN megőrzi!
  */
 function cleanExpiredTempImages(maxAgeHours = 24) {
   try {
     const tempDir = path.join(config.uploadsDir, 'quizzes', 'temp');
     if (!fs.existsSync(tempDir)) return;
 
+    const { referenced, hasParseError } = collectAllReferencedTempFilenames();
+    if (hasParseError) {
+      console.warn('Figyelmeztetés: az ideiglenes képek takarítása kihagyva olvashatatlan JSON szerkezet miatt.');
+      return;
+    }
+
     const now = Date.now();
     const maxAgeMs = maxAgeHours * 60 * 60 * 1000;
     const files = fs.readdirSync(tempDir);
     for (const file of files) {
+      if (referenced.has(file)) continue; // Hivatkozott fájlt soha nem törlünk!
       const fullPath = path.join(tempDir, file);
       try {
         const stat = fs.statSync(fullPath);
@@ -302,40 +881,99 @@ function cleanExpiredTempImages(maxAgeHours = 24) {
 }
 
 /**
- * Kvízhez tartozó képek átmásolása duplikáláskor az új kvíz almappájába
+ * Kvíz kérdéseinek összes képhivatkozásának (fő kép + ABCD opcióképek + képes megoldókulcs) átírása
  */
-function copyQuizImages(originalQuizId, newQuizId) {
-  try {
-    const origDir = path.join(config.uploadsDir, 'quizzes', `quiz-${originalQuizId}`);
-    if (!fs.existsSync(origDir)) return;
+function remapQuizQuestionImagePaths(targetQuizId, pathMap) {
+  if (!pathMap || pathMap.size === 0) return;
+  const rows = db.prepare('SELECT id, image_path, options_json, correct_answer FROM questions WHERE quiz_id = ?').all(targetQuizId);
+  const updateStmt = db.prepare('UPDATE questions SET image_path = ?, options_json = ?, correct_answer = ? WHERE id = ?');
 
-    const newDir = path.join(config.uploadsDir, 'quizzes', `quiz-${newQuizId}`);
-    fs.mkdirSync(newDir, { recursive: true });
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      let nextImagePath = row.image_path;
+      let nextOptionsJson = row.options_json;
+      let nextCorrectAnswer = row.correct_answer;
+      let changed = false;
 
-    const entries = fs.readdirSync(origDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isFile()) {
-        fs.copyFileSync(path.join(origDir, entry.name), path.join(newDir, entry.name));
+      if (typeof row.image_path === 'string' && pathMap.has(row.image_path.trim())) {
+        nextImagePath = pathMap.get(row.image_path.trim());
+        changed = true;
+      }
+
+      if (row.options_json) {
+        try {
+          const parsedOpts = JSON.parse(row.options_json);
+          if (Array.isArray(parsedOpts)) {
+            let optsChanged = false;
+            const mappedOpts = parsedOpts.map(opt => {
+              if (opt && typeof opt === 'object' && typeof opt.image_path === 'string' && pathMap.has(opt.image_path.trim())) {
+                optsChanged = true;
+                return { ...opt, image_path: pathMap.get(opt.image_path.trim()) };
+              }
+              return opt;
+            });
+            if (optsChanged) {
+              nextOptionsJson = JSON.stringify(mappedOpts);
+              changed = true;
+            }
+          }
+        } catch {}
+      }
+
+      if (row.correct_answer) {
+        const remappedCorrect = remapCorrectAnswerImagePaths(row.correct_answer, pathMap);
+        if (remappedCorrect !== row.correct_answer) {
+          nextCorrectAnswer = remappedCorrect;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        updateStmt.run(nextImagePath, nextOptionsJson, nextCorrectAnswer, row.id);
       }
     }
+  });
 
-    db.prepare(`
-      UPDATE questions 
-      SET image_path = REPLACE(image_path, '/uploads/quizzes/quiz-' || ?, '/uploads/quizzes/quiz-' || ?)
-      WHERE quiz_id = ?
-    `).run(String(originalQuizId), String(newQuizId), newQuizId);
-  } catch (err) {
-    console.error(`Hiba a kvíz (#${originalQuizId} -> #${newQuizId}) képeinek másolásakor:`, err);
-  }
+  tx();
 }
 
 /**
- * Kvízhez tartozó képek almappájának törlése
+ * Kvízhez tartozó képek átmásolása duplikáláskor az új kvíz almappájába (fő kép + opcióképek + kulcs)
+ */
+function copyQuizImages(originalQuizId, newQuizId) {
+  const origDir = path.join(config.uploadsDir, 'quizzes', `quiz-${originalQuizId}`);
+  if (!fs.existsSync(origDir)) return;
+
+  const newDir = path.join(config.uploadsDir, 'quizzes', `quiz-${newQuizId}`);
+  fs.mkdirSync(newDir, { recursive: true });
+
+  const pathMap = new Map();
+  const entries = fs.readdirSync(origDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isFile()) {
+      fs.copyFileSync(path.join(origDir, entry.name), path.join(newDir, entry.name));
+      pathMap.set(
+        `/uploads/quizzes/quiz-${originalQuizId}/${entry.name}`,
+        `/uploads/quizzes/quiz-${newQuizId}/${entry.name}`
+      );
+    }
+  }
+
+  remapQuizQuestionImagePaths(newQuizId, pathMap);
+}
+
+/**
+ * Kvízhez tartozó képek biztonságos takarítása törléskor:
+ * Más kvízek vagy lezárt munkamenet-pillanatképek által hivatkozott fájlokat SZIGORÚAN megőriz!
  */
 function removeQuizImages(quizId) {
   try {
     const dir = path.join(config.uploadsDir, 'quizzes', `quiz-${quizId}`);
-    if (fs.existsSync(dir)) {
+    if (!fs.existsSync(dir)) return;
+
+    cleanQuizOrphanImages(quizId);
+    const remaining = fs.readdirSync(dir);
+    if (remaining.length === 0) {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   } catch (err) {
@@ -349,6 +987,7 @@ function removeQuizImages(quizId) {
 function createQuiz({ subject_id = 1, folder_id = null, title, subject_grade = '', default_time_limit_min = 0, questions = [] }) {
   const trimmedTitle = String(title || '').trim();
   if (!trimmedTitle) throw new Error('A teszt címe kötelező!');
+  validateQuestionsLocalImagesExist(questions);
 
   let newQuizId = null;
 
@@ -401,7 +1040,22 @@ function createQuiz({ subject_id = 1, folder_id = null, title, subject_grade = '
   });
 
   tx();
-  finalizeQuizTempImages(newQuizId);
+  try {
+    finalizeQuizTempImages(newQuizId);
+  } catch (imgErr) {
+    // Ha a képek véglegesítése I/O hibára futott, visszagörgetjük a félkész új tesztet
+    try {
+      const cleanupTx = db.transaction(() => {
+        db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(newQuizId);
+        db.prepare('DELETE FROM quizzes WHERE id = ?').run(newQuizId);
+      });
+      cleanupTx();
+      removeQuizImages(newQuizId);
+    } catch (cleanupErr) {
+      console.error(`Figyelmeztetés: félkész teszt (#${newQuizId}) kompenzáló takarítása sikertelen:`, cleanupErr.message);
+    }
+    throw imgErr;
+  }
   return getQuizById(newQuizId, false);
 }
 
@@ -411,6 +1065,10 @@ function createQuiz({ subject_id = 1, folder_id = null, title, subject_grade = '
 function updateQuiz(quizId, { subject_id, folder_id = null, title, subject_grade, default_time_limit_min, questions }) {
   const trimmedTitle = String(title || '').trim();
   if (!trimmedTitle) throw new Error('A teszt címe kötelező!');
+  validateQuestionsLocalImagesExist(questions);
+
+  // K1: Képek előkészítése és átmásolása MÉG az adatbázis-tranzakció ELŐTT
+  const { preparedQuestions, stagedRemaps, createdFiles } = prepareQuestionsImagesForQuiz(quizId, questions);
 
   const tx = db.transaction(() => {
     const updateQuizStmt = db.prepare(`
@@ -462,8 +1120,8 @@ function updateQuiz(quizId, { subject_id, folder_id = null, title, subject_grade
       )
     `);
 
-    if (Array.isArray(questions) && questions.length > 0) {
-      questions.forEach((q, idx) => {
+    if (Array.isArray(preparedQuestions) && preparedQuestions.length > 0) {
+      preparedQuestions.forEach((q, idx) => {
         const order = idx + 1;
         const optionsJson = Array.isArray(q.options) ? JSON.stringify(q.options) : (q.options_json || '[]');
         const qType = q.question_type || 'ABCD';
@@ -534,8 +1192,15 @@ function updateQuiz(quizId, { subject_id, folder_id = null, title, subject_grade
     }
   });
 
-  tx();
-  finalizeQuizTempImages(quizId);
+  try {
+    tx();
+  } catch (dbErr) {
+    for (const f of createdFiles) {
+      try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch {}
+    }
+    throw dbErr;
+  }
+  cleanupPreparedSources(quizId, stagedRemaps);
   return getQuizById(quizId, false);
 }
 
@@ -567,7 +1232,19 @@ function duplicateQuiz(quizId, customTitle = null) {
     }))
   });
 
-  copyQuizImages(original.id, newQuiz.id);
+  try {
+    copyQuizImages(original.id, newQuiz.id);
+  } catch (copyErr) {
+    try {
+      const cleanupTx = db.transaction(() => {
+        db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(newQuiz.id);
+        db.prepare('DELETE FROM quizzes WHERE id = ?').run(newQuiz.id);
+      });
+      cleanupTx();
+      removeQuizImages(newQuiz.id);
+    } catch {}
+    throw copyErr;
+  }
   return getQuizById(newQuiz.id, false);
 }
 
@@ -575,32 +1252,28 @@ function duplicateQuiz(quizId, customTitle = null) {
  * Több forráskvízhez tartozó képek átmásolása az új kvíz almappájába (névütközés-mentesen)
  */
 function copyMergedQuizImages(sourceQuizIds, newQuizId) {
-  try {
-    const newDir = path.join(config.uploadsDir, 'quizzes', `quiz-${newQuizId}`);
-    fs.mkdirSync(newDir, { recursive: true });
+  const newDir = path.join(config.uploadsDir, 'quizzes', `quiz-${newQuizId}`);
+  fs.mkdirSync(newDir, { recursive: true });
 
-    for (const srcId of sourceQuizIds) {
-      const origDir = path.join(config.uploadsDir, 'quizzes', `quiz-${srcId}`);
-      if (fs.existsSync(origDir)) {
-        const entries = fs.readdirSync(origDir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isFile()) {
-            const destName = `src_${srcId}_${entry.name}`;
-            fs.copyFileSync(path.join(origDir, entry.name), path.join(newDir, destName));
-
-            // Frissítjük az új kvíz kérdéseiben a hivatkozást
-            db.prepare(`
-              UPDATE questions 
-              SET image_path = REPLACE(image_path, '/uploads/quizzes/quiz-' || ? || '/' || ?, '/uploads/quizzes/quiz-' || ? || '/' || ?)
-              WHERE quiz_id = ?
-            `).run(String(srcId), entry.name, String(newQuizId), destName, newQuizId);
-          }
+  const pathMap = new Map();
+  for (const srcId of sourceQuizIds) {
+    const origDir = path.join(config.uploadsDir, 'quizzes', `quiz-${srcId}`);
+    if (fs.existsSync(origDir)) {
+      const entries = fs.readdirSync(origDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile()) {
+          const destName = `src_${srcId}_${entry.name}`;
+          fs.copyFileSync(path.join(origDir, entry.name), path.join(newDir, destName));
+          pathMap.set(
+            `/uploads/quizzes/quiz-${srcId}/${entry.name}`,
+            `/uploads/quizzes/quiz-${newQuizId}/${destName}`
+          );
         }
       }
     }
-  } catch (err) {
-    console.error(`Hiba a kvízek (${sourceQuizIds.join(', ')} -> #${newQuizId}) képeinek másolásakor:`, err);
   }
+
+  remapQuizQuestionImagePaths(newQuizId, pathMap);
 }
 
 /**
@@ -669,7 +1342,19 @@ function mergeQuizzes(quizId1, quizId2, options = {}) {
     questions: combinedQuestions
   });
 
-  copyMergedQuizImages([q1.id, q2.id], newQuiz.id);
+  try {
+    copyMergedQuizImages([q1.id, q2.id], newQuiz.id);
+  } catch (copyErr) {
+    try {
+      const cleanupTx = db.transaction(() => {
+        db.prepare('DELETE FROM questions WHERE quiz_id = ?').run(newQuiz.id);
+        db.prepare('DELETE FROM quizzes WHERE id = ?').run(newQuiz.id);
+      });
+      cleanupTx();
+      removeQuizImages(newQuiz.id);
+    } catch {}
+    throw copyErr;
+  }
   return getQuizById(newQuiz.id, false);
 }
 
@@ -870,63 +1555,171 @@ function moveFolder(folderId, targetParentId) {
 }
 
 /**
- * Mappák egyéni megjelenítési sorrendjének mentése (Drag & Drop rendezéshez)
- * @param {number[]} orderedFolderIds - A kívánt sorrendben lévő mappaazonosítók
- * @returns {{ success: boolean, count: number }}
+ * Mappák egyéni megjelenítési sorrendjének szigorú, tranzakciós mentése (Drag & Drop)
+ * Ellenőrzi az azonosítók egyediségét, létezését, közös szülőmappáját és párhuzamos módosításokat (409 ORDER_CONFLICT).
+ * @param {number[]} orderedFolderIds - A kívánt sorrendben lévő testvérmappa-azonosítók
+ * @param {{ parentId?: number|null, expectedOrderIds?: number[] }} options
+ * @returns {{ success: boolean, count: number, orderedIds: number[] }}
  */
-function reorderFolders(orderedFolderIds = []) {
+function reorderFolders(orderedFolderIds = [], options = {}) {
   if (!Array.isArray(orderedFolderIds) || orderedFolderIds.length === 0) {
-    throw new Error('A rendezendő mappák listája nem lehet üres!');
+    throw Object.assign(new Error('A rendezendő mappák listája nem lehet üres!'), { status: 400, code: 'INVALID_ORDER_LIST' });
   }
 
   const cleanIds = [];
+  const seen = new Set();
   for (const rawId of orderedFolderIds) {
     const id = Number(rawId);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw new Error('Érvénytelen mappaazonosító a sorrendlistában!');
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      throw Object.assign(new Error('Érvénytelen mappaazonosító a sorrendlistában!'), { status: 400, code: 'INVALID_FOLDER_ID' });
     }
-    if (!cleanIds.includes(id)) cleanIds.push(id);
+    if (seen.has(id)) {
+      throw Object.assign(new Error('Duplikált mappaazonosító a sorrendlistában!'), { status: 400, code: 'DUPLICATE_FOLDER_ID' });
+    }
+    seen.add(id);
+    cleanIds.push(id);
   }
 
-  const updateStmt = db.prepare('UPDATE quiz_folders SET sort_order = ? WHERE id = ?');
-  const tx = db.transaction((ids) => {
-    ids.forEach((id, idx) => {
-      updateStmt.run(idx + 1, id);
+  const hasExplicitParent = options && options.parentId !== undefined;
+  const normalizedParentId = hasExplicitParent
+    ? ((options.parentId === null || options.parentId === '' || options.parentId === 'root') ? null : Number(options.parentId))
+    : undefined;
+
+  let expectedIds = null;
+  if (options && options.expectedOrderIds !== undefined) {
+    if (!Array.isArray(options.expectedOrderIds)) {
+      throw Object.assign(new Error('Az elvárt alap-sorrendlistának tömbnek kell lennie!'), { status: 400, code: 'INVALID_EXPECTED_ORDER' });
+    }
+    expectedIds = [];
+    for (const rawExp of options.expectedOrderIds) {
+      const n = Number(rawExp);
+      if (!Number.isSafeInteger(n) || n <= 0) {
+        throw Object.assign(new Error('Érvénytelen azonosító az elvárt alap-sorrendlistában!'), { status: 400, code: 'INVALID_EXPECTED_ORDER' });
+      }
+      expectedIds.push(n);
+    }
+  }
+
+  const tx = db.transaction(() => {
+    const placeholders = cleanIds.map(() => '?').join(',');
+    const foundRows = db.prepare(`SELECT id, parent_id FROM quiz_folders WHERE id IN (${placeholders})`).all(...cleanIds);
+    if (foundRows.length !== cleanIds.length) {
+      throw Object.assign(new Error('A sorrendlistában szereplő egyik mappa már nem létezik!'), { status: 409, code: 'ORDER_CONFLICT' });
+    }
+
+    const scopeParentId = hasExplicitParent ? normalizedParentId : (foundRows[0].parent_id === null ? null : Number(foundRows[0].parent_id));
+    for (const row of foundRows) {
+      const rowParent = row.parent_id === null ? null : Number(row.parent_id);
+      if (rowParent !== scopeParentId) {
+        throw Object.assign(new Error('A sorrendlista eltérő mappaszinthez tartozó elemeket tartalmaz, vagy közben áthelyeztek egy mappát!'), { status: 409, code: 'ORDER_CONFLICT' });
+      }
+    }
+
+    const currentSiblings = getFolders(scopeParentId).map(f => Number(f.id));
+    if (currentSiblings.length !== cleanIds.length || !currentSiblings.every(id => seen.has(id))) {
+      throw Object.assign(new Error('A mappák listája hiányos vagy időközben megváltozott (hozzáadás, törlés vagy áthelyezés történt). A nézet frissítése szükséges!'), { status: 409, code: 'ORDER_CONFLICT' });
+    }
+    if (expectedIds !== null) {
+      if (expectedIds.length !== currentSiblings.length || expectedIds.some((id, idx) => id !== currentSiblings[idx])) {
+        throw Object.assign(new Error('A mappák sorrendjét időközben egy másik munkaállomásról módosították!'), { status: 409, code: 'ORDER_CONFLICT' });
+      }
+    }
+
+    const updateStmt = db.prepare('UPDATE quiz_folders SET sort_order = ? WHERE id = ?');
+    let updatedCount = 0;
+    cleanIds.forEach((id, idx) => {
+      const info = updateStmt.run(idx + 1, id);
+      updatedCount += info.changes;
     });
+
+    return { success: true, count: updatedCount, orderedIds: cleanIds };
   });
 
-  tx(cleanIds);
-  return { success: true, count: cleanIds.length };
+  return tx();
 }
 
 /**
- * Tesztek egyéni megjelenítési sorrendjének mentése (mappán belüli Drag & Drop rendezéshez)
+ * Tesztek egyéni megjelenítési sorrendjének szigorú, tranzakciós mentése (mappán belüli Drag & Drop)
+ * Ellenőrzi az azonosítók egyediségét, létezését, nem törölt állapotát, közös mappáját és párhuzamos módosításokat (409 ORDER_CONFLICT).
  * @param {number[]} orderedQuizIds - A kívánt sorrendben lévő tesztazonosítók
- * @returns {{ success: boolean, count: number }}
+ * @param {{ folderId?: number|null, expectedOrderIds?: number[] }} options
+ * @returns {{ success: boolean, count: number, orderedIds: number[] }}
  */
-function reorderQuizzes(orderedQuizIds = []) {
+function reorderQuizzes(orderedQuizIds = [], options = {}) {
   if (!Array.isArray(orderedQuizIds) || orderedQuizIds.length === 0) {
-    throw new Error('A rendezendő tesztek listája nem lehet üres!');
+    throw Object.assign(new Error('A rendezendő tesztek listája nem lehet üres!'), { status: 400, code: 'INVALID_ORDER_LIST' });
   }
 
   const cleanIds = [];
+  const seen = new Set();
   for (const rawId of orderedQuizIds) {
     const id = Number(rawId);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw new Error('Érvénytelen tesztazonosító a sorrendlistában!');
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      throw Object.assign(new Error('Érvénytelen tesztazonosító a sorrendlistában!'), { status: 400, code: 'INVALID_QUIZ_ID' });
     }
-    if (!cleanIds.includes(id)) cleanIds.push(id);
+    if (seen.has(id)) {
+      throw Object.assign(new Error('Duplikált tesztazonosító a sorrendlistában!'), { status: 400, code: 'DUPLICATE_QUIZ_ID' });
+    }
+    seen.add(id);
+    cleanIds.push(id);
   }
 
-  const updateStmt = db.prepare('UPDATE quizzes SET sort_order = ? WHERE id = ?');
-  const tx = db.transaction((ids) => {
-    ids.forEach((id, idx) => {
-      updateStmt.run(idx + 1, id);
+  const hasExplicitFolder = options && options.folderId !== undefined;
+  const normalizedFolderId = hasExplicitFolder
+    ? ((options.folderId === null || options.folderId === '' || options.folderId === 'root') ? null : Number(options.folderId))
+    : undefined;
+
+  let expectedIds = null;
+  if (options && options.expectedOrderIds !== undefined) {
+    if (!Array.isArray(options.expectedOrderIds)) {
+      throw Object.assign(new Error('Az elvárt alap-sorrendlistának tömbnek kell lennie!'), { status: 400, code: 'INVALID_EXPECTED_ORDER' });
+    }
+    expectedIds = [];
+    for (const rawExp of options.expectedOrderIds) {
+      const n = Number(rawExp);
+      if (!Number.isSafeInteger(n) || n <= 0) {
+        throw Object.assign(new Error('Érvénytelen azonosító az elvárt alap-sorrendlistában!'), { status: 400, code: 'INVALID_EXPECTED_ORDER' });
+      }
+      expectedIds.push(n);
+    }
+  }
+
+  const tx = db.transaction(() => {
+    const placeholders = cleanIds.map(() => '?').join(',');
+    const foundRows = db.prepare(`SELECT id, folder_id FROM quizzes WHERE COALESCE(is_deleted, 0) = 0 AND id IN (${placeholders})`).all(...cleanIds);
+    if (foundRows.length !== cleanIds.length) {
+      throw Object.assign(new Error('A sorrendlistában szereplő egyik teszt már nem létezik vagy törölve lett!'), { status: 409, code: 'ORDER_CONFLICT' });
+    }
+
+    const scopeFolderId = hasExplicitFolder ? normalizedFolderId : (foundRows[0].folder_id === null ? null : Number(foundRows[0].folder_id));
+    for (const row of foundRows) {
+      const rowFolder = row.folder_id === null ? null : Number(row.folder_id);
+      if (rowFolder !== scopeFolderId) {
+        throw Object.assign(new Error('A sorrendlista eltérő mappához tartozó teszteket tartalmaz, vagy közben áthelyeztek egy tesztet!'), { status: 409, code: 'ORDER_CONFLICT' });
+      }
+    }
+
+    const currentSiblings = getQuizzes(null, null, scopeFolderId).map(q => Number(q.id));
+    if (currentSiblings.length !== cleanIds.length || !currentSiblings.every(id => seen.has(id))) {
+      throw Object.assign(new Error('A mappa tesztlistája hiányos vagy időközben megváltozott (új teszt, törlés vagy áthelyezés történt). A nézet frissítése szükséges!'), { status: 409, code: 'ORDER_CONFLICT' });
+    }
+    if (expectedIds !== null) {
+      if (expectedIds.length !== currentSiblings.length || expectedIds.some((id, idx) => id !== currentSiblings[idx])) {
+        throw Object.assign(new Error('A tesztek sorrendjét időközben egy másik munkaállomásról módosították!'), { status: 409, code: 'ORDER_CONFLICT' });
+      }
+    }
+
+    const updateStmt = db.prepare('UPDATE quizzes SET sort_order = ? WHERE id = ? AND COALESCE(is_deleted, 0) = 0');
+    let updatedCount = 0;
+    cleanIds.forEach((id, idx) => {
+      const info = updateStmt.run(idx + 1, id);
+      updatedCount += info.changes;
     });
+
+    return { success: true, count: updatedCount, orderedIds: cleanIds };
   });
 
-  tx(cleanIds);
-  return { success: true, count: cleanIds.length };
+  return tx();
 }
 
 /**
@@ -964,15 +1757,20 @@ function saveSingleQuestion(quizId, questionData = {}) {
   const qType = questionData.question_type || 'ABCD';
   const qText = String(questionData.question_text || '').trim();
   if (!qText) throw new Error('A kérdés szövegének megadása kötelező!');
+  validateQuestionsLocalImagesExist([questionData]);
 
-  const instructions = String(questionData.instructions || '').trim();
-  const imagePath = questionData.image_path ? String(questionData.image_path).trim() : null;
-  const optionsJson = Array.isArray(questionData.options)
-    ? JSON.stringify(questionData.options)
-    : (questionData.options_json || '[]');
-  const correctAnswer = String(questionData.correct_answer || '').trim();
-  const explanation = String(questionData.explanation || '').trim();
-  const points = Number(questionData.points) || 1.0;
+  // K1: Csak a célzott kérdés képeit készítjük elő, MÉG a DB tranzakció ELŐTT
+  const { preparedQuestions, stagedRemaps, createdFiles } = prepareQuestionsImagesForQuiz(qzId, [questionData]);
+  const preparedQ = preparedQuestions[0];
+
+  const instructions = String(preparedQ.instructions || '').trim();
+  const imagePath = preparedQ.image_path ? String(preparedQ.image_path).trim() : null;
+  const optionsJson = Array.isArray(preparedQ.options)
+    ? JSON.stringify(preparedQ.options)
+    : (preparedQ.options_json || '[]');
+  const correctAnswer = String(preparedQ.correct_answer || '').trim();
+  const explanation = String(preparedQ.explanation || '').trim();
+  const points = Number(preparedQ.points) || 1.0;
 
   let savedId = existingQuestionId;
 
@@ -1007,8 +1805,15 @@ function saveSingleQuestion(quizId, questionData = {}) {
     db.prepare('UPDATE quizzes SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(qzId);
   });
 
-  tx();
-  finalizeQuizTempImages(qzId);
+  try {
+    tx();
+  } catch (dbErr) {
+    for (const f of createdFiles) {
+      try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch {}
+    }
+    throw dbErr;
+  }
+  cleanupPreparedSources(qzId, stagedRemaps);
 
   const savedRow = db.prepare(`
     SELECT id, quiz_id, question_order, question_type, question_text, instructions,
@@ -1045,6 +1850,7 @@ module.exports = {
   reorderFolders,
   deleteFolder,
   cleanExpiredTempImages,
-  cleanQuizOrphanImages
+  cleanQuizOrphanImages,
+  validateAbcdQuestionsIntegrity
 };
 

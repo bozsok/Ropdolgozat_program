@@ -456,6 +456,10 @@ console.log('✓ Az elavult ideiglenes feltöltések automatikus takarítása si
 
 // 13. TESZT: Snapshot integritás és képvédelem a kvíz módosítása / törlése után (Report 15 / 2. fejezet)
 console.log('\n--- 13. TESZT: Snapshot integritás és képvédelem (Report 15 / 2. fejezet) ---');
+const mockOrigImgDir = path.join(config.uploadsDir, 'quizzes', 'quiz-9999');
+fs.mkdirSync(mockOrigImgDir, { recursive: true });
+fs.writeFileSync(path.join(mockOrigImgDir, 'snap_img.png'), 'mock_image_bytes');
+
 const snapQuiz = quizRepo.createQuiz({
   subject_id: 1,
   title: 'Snapshot Teszt Kvíz',

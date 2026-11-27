@@ -29,12 +29,19 @@ function normalizeText(str) {
 }
 
 /**
- * Válasz(ok) parszolása tömbbé (többválasztós JSON tömb vagy egyetlen string esetén is)
+ * Válasz(ok) parszolása tömbbé (többválasztós JSON tömb vagy egyetlen string esetén is).
+ * A2 védelem: ha a teljes nyers string pontosan megegyezik egy létező ABCD opcióval
+ * (pl. szó szerinti '["x","y"]' Python-lista felirat), akkor 1 elemként tartjuk meg, nem bontjuk szét!
  */
-function parseAnswerList(raw) {
+function parseAnswerList(raw, options = []) {
   if (raw === null || raw === undefined) return [];
   const str = String(raw).trim();
   if (!str) return [];
+  if (Array.isArray(options) && options.length > 0) {
+    if (options.some(opt => getOptionValue(opt) === str)) {
+      return [str];
+    }
+  }
   if (str.startsWith('[')) {
     try {
       const parsed = JSON.parse(str);
@@ -49,28 +56,95 @@ function parseAnswerList(raw) {
 }
 
 /**
- * Eldönti, hogy egy kérdéshez több helyes ABCD válasz tartozik-e
+ * Eldönti, hogy egy kérdéshez több egyedi helyes ABCD válasz tartozik-e (A2: duplikált kulcsok deduplikálásával,
+ * kizárólag a ténylegesen feloldható exact: opciókat számolva)
  */
-function isMultipleChoiceCorrectAnswer(questionType, correctAnswer) {
+function isMultipleChoiceCorrectAnswer(questionType, correctAnswer, options = []) {
   if (questionType !== 'ABCD') return false;
-  return parseAnswerList(correctAnswer).length > 1;
+  const items = parseAnswerList(correctAnswer, options);
+  if (items.length <= 1) return false;
+  if (Array.isArray(options) && options.length > 0) {
+    const uniqueExact = new Set(
+      items
+        .map(it => resolveAbcdCanonical(it, options))
+        .filter(v => v && v.startsWith('exact:'))
+    );
+    return uniqueExact.size > 1;
+  }
+  return new Set(items).size > 1;
 }
 
 /**
- * ABCD opció normalizálása összehasonlításhoz (betűjel A-F feloldással együtt, ha van options)
+ * ABCD opció normalizálása összehasonlításhoz (kétlépcsős, kis-/nagybetű-tudatos feloldás):
+ * 1. Pontos, kis- és nagybetű-érzékeny egyezés a kérdés opcióival
+ *    (pl. ha külön opcióként létezik "Alpha" és "ALPHA", azok NEM olvadnak össze!).
+ * 2. Egyértelmű kisbetűs tartalék: csak akkor használjuk, ha pontosan 1 opció illik rá
+ *    (nincs kis-/nagybetűs ütközés két külön opció között).
+ * 3. Régi betűjeles (A-F) pozíció-feloldás: kizárólag akkor fut kompatibilitási tartalékként,
+ *    ha az adott betű nem létezik önálló opcióértékként a kérdésben.
  */
 function resolveAbcdCanonical(val, options = []) {
-  const lower = String(val ?? '').trim().toLowerCase();
-  if (!lower) return '';
+  const trimmed = String(val ?? '').trim();
+  if (!trimmed) return '';
+  const lower = trimmed.toLowerCase();
+
   if (Array.isArray(options) && options.length > 0) {
+    const exactValues = options.map(o => getOptionValue(o));
+
+    // 1. Pontos (case-sensitive) egyezés egy opcióval
+    const exactMatch = exactValues.find(v => v === trimmed);
+    if (exactMatch !== undefined) {
+      return `exact:${exactMatch}`;
+    }
+
+    // 2. Kisbetűs tartalék, de kizárólag akkor, ha pontosan 1 opcióra illik (ütközésmentes)
+    const ciMatches = exactValues.filter(v => v.toLowerCase() === lower);
+    if (ciMatches.length === 1) {
+      return `exact:${ciMatches[0]}`;
+    }
+    if (ciMatches.length > 1) {
+      // Kétértelmű kis-/nagybetűs egyezés (pl. Alpha és ALPHA mellett "alpha" érkezett)
+      return `raw:${trimmed}`;
+    }
+
+    // 3. Régi betűjeles (A-F) pozíció-feloldás (csak ha nem önálló opció!)
     const letterMap = { 'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5 };
     const idx = letterMap[lower];
-    if (idx !== undefined && options[idx] !== undefined) {
-      const optVal = getOptionValue(options[idx]).toLowerCase();
-      if (optVal) return optVal;
+    if (idx !== undefined && exactValues[idx]) {
+      return `exact:${exactValues[idx]}`;
     }
+
+    return `raw:${trimmed}`;
   }
+
   return lower;
+}
+
+/**
+ * ABCD megoldókulcs feloldása megjelenítéshez/visszajelzéshez a kérdés eredeti (keverés előtti) opciólistáján.
+ * Így kevert opciók mellett a régi betűjeles ('A'..'F') kulcs is pontosan a megfelelő opciót jelöli ki (A2 védelem).
+ */
+function resolveAbcdDisplayAnswer(questionType, rawCorrect, options = []) {
+  if (questionType !== 'ABCD' || rawCorrect === null || rawCorrect === undefined) {
+    return rawCorrect;
+  }
+  if (!Array.isArray(options) || options.length === 0) {
+    return rawCorrect;
+  }
+  const items = parseAnswerList(rawCorrect, options);
+  if (items.length === 0) return rawCorrect;
+
+  const resolvedItems = items.map(item => {
+    const canon = resolveAbcdCanonical(item, options);
+    if (canon.startsWith('exact:')) return canon.slice(6);
+    if (canon.startsWith('raw:')) return canon.slice(4);
+    return item;
+  });
+
+  if (resolvedItems.length === 1) {
+    return resolvedItems[0];
+  }
+  return JSON.stringify(resolvedItems);
 }
 
 /**
@@ -96,12 +170,19 @@ function evaluateAnswer(questionType, submittedAnswer, correctAnswer, maxPoints 
 
   // 1. Feleletválasztós (ABCD) kiértékelése
   if (questionType === 'ABCD') {
-    const acceptedAnswers = parseAnswerList(rawCorrect);
+    const acceptedAnswers = parseAnswerList(rawCorrect, options);
+    const hasOptionsList = Array.isArray(options) && options.length > 0;
 
     // Több helyes válasz (többválasztós ABCD): SZIGORÚ (minden vagy semmi) halmazegyezés
+    // A1: Többválasztós módban a beküldött JSON tömböt mindig listaként bontjuk fel, sorrendtől függetlenül!
     if (acceptedAnswers.length > 1) {
       const submittedAnswers = parseAnswerList(rawSubmitted);
-      const acceptedSet = new Set(acceptedAnswers.map(ans => resolveAbcdCanonical(ans, options)).filter(Boolean));
+      const resolvedAccepted = acceptedAnswers.map(ans => resolveAbcdCanonical(ans, options)).filter(Boolean);
+      // A3: Ha van opciólista, de bármelyik megoldókulcs-elem nem oldható fel egyértelműen létező opcióra (raw:), nem adhat hamis találatot
+      if (hasOptionsList && resolvedAccepted.some(v => !v.startsWith('exact:'))) {
+        return { eval_status: 'WRONG', points_earned: 0.0, is_correct: 0 };
+      }
+      const acceptedSet = new Set(resolvedAccepted);
       const submittedSet = new Set(submittedAnswers.map(ans => resolveAbcdCanonical(ans, options)).filter(Boolean));
 
       const isMatch = acceptedSet.size > 0
@@ -115,30 +196,15 @@ function evaluateAnswer(questionType, submittedAnswer, correctAnswer, maxPoints 
       };
     }
 
-    // Egyetlen helyes válasz (hagyományos ABCD)
-    let isMatch = acceptedAnswers.some(ans => ans.toLowerCase() === rawSubmitted.toLowerCase());
-
-    // Kompatibilitási fallback: ha a correctAnswer betűjel (pl. 'A'-'F'), és van options tömb
-    if (!isMatch && Array.isArray(options) && options.length > 0) {
-      const letterMap = { 'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5 };
-      const subLower = rawSubmitted.toLowerCase();
-      acceptedAnswers.forEach(ans => {
-        const idx = letterMap[ans.toLowerCase()];
-        const optVal = idx !== undefined && options[idx] !== undefined ? getOptionValue(options[idx]) : '';
-        if (optVal && optVal.toLowerCase() === subLower) {
-          isMatch = true;
-        }
+    // Egyetlen helyes válasz (hagyományos ABCD) – azonos, ütközésmentes feloldással
+    const canonicalSubmitted = resolveAbcdCanonical(rawSubmitted, options);
+    const isMatch = Boolean(canonicalSubmitted)
+      && (!hasOptionsList || canonicalSubmitted.startsWith('exact:'))
+      && acceptedAnswers.some(ans => {
+        const canonicalCorrect = resolveAbcdCanonical(ans, options);
+        if (hasOptionsList && !canonicalCorrect.startsWith('exact:')) return false;
+        return canonicalCorrect === canonicalSubmitted;
       });
-      // Vagy fordítva: ha a diák betűjelet küldött be, de a correct_answer a szöveg/kép
-      const subIdx = letterMap[subLower];
-      const subOptVal = subIdx !== undefined && options[subIdx] !== undefined ? getOptionValue(options[subIdx]) : '';
-      if (!isMatch && subOptVal) {
-        const optLower = subOptVal.toLowerCase();
-        if (acceptedAnswers.some(ans => ans.toLowerCase() === optLower)) {
-          isMatch = true;
-        }
-      }
-    }
 
     return {
       eval_status: isMatch ? 'CORRECT' : 'WRONG',
@@ -248,6 +314,8 @@ module.exports = {
   getOptionValue,
   parseAnswerList,
   isMultipleChoiceCorrectAnswer,
+  resolveAbcdCanonical,
+  resolveAbcdDisplayAnswer,
   normalizeText,
   evaluateAnswer,
   calculateGrade,

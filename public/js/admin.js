@@ -1209,17 +1209,19 @@
           }
         }
 
+        const abcdAccepted = parseMultiAnswerValues(q.correct_answer, opts);
+        const resolvedCorrectSet = new Set(
+          abcdAccepted
+            .map(ans => resolveAbcdOptionValueClient(ans, opts))
+            .filter(Boolean)
+        );
+
         opts.forEach((optRaw, optIdx) => {
           const optObj = normalizeOptionItem(optRaw);
           const letter = letters[optIdx] || String(optIdx + 1);
           const optRow = document.createElement('div');
 
-          const isCorrectOpt = acceptedAnswers.some(ans =>
-            ans.toLowerCase() === letter.toLowerCase() ||
-            (optObj.value && ans.toLowerCase() === optObj.value.toLowerCase()) ||
-            (optObj.text && ans.toLowerCase() === optObj.text.toLowerCase()) ||
-            (optObj.image_path && ans.toLowerCase() === optObj.image_path.toLowerCase())
-          );
+          const isCorrectOpt = Boolean(optObj.value) && resolvedCorrectSet.has(optObj.value);
 
           const contentHtml = optObj.image_path
             ? `<span class="summary-answer-with-img"><img src="${escapeHtml(optObj.image_path)}" alt="Opció képe" class="summary-answer-thumb">${optObj.text ? `<span>${formatCode(optObj.text)}</span>` : ''}</span>`
@@ -1818,26 +1820,47 @@
   /**
    * Tesztek betöltése (Tesztszerkesztő)
    */
+  let quizzesLoadSeq = 0;
+  let isReorderingFolders = false;
+  let isReorderingQuizzes = false;
+
   /**
    * Tesztek és mappák betöltése (Tesztszerkesztő hierarchikus nézet)
+   * Generációszámlálóval védve a gyors A -> B -> A mappaváltások ellen.
    */
   async function loadQuizzes(targetFolderId = currentFolderId) {
-    currentFolderId = (targetFolderId !== undefined) ? targetFolderId : currentFolderId;
+    const requestedFolderId = (targetFolderId !== undefined) ? targetFolderId : currentFolderId;
+    const myLoadSeq = ++quizzesLoadSeq;
+    // Betöltés közben tiltjuk a régi kártyák húzását, hogy ne készülhessen elavult sorrendkérés
+    if (quizzesListContainer) {
+      quizzesListContainer.querySelectorAll('.folder-card, .quiz-card').forEach(el => el.setAttribute('draggable', 'false'));
+    }
     try {
-      const folderParam = (currentFolderId === null || currentFolderId === undefined) ? 'root' : currentFolderId;
+      const folderParam = (requestedFolderId === null || requestedFolderId === undefined) ? 'root' : requestedFolderId;
 
       // 1. Almappák és morzsamenü lekérése
       const folderRes = await fetch(`/api/admin/quiz-folders?parentId=${folderParam}`);
+      if (!folderRes.ok) throw new Error(`Mappák lekérése sikertelen (HTTP ${folderRes.status})`);
       const folderData = await folderRes.json();
-      const currentFolders = folderData.folders || [];
-      currentBreadcrumbs = folderData.breadcrumbs || [];
+      if (myLoadSeq !== quizzesLoadSeq) return;
+      const currentFolders = Array.isArray(folderData.folders) ? folderData.folders : [];
+      const fetchedBreadcrumbs = Array.isArray(folderData.breadcrumbs) ? folderData.breadcrumbs : [];
 
       // 2. Kvízek lekérése az aktuális mappában
       const quizRes = await fetch(`/api/admin/quizzes?folderId=${folderParam}`);
-      quizzesList = await quizRes.json();
+      if (!quizRes.ok) throw new Error(`Tesztek lekérése sikertelen (HTTP ${quizRes.status})`);
+      const fetchedQuizzes = await quizRes.json();
+      if (myLoadSeq !== quizzesLoadSeq) return;
+      if (!Array.isArray(fetchedQuizzes)) throw new Error('Érvénytelen tesztlista-formátum érkezett a szervertől');
 
       // 3. Dolgozatindító modál legördülő frissítése az összes teszttel
       await updateStartSessionQuizOptions(true);
+      if (myLoadSeq !== quizzesLoadSeq) return;
+
+      // Csak az aktuális, megerősített generációnál véglegesítjük a nézet állapotát!
+      currentFolderId = requestedFolderId;
+      currentBreadcrumbs = fetchedBreadcrumbs;
+      quizzesList = fetchedQuizzes;
 
       // 4. Morzsamenü és navigáció kirajzolása
       renderBreadcrumbs();
@@ -1846,7 +1869,15 @@
       renderQuizGrid(currentFolders, quizzesList);
 
     } catch (err) {
+      if (myLoadSeq !== quizzesLoadSeq) return;
+      // S2: Ha a betöltés sikertelen és még ez az aktuális generáció, állítsuk vissza a látható régi kártyák húzhatóságát!
+      if (quizzesListContainer) {
+        quizzesListContainer.querySelectorAll('.folder-card, .quiz-card').forEach(el => el.setAttribute('draggable', 'true'));
+      }
       console.error('Hiba a tesztek és mappák betöltésekor:', err);
+      if (typeof showToast === 'function') {
+        showToast('Nem sikerült betölteni a mappát. Kérlek próbáld újra!', 'error');
+      }
     }
   }
 
@@ -2125,7 +2156,7 @@
         `;
 
         card.addEventListener('dragstart', (e) => {
-          if (e.target && (e.target.closest('button') || e.target.closest('input'))) {
+          if (isReorderingFolders || (e.target && (e.target.closest('button') || e.target.closest('input')))) {
             e.preventDefault();
             return;
           }
@@ -2169,22 +2200,40 @@
           const newOrderKey = newOrderIds.join(',');
           if (!newOrderKey || newOrderKey === initialFolderOrderKey) return;
 
+          const expectedOrderIds = initialFolderOrderKey
+            ? initialFolderOrderKey.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0)
+            : [];
+          const opFolderId = currentFolderId;
+          const opLoadSeq = quizzesLoadSeq;
+
+          isReorderingFolders = true;
           try {
             const res = await fetch('/api/admin/quiz-folders/reorder', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ folderIds: newOrderIds })
+              body: JSON.stringify({
+                folderIds: newOrderIds,
+                parentId: opFolderId,
+                expectedOrderIds
+              })
             });
             const data = await res.json();
+            if (quizzesLoadSeq !== opLoadSeq || currentFolderId !== opFolderId) return;
             if (res.ok && data.success) {
               showToast('Mappák sorrendje elmentve!', 'success');
             } else {
-              showAdminAlert('⚠️ Sorrend mentési hiba', (data && data.error) || 'Nem sikerült elmenteni a mappák sorrendjét!');
+              showAdminAlert(
+                res.status === 409 ? '⚠️ Sorrend-ütközés' : '⚠️ Sorrend mentési hiba',
+                (data && data.error) || 'Nem sikerült elmenteni a mappák sorrendjét!'
+              );
               await loadQuizzes(currentFolderId);
             }
           } catch (err) {
+            if (quizzesLoadSeq !== opLoadSeq || currentFolderId !== opFolderId) return;
             showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a mappák sorrendjének mentésekor!');
             await loadQuizzes(currentFolderId);
+          } finally {
+            isReorderingFolders = false;
           }
         });
 
@@ -2276,7 +2325,7 @@
         `;
 
         card.addEventListener('dragstart', (e) => {
-          if (e.target && e.target.closest('button')) {
+          if (isReorderingQuizzes || (e.target && e.target.closest('button'))) {
             e.preventDefault();
             return;
           }
@@ -2320,22 +2369,40 @@
           const newOrderKey = newOrderIds.join(',');
           if (!newOrderKey || newOrderKey === initialQuizOrderKey) return;
 
+          const expectedOrderIds = initialQuizOrderKey
+            ? initialQuizOrderKey.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0)
+            : [];
+          const opFolderId = currentFolderId;
+          const opLoadSeq = quizzesLoadSeq;
+
+          isReorderingQuizzes = true;
           try {
             const res = await fetch('/api/admin/quizzes/reorder', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ quizIds: newOrderIds })
+              body: JSON.stringify({
+                quizIds: newOrderIds,
+                folderId: opFolderId,
+                expectedOrderIds
+              })
             });
             const data = await res.json();
+            if (quizzesLoadSeq !== opLoadSeq || currentFolderId !== opFolderId) return;
             if (res.ok && data.success) {
               showToast('Tesztek sorrendje elmentve!', 'success');
             } else {
-              showAdminAlert('⚠️ Sorrend mentési hiba', (data && data.error) || 'Nem sikerült elmenteni a sorrendet!');
+              showAdminAlert(
+                res.status === 409 ? '⚠️ Sorrend-ütközés' : '⚠️ Sorrend mentési hiba',
+                (data && data.error) || 'Nem sikerült elmenteni a sorrendet!'
+              );
               await loadQuizzes(currentFolderId);
             }
           } catch (err) {
+            if (quizzesLoadSeq !== opLoadSeq || currentFolderId !== opFolderId) return;
             showAdminAlert('⚠️ Hálózati hiba', 'Hálózati hiba a tesztek sorrendjének mentésekor!');
             await loadQuizzes(currentFolderId);
+          } finally {
+            isReorderingQuizzes = false;
           }
         });
 
@@ -3321,28 +3388,24 @@
     }
     if (initialShortAnswers.length === 0) initialShortAnswers = [''];
 
-    // ABCD opciók előkészítése (alapból legalább 4 sor, de meglévő 5+ opciót is megtart; támogatja a string és { text, image_path } formátumot)
-    const initialAbcdOptions = Array.isArray(qOptions) ? qOptions.map(normalizeOptionItem) : [];
+    // ABCD opciók előkészítése: a kulcsot SZIGORÚAN a tényleges tárolt opciókon oldjuk fel (A1 védelem),
+    // mielőtt a megjelenítéshez legalább 4 sorra kiegészítjük.
+    const rawStoredAbcdOptions = Array.isArray(qOptions) ? qOptions.map(normalizeOptionItem) : [];
+    const initialAbcdOptions = rawStoredAbcdOptions.map(o => ({ ...o }));
     while (initialAbcdOptions.length < 4) initialAbcdOptions.push({ text: '', image_path: '', value: '' });
 
-    // Meglévő helyes válasz(ok) indexeinek azonosítása ABCD esetén (1 vagy több helyes válasz is támogatott)
+    // Meglévő helyes válasz(ok) indexeinek azonosítása ABCD esetén (grader.js-szel azonos feloldás)
     const correctOptionIndices = new Set();
     if (qType === 'ABCD' && qCorrect) {
-      const correctList = parseMultiAnswerValues(qCorrect);
+      const correctList = parseMultiAnswerValues(qCorrect, rawStoredAbcdOptions);
       correctList.forEach(corItem => {
-        let foundIdx = -1;
-        if (/^[A-Z]$/i.test(corItem)) {
-          const idxByLetter = corItem.toUpperCase().charCodeAt(0) - 65;
-          if (idxByLetter >= 0 && idxByLetter < initialAbcdOptions.length) {
-            foundIdx = idxByLetter;
-          }
-        }
+        const resolved = resolveAbcdOptionValueClient(corItem, rawStoredAbcdOptions);
+        let foundIdx = rawStoredAbcdOptions.findIndex(opt => opt.value && opt.value === resolved);
         if (foundIdx === -1) {
-          const corLower = corItem.toLowerCase();
-          foundIdx = initialAbcdOptions.findIndex(opt =>
-            (opt.value && opt.value.toLowerCase() === corLower) ||
-            (opt.text && opt.text.toLowerCase() === corLower) ||
-            (opt.image_path && opt.image_path.toLowerCase() === corLower)
+          // Ha csak szöveg vagy image_path egyezik pontosan
+          foundIdx = rawStoredAbcdOptions.findIndex(opt =>
+            (opt.text && opt.text === resolved) ||
+            (opt.image_path && opt.image_path === resolved)
           );
         }
         if (foundIdx !== -1) correctOptionIndices.add(foundIdx);
@@ -4292,10 +4355,59 @@
     if (image_path) {
       return {
         stored: { text, image_path },
-        value: text || image_path
+        value: text || image_path,
+        row,
+        sentImagePath: image_path
       };
     }
-    return { stored: text, value: text };
+    return { stored: text, value: text, row, sentImagePath: '' };
+  }
+
+  // Közös helper (K1 védelem): szerver által megerősített kérdés-ID, főkép és opcióképek visszaszinkronizálása
+  // a nyitva maradó szerkesztőkártyába (csak a mentéskor elküldött értéket cseréli le, közben feltöltött új képet nem ír felül).
+  function syncSavedQuestionToCard(cardEl, savedQuestion, sentMainImage = '', sentOptionRows = []) {
+    if (!cardEl || !savedQuestion) return;
+    if (savedQuestion.id) {
+      cardEl.dataset.questionId = String(savedQuestion.id);
+    }
+
+    // 1. Főkép visszaszinkronizálása
+    const mainImgInput = cardEl.querySelector('.q-image-path');
+    if (mainImgInput && savedQuestion.image_path) {
+      const currentVal = mainImgInput.value.trim();
+      if (!sentMainImage || currentVal === sentMainImage) {
+        mainImgInput.value = savedQuestion.image_path;
+        const mainThumb = cardEl.querySelector('.q-image-preview-thumb');
+        if (mainThumb) mainThumb.src = savedQuestion.image_path;
+        const mainName = cardEl.querySelector('.q-image-preview-name');
+        if (mainName) mainName.textContent = savedQuestion.image_path.split('/').pop();
+      }
+    }
+
+    // 2. ABCD opcióképek visszaszinkronizálása a ténylegesen elküldött sorok sorrendje alapján
+    const savedOpts = Array.isArray(savedQuestion.options)
+      ? savedQuestion.options
+      : (() => { try { return JSON.parse(savedQuestion.options_json || '[]'); } catch { return []; } })();
+
+    if (Array.isArray(sentOptionRows) && sentOptionRows.length > 0 && Array.isArray(savedOpts)) {
+      sentOptionRows.forEach((meta, idx) => {
+        if (!meta || !meta.row) return;
+        const savedOpt = savedOpts[idx];
+        const savedImg = (savedOpt && typeof savedOpt === 'object' && savedOpt.image_path)
+          ? String(savedOpt.image_path).trim()
+          : '';
+        if (!savedImg) return;
+        const optPathInput = meta.row.querySelector('.q-opt-image-path');
+        if (optPathInput) {
+          const curOptVal = optPathInput.value.trim();
+          if (!meta.sentImagePath || curOptVal === meta.sentImagePath) {
+            optPathInput.value = savedImg;
+            const optThumb = meta.row.querySelector('.q-opt-img-thumb');
+            if (optThumb) optThumb.src = savedImg;
+          }
+        }
+      });
+    }
   }
 
   // Egyetlen kérdéskártya validálása és lokális mentése (a feladatsor többi kérdésétől függetlenül)
@@ -4323,6 +4435,7 @@
 
     let correct = '';
     let options = [];
+    let sentOptionRows = [];
 
     if (type === 'ABCD') {
       const selectedToggles = Array.from(cardEl.querySelectorAll('.q-opt-correct-toggle.is-correct'));
@@ -4342,10 +4455,11 @@
         }
         if (!correctVals.includes(cVal)) correctVals.push(cVal);
       }
-      const filledOpts = Array.from(cardEl.querySelectorAll('.q-opt-row'))
+      const filledOptionItems = Array.from(cardEl.querySelectorAll('.q-opt-row'))
         .map(extractAbcdOptionFromRow)
-        .filter(Boolean)
-        .map(item => item.stored);
+        .filter(Boolean);
+      const filledOpts = filledOptionItems.map(item => item.stored);
+      sentOptionRows = filledOptionItems;
       if (filledOpts.length < 2) {
         showAdminAlert('⚠️ Kevés válaszlehetőség', `A(z) ${qNum}. feleletválasztós kérdésnél legalább 2 válaszlehetőség kitöltése kötelező!`);
         return;
@@ -4405,10 +4519,7 @@
       const data = await res.json();
 
       if (res.ok && data.success && data.question) {
-        cardEl.dataset.questionId = String(data.question.id);
-        if (imagePathInput && data.question.image_path) {
-          imagePathInput.value = data.question.image_path;
-        }
+        syncSavedQuestionToCard(cardEl, data.question, image_path || '', sentOptionRows);
         showToast(`A(z) ${qNum}. kérdés sikeresen elmentve!`, 'success');
       } else {
         showAdminAlert('⚠️ Mentési hiba', (data && data.error) || 'Hiba a kérdés mentése során!');
@@ -4435,6 +4546,7 @@
 
     const quizId = editQuizId.value;
     const questions = [];
+    const sentCardMeta = [];
 
     const items = editorQuestionsList.querySelectorAll('.q-editor-item');
     if (items.length === 0) {
@@ -4457,6 +4569,7 @@
 
       let correct = '';
       let options = [];
+      let sentCardOptionRows = [];
 
       if (type === 'ABCD') {
         const selectedToggles = Array.from(b.querySelectorAll('.q-opt-correct-toggle.is-correct'));
@@ -4479,10 +4592,11 @@
           if (!correctVals.includes(cVal)) correctVals.push(cVal);
         }
 
-        const filledOpts = Array.from(b.querySelectorAll('.q-opt-row'))
+        const filledOptionItems = Array.from(b.querySelectorAll('.q-opt-row'))
           .map(extractAbcdOptionFromRow)
-          .filter(Boolean)
-          .map(item => item.stored);
+          .filter(Boolean);
+        const filledOpts = filledOptionItems.map(item => item.stored);
+        sentCardOptionRows = filledOptionItems;
 
         if (filledOpts.length < 2) {
           showAdminAlert('⚠️ Kevés válaszlehetőség', `A(z) ${qNum}. feleletválasztós kérdésnél legalább 2 válaszlehetőség kitöltése kötelező!`);
@@ -4531,6 +4645,7 @@
         correct_answer: correct,
         explanation
       });
+      sentCardMeta.push({ cardEl: b, sentMainImage: image_path || '', sentOptionRows: sentCardOptionRows });
     }
 
     const payload = {
@@ -4564,8 +4679,9 @@
         if (!closeAfterSave && data.quiz && Array.isArray(data.quiz.questions)) {
           const savedSorted = [...data.quiz.questions].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
           items.forEach((el, idx) => {
-            if (savedSorted[idx] && savedSorted[idx].id) {
-              el.dataset.questionId = String(savedSorted[idx].id);
+            if (savedSorted[idx]) {
+              const meta = sentCardMeta[idx] || { sentMainImage: '', sentOptionRows: [] };
+              syncSavedQuestionToCard(el, savedSorted[idx], meta.sentMainImage, meta.sentOptionRows);
             }
           });
         }

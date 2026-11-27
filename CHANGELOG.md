@@ -4,6 +4,37 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.16] – 2026-11-27
+
+### Offline frissítő megerősítése, képes kérdések atomi életciklusa, ABCD-azonosítás és sorrendvédelem
+
+Átfogó stabilitási, adatbiztonsági és üzemeltetési hibajavítások a 02–11. hibajavítási ellenőrzési körök alapján, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Javítva (Fixed)
+* **Képes kérdések és ABCD opcióképek teljes, atomi életciklusa (`src/db/quizRepo.js`, `src/routes/api.js`, `public/js/admin.js`):**
+  - Minden új képfeltöltés egységesen a `quizzes/temp/` mappába kerül, és csak sikeres mentéskor publikálódik a kvíz saját `quiz-<id>/` almappájába, SHA-256 tartalom-alapú névütközés-védelemmel.
+  - Az `updateQuiz` és `saveSingleQuestion` még az adatbázis-tranzakció *előtt* végzi el a képek előkészítését és ellenőrzését (fájllétezés, rendes fájl típus, olvashatóság permanens URL-ekre is), így I/O hiba esetén az adatbázis érintetlen marad.
+  - A `createQuiz`, `duplicateQuiz` és `mergeQuizzes` képmásolási hiba esetén kompenzáló visszagörgetéssel törli a félkész tesztet és naplózza az esetleges takarítási hibát.
+  - A nyitva maradó szerkesztőkártya (`saveSingleQuestionCard` és `saveQuizEditor`) mentés után visszaszinkronizálja a szerver által megerősített kérdésazonosítót, főképet és az összes opciókép végleges URL-jét anélkül, hogy felülírná a közben újonnan kiválasztott képeket.
+  - A globális hivatkozás-leltár (`collectAllReferencedImagePaths`) az összes kvíz kérdéseit, ABCD opcióképeit és munkamenet-pillanatképeit védi az árvatakarításkor.
+
+* **ABCD pontozás, szerkesztői előkijelölés, keverés és Open Navigation egységesítése (`src/services/grader.js`, `src/db/sessionRepo.js`, `src/db/quizRepo.js`, `src/routes/api.js`, `public/js/utils.js`, `public/js/student.js`, `public/js/admin.js`):**
+  - Egységes, háromlépcsős, kis- és nagybetű-tudatos opciófeloldás (`Alpha` ≠ `ALPHA`, szó szerinti `A` ≠ 1. opció, egyértelmű kisbetűs és régi `A`–`F` kompatibilitási tartalék) a pontozóban, a tanári szerkesztőben, a kérdésrészletezőben, a diák azonnali visszajelzésben és az összegzőben.
+  - Keverésbiztos megoldás-visszajelzés az első és ismételt (idempotens) válaszbeküldésnél, valamint a `session-data` összegzőben is (`resolveAbcdDisplayAnswer`).
+  - Szó szerinti JSON-tömb alakú opciók (`[]`, `[""]`, `["x","y"]`) teljes körű támogatása egyszeres kérdéseknél (pontozás, Open Navigation piszkozatmentés, véglegesítés, csempe-visszatöltés, összegző), valamint sorrendfüggetlen halmazpontozás többválasztós kérdéseknél.
+  - Egységes ABCD-validátor (`validateAbcdQuestionsIntegrity`) mentéskor és dolgozatindításkor (`startSession`): elutasítja a feloldhatatlan vagy üresre feloldódó megoldókulcsot (`INVALID_CORRECT_ANSWER`), a duplikált beküldési értékű opciókat (`DUPLICATE_ABCD_OPTION`) és a kétértelmű kombinációkat (`AMBIGUOUS_ABCD_OPTIONS`).
+
+* **Offline szerverfrissítő rendszer (`src/scripts/update_server.ps1`, `frissitsd_a_szervert.bat`, `csomagolj_frissitest.bat`, `.gitattributes`):**
+  - A frissítő logika külön PowerShell 5.1 workerbe (`src/scripts/update_server.ps1`) került, teljes fájlszintű és SQLite WAL-kompatibilis rollbackkel, kanonikus 8.3-as `TEMP` útvonalfeloldással, kötelező csomagelem-típusellenőrzéssel és fájl–könyvtár ütközésvédelemmel.
+  - Kétlépcsős, kizárólag `127.0.0.1` loopbackre kötött indítási füstpróba: előbb izolált staging `config.js`-szel és másolt adatbázissal, majd éles telepítés után a megőrzött helyi `config.js`-szel; hiba esetén automatikus visszagörgetés.
+  - Atomi `update.lock` (`FileMode.CreateNew`), egyedi token-alapú egyszeri zár-felszabadítás külső `try/finally`-ben, zárolás utáni TOCTOU verzió-, konfiguráció- és port-újraellenőrzés, függő `pending_rollback.json` megállítás (`exit 7`) és zárolt jegyzék védelem (`exit 8`).
+  - Szabványos Windows `CRLF` sorvégek rögzítve a `.bat` fájlokra (`.gitattributes`), relatív `-DropZip` útvonal helyes feloldása BAT-ból és közvetlen PowerShell-ből is, pontos kezelői üzenetek a `0/4/7/8/9` kilépési kódokra.
+
+* **Teszttári sorrend konkurenciavédelme (`src/db/quizRepo.js`, `src/routes/api.js`, `public/js/admin.js`):**
+  - Kötelező, szigorúan validált `expectedOrderIds` (`400 INVALID_EXPECTED_ORDER` / `409 ORDER_CONFLICT`) mindkét rendezési végponton, generációszámlálóval (`quizzesLoadSeq`) védett mappaváltás és sikertelen betöltés utáni `draggable` visszaállítás.
+
+---
+
 ## [1.37.15] – 2026-11-27
 
 ### Windows Server 2016 backup-visszaállítás, szerverfrissítő szkript és többválasztós képes válasz javítások

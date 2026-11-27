@@ -178,13 +178,48 @@ function normalizeOptionItem(opt) {
 }
 
 /**
- * Többválasztós (JSON tömb) vagy egyetlen válasz string felbontása tömbbé
+ * ABCD válasz / megoldókulcs elemének feloldása pontos opcióértékre (a szerveroldali grader.js-szel 100%-ban azonos szabály):
+ * 1. Pontos, kis- és nagybetű-érzékeny egyezés (Alpha != ALPHA)
+ * 2. Egyértelmű kisbetűs tartalék (csak ha pontosan 1 opció illeszkedik)
+ * 3. Régi betűjeles (A-F) pozíció-feloldás (csak ha nem létezik önálló opcióként)
+ * @returns {string} A feloldott pontos opcióérték (vagy eredeti trimmelt érték)
+ */
+function resolveAbcdOptionValueClient(rawVal, questionOptions = []) {
+  const trimmed = (rawVal !== undefined && rawVal !== null) ? String(rawVal).trim() : '';
+  if (!trimmed) return '';
+  const lower = trimmed.toLowerCase();
+
+  if (Array.isArray(questionOptions) && questionOptions.length > 0) {
+    const exactValues = questionOptions.map(o => normalizeOptionItem(o).value);
+    const exactMatch = exactValues.find(v => v === trimmed);
+    if (exactMatch !== undefined) return exactMatch;
+
+    const ciMatches = exactValues.filter(v => v.toLowerCase() === lower);
+    if (ciMatches.length === 1) return ciMatches[0];
+    if (ciMatches.length > 1) return trimmed;
+
+    const letterMap = { 'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5 };
+    const idx = letterMap[lower];
+    if (idx !== undefined && exactValues[idx]) return exactValues[idx];
+  }
+  return trimmed;
+}
+
+/**
+ * Többválasztós (JSON tömb) vagy egyetlen válasz string felbontása tömbbé.
+ * A2 védelem: ha questionOptions meg van adva és a teljes string pontosan megegyezik egy létező opcióval
+ * (pl. szó szerinti '["x","y"]' vagy '[]'), 1 elemként tartjuk meg, nem bontjuk szét!
  * @returns {string[]}
  */
-function parseMultiAnswerValues(rawAnswer) {
+function parseMultiAnswerValues(rawAnswer, questionOptions = []) {
   if (rawAnswer === undefined || rawAnswer === null) return [];
   const str = String(rawAnswer).trim();
   if (!str) return [];
+  if (Array.isArray(questionOptions) && questionOptions.length > 0) {
+    if (questionOptions.some(opt => normalizeOptionItem(opt).value === str)) {
+      return [str];
+    }
+  }
   if (str.startsWith('[')) {
     try {
       const parsed = JSON.parse(str);
@@ -202,15 +237,22 @@ function parseMultiAnswerValues(rawAnswer) {
  * Válasz megjelenítése összegzőben/visszajelzésben (képes opció esetén bélyegképpel,
  * többválasztós válasz esetén az összes kijelölt elem megjelenítésével)
  */
-function renderAnswerDisplayHtml(rawAnswer, questionOptions = []) {
-  const values = parseMultiAnswerValues(rawAnswer);
+function renderAnswerDisplayHtml(rawAnswer, questionOptions = [], isMultiple = null) {
+  const values = isMultiple === true
+    ? parseMultiAnswerValues(rawAnswer)
+    : parseMultiAnswerValues(rawAnswer, questionOptions);
   if (values.length === 0) return '–';
 
   const normalizedOpts = Array.isArray(questionOptions) ? questionOptions.map(normalizeOptionItem) : [];
 
   const renderSingle = (ansStr) => {
     if (normalizedOpts.length > 0) {
-      const matched = normalizedOpts.find(item => item.value && item.value.toLowerCase() === ansStr.toLowerCase());
+      const resolved = resolveAbcdOptionValueClient(ansStr, questionOptions);
+      let matched = normalizedOpts.find(item => item.value && item.value === resolved);
+      if (!matched) {
+        const ciMatches = normalizedOpts.filter(item => item.value && item.value.toLowerCase() === ansStr.toLowerCase());
+        if (ciMatches.length === 1) matched = ciMatches[0];
+      }
       if (matched && matched.image_path) {
         const imgHtml = `<img src="${escapeHtml(matched.image_path)}" alt="Válasz képe" class="summary-answer-thumb">`;
         return matched.text
