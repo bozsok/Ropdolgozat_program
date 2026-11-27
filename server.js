@@ -389,6 +389,17 @@ function gracefulShutdown(signal, options = {}) {
       flushResult = { ok: false, reason: 'write_error' };
     }
 
+    // 3b. SQLite WAL-napló kiírása a fő adatbázisfájlba és kapcsolat szabályos lezárása
+    try {
+      const db = require('./src/db/init');
+      if (db && db.open) {
+        db.pragma('wal_checkpoint(TRUNCATE)');
+        db.close();
+      }
+    } catch (dbCloseErr) {
+      console.warn('Figyelmeztetés: SQLite WAL-checkpoint / lezárás sikertelen:', dbCloseErr.message);
+    }
+
     // 4. Kilépési kód beállítása (a sikeres ürítés NEM írhatja felül a határidő-túllépés hibakódját!)
     if (deadlineReached || !flushResult.ok) {
       if (!flushResult.ok) {

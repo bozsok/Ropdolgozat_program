@@ -205,9 +205,9 @@ A tanár a tantermi gépről vagy laptopról bármelyik böngészőből eléri a
 
 Ha a későbbiekben hibajavítás vagy új funkció készül, **nem kell kézzel válogatni a fájlokat**:
 
-1. **Fejlesztői (otthoni) gépen:** Kattints duplán a `csomagolj_frissitest.bat` fájlra. Ez a `package.json` verziószáma alapján létrehoz egyetlen, verziószámozott csomagot a főkönyvtárban (pl. `Okoskodo_frissites_v1.37.14.zip`), amely kizárólag a programfájlokat (`src/`, `public/`, `server.js`, stb.) tartalmazza.
+1. **Fejlesztői (otthoni) gépen:** Kattints duplán a `csomagolj_frissitest.bat` fájlra. Ez a `package.json` verziószáma alapján létrehoz egyetlen, verziószámozott csomagot a főkönyvtárban (pl. `Okoskodo_frissites_v1.37.17.zip`), amely kizárólag a programfájlokat (`src/`, `public/`, `server.js`, stb.) tartalmazza.
 2. **Iskolai szerveren (`C:\Ropdolgozat\`):**
-   - Állítsd le a futó szervert (zárd be a `start_server.bat` ablakot).
+   - Állítsd le szabályosan a futó szervert (`Ctrl+C` a `start_server.bat` ablakában, hogy az SQLite WAL-napló kiíródjon a `ropdolgozat.db`-be és a `-wal`/`-shm` fájlok eltűnjenek).
    - Másold be a `.zip` fájlt a `C:\Ropdolgozat\` főkönyvtárba.
    - Kattints duplán a **`frissitsd_a_szervert.bat`** fájlra:
      - Automatikusan kiválasztja a legmagasabb verziószámú `Okoskodo_frissites_v*.zip` csomagot.

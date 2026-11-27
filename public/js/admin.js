@@ -3657,7 +3657,7 @@
         const btnDel = row.querySelector('.btn-remove-abcd-opt');
         if (toggle) toggle.dataset.optIndex = String(idx);
         if (numSpan) numSpan.textContent = String(idx + 1);
-        if (input) input.setAttribute('data-placeholder', `${idx + 1}. válaszlehetőség`);
+        if (input) input.setAttribute('data-placeholder', `${idx + 1}. válaszlehetőség (vagy csatolj képet / Ctrl+V)`);
         if (btnDel) btnDel.style.display = rows.length > 2 ? 'inline-flex' : 'none';
       });
     }

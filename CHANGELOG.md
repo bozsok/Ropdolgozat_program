@@ -4,6 +4,23 @@ Minden lényeges módosítás, hibajavítás és funkcióbővítés ebben a fáj
 
 ---
 
+## [1.37.17] – 2026-11-27
+
+### Szabályos leállításkori SQLite WAL-lezárás és ABCD placeholder-egységesítés
+
+Üzemeltetési adatbiztonsági és szerkesztői felületi javítás, SQLite-sémamódosítás nélkül (`13700`).
+
+#### Javítva (Fixed)
+* **SQLite WAL-napló kiírása és adatbázis-kapcsolat szabályos lezárása leállításkor (`server.js`):**
+  - **Fájl:** [`server.js`](file:///d:/dev/Röpdolgozat%20program/server.js)
+  - A `gracefulShutdown()` eljárás szabályos szerverleállításkor (`Ctrl+C` / `SIGINT`, `SIGTERM`, `IPC_SHUTDOWN`) lefuttatja a `db.pragma('wal_checkpoint(TRUNCATE)')` és `db.close()` műveleteket, így minden nyitott WAL-változás azonnal beleíródik a `data/ropdolgozat.db` fájlba, a `-wal` és `-shm` segédfájlok pedig tisztán eltűnnek.
+
+* **ABCD válaszsorok placeholder szövegének egységesítése törlés után (`public/js/admin.js`):**
+  - **Fájl:** [`public/js/admin.js`](file:///d:/dev/Röpdolgozat%20program/public/js/admin.js)
+  - Egy ABCD válaszsor eltávolításakor a `refreshAbcdOptionRows()` újraszámozó függvény már a teljes `${idx + 1}. válaszlehetőség (vagy csatolj képet / Ctrl+V)` placeholder szöveget állítja be, így a megmaradó mezők helyőrző szövege nem változik meg.
+
+---
+
 ## [1.37.16] – 2026-11-27
 
 ### Offline frissítő megerősítése, képes kérdések atomi életciklusa, ABCD-azonosítás és sorrendvédelem
